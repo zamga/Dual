@@ -1,0 +1,25 @@
+{
+  "name": "quorum",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Quorum: conviction-gated stock research. Four model families, a public sealed ledger, SMS only when the models agree.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=4 \"tests/**/*.test.js\"",
+    "test:e2e": "node scripts/e2e.js",
+    "engine:run": "node engine/cli.js run",
+    "engine:export": "node engine/cli.js export",
+    "build:web": "node scripts/build-web.js",
+    "fixture": "node scripts/fixture-data.js",
+    "check:sms": "node scripts/check-sms-templates.js",
+    "server": "node server/index.js",
+    "demo:day": "node scripts/demo-day.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
+    "zod": "^4.6.5"
+  }
+}
