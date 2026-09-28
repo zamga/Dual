@@ -16,7 +16,7 @@ teardown and strategy are in [`research/prva-bonitetna-agencija.md`](research/pr
 
 ## Layout
 
-- `app/index.html`, `app/landing.js`: the public page. Every WebGL point is one company from the demo universe; scrolling re-arranges the same points into a map of Slovenia, the age of annual accounts, payment delays, grades, a live credit decision and the back-test curve. Hover a point to see the company, click to open its dossier. Uses three.js r159 and Lenis from jsDelivr.
+- `app/index.html`, `app/landing.js`: the public page. Every WebGL point is one company from the demo universe; scrolling re-arranges the same points into a map of Slovenia, the age of annual accounts, payment delays, grades, a live credit decision and the back-test curve. Hover a point to see the company, click to open its dossier. Uses three.js r159 and Lenis from jsDelivr. On phones held upright each chapter sits in a bottom sheet and the charts turn upright (vertical timeline, horizontal bars, a vertical grade swarm); every chart picks its own dot spacing to fill the space it gets.
 - `app/desk.html`, `app/app.js`: the credit desk (Companies, Portfolio, Model, Pricing).
 - `app/engine.js`: scoring engine (UMD). Transparent logistic model, reason codes, credit decision, network stats, AUC and calibration.
 - `app/data.js`: seeded generator of **fictional** Slovenian companies. It stands in for AJPES, FURS, the blocked-account register and the invoice co-op until those feeds are connected.

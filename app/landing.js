@@ -35,6 +35,12 @@
   const rnd = mulberry32(7);
   const gauss = () => { const u = 1 - rnd(), v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
 
+  // Tall screens (phones held upright, small tablets) get their own layout:
+  // text in a bottom sheet, the picture above it. Matches the CSS media query.
+  function isTall() {
+    return window.innerWidth < 900 && window.innerWidth / window.innerHeight <= 0.87;
+  }
+
   // ---------- data ----------
   const { companies, asOf } = D.generate(2026, D.DEMO_COUNT);
   E.attachNetwork(companies);
@@ -90,7 +96,10 @@
   $('#fig-late').innerHTML = `${Math.round((covered.filter(d => d >= 20).length / covered.length) * 100)}<small>%</small>`;
   $('#fig-median').innerHTML = `${pdNum(medianPd)}<small>%</small>`;
   $('#fig-de').textContent = intFmt.format(res.filter(r => r.grade.grade === 'D' || r.grade.grade === 'E').length);
-  if (!finePointer) document.querySelector('.hover-hint').textContent = 'Tap a dot to inspect it';
+  if (!finePointer) {
+    document.querySelector('.hero-meta span').textContent = 'Each dot is a company · tap to inspect';
+    document.querySelector('.hover-hint').hidden = true;
+  }
 
   // Alert ticker: the week's worst news from the demo universe.
   (function ticker() {
@@ -187,7 +196,7 @@
   const idle = window.requestIdleCallback || (fn => setTimeout(fn, 500));
   idle(() => {
     backtest = runBacktest();
-    $('#bt-n').textContent = intFmt.format(backtest.n);
+    document.querySelectorAll('.bt-n').forEach(el => { el.textContent = intFmt.format(backtest.n); });
     $('#bt-rok').textContent = backtest.aucF.toFixed(3);
     $('#bt-fin').textContent = backtest.aucO.toFixed(3);
     $('#bt-cap').innerHTML = `${Math.round(backtest.capF * 100)}<small>%</small>`;
@@ -218,12 +227,13 @@
       attribute float aSize;
       attribute float aAlpha;
       uniform float uPx;
+      uniform float uMin;
       varying vec3 vColor;
       varying float vAlpha;
       void main() {
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = max(1.5, aSize * uPx * (10.0 / -mv.z));
+        gl_PointSize = max(uMin, aSize * uPx * (10.0 / -mv.z));
         vColor = aColor;
         vAlpha = aAlpha;
       }`;
@@ -250,7 +260,7 @@
 
     function pointsMaterial(blending) {
       return new THREE.ShaderMaterial({
-        uniforms: { uPx: { value: 1 }, uMul: { value: 1 } },
+        uniforms: { uPx: { value: 1 }, uMul: { value: 1 }, uMin: { value: 1.5 } },
         vertexShader: VERT,
         fragmentShader: FRAG,
         transparent: true,
@@ -351,7 +361,8 @@
     const guides = [];
     for (let k = 0; k < K; k++) guides.push(null);
     let pivot = { x: 0, y: 0 };
-    let orbit = { cx: 0, cy: 0, R: 1, others: new Uint8Array(N) };
+    let tiltX = -0.46, driftY = 0.07;
+    let orbit = { cx: 0, cy: 0, R: 1, ey: 0.92, others: new Uint8Array(N) };
     let dirty = true;
     let sPrev = -1;
     const introStart = performance.now();
@@ -365,7 +376,22 @@
     }
 
     function relayout() {
-      const mobile = window.innerWidth < 900;
+      const W = window.innerWidth, H = window.innerHeight;
+      const tall = isTall();
+      const pxw = (2 * Math.tan((camera.fov * Math.PI) / 360) * 10) / H; // world units per CSS pixel
+      const pxBox = (l, t, r, b) => worldBox([(l / W) * 2 - 1, (r / W) * 2 - 1, 1 - (b / H) * 2, 1 - (t / H) * 2]);
+      const navEl = document.querySelector('.nav');
+      const navH = navEl ? navEl.offsetHeight : 64;
+      // Where each chapter's picture may live: beside the text on wide screens,
+      // above the chapter's bottom sheet on tall ones.
+      const frameFor = k => {
+        if (!tall) return k >= 4 ? worldBox([0.04, 0.92, -0.74, 0.74]) : worldBox([-0.02, 0.92, -0.62, 0.66]);
+        const sec = document.querySelector(`[data-state="${k}"]`);
+        const panel = sec && sec.querySelector('.chapter-text');
+        const ph = panel ? Math.min(panel.offsetHeight, H * 0.6) : H * 0.42;
+        return pxBox(14, navH + 12, W - 14, H - ph - 18);
+      };
+      const upright = f => f.h > f.w * 1.05;
       const segs = [];
       for (let k = 0; k < K; k++) segs.push({ p: [], c: [] });
       const defs = [];
@@ -377,22 +403,25 @@
       const seg = (k, x1, y1, x2, y2, col) => { segs[k].p.push(x1, y1, 0, x2, y2, 0); const c = col || PAPER; segs[k].c.push(c[0], c[1], c[2], c[0], c[1], c[2]); };
       const dashed = (k, x1, y1, x2, y2, n, col) => { for (let j = 0; j < n; j++) { const a = j / n, b = (j + 0.5) / n; seg(k, lerp(x1, x2, a), lerp(y1, y2, a), lerp(x1, x2, b), lerp(y1, y2, b), col); } };
       const label = (k, x, y, text, cls, align, extra) => defs.push(Object.assign({ k, x, y, text, cls: cls || '', align: align || 'center' }, extra || {}));
+      const dot = v => Math.max(pxw * 1.7, v); // never smaller than 1.7 CSS pixels
 
-      const chart = worldBox(mobile ? [-0.9, 0.9, 0.14, 0.86] : [-0.02, 0.92, -0.62, 0.66]);
-      const unitPx = window.innerHeight / chart.vh;
-
-      // 0 · Map of Slovenia
-      const mb = worldBox(mobile ? [-0.98, 0.98, 0.1, 0.9] : [-0.06, 0.9, -0.28, 0.86]);
-      const sc = Math.min(mb.w / 1.95, mb.h / 1.3);
+      // 0 · Map of Slovenia. On tall screens it runs edge to edge.
+      // On tall screens the map fills the space between the nav and the headline.
+      const heroEl = document.querySelector('.hero'), heroInnerEl = document.getElementById('hero-inner');
+      const textTop = heroEl && heroInnerEl ? heroEl.offsetTop + heroInnerEl.offsetTop : H * 0.55;
+      const mb = tall ? pxBox(0, navH, W, Math.max(navH + 140, Math.min(H * 0.54, textTop - 10))) : worldBox([-0.06, 0.9, -0.28, 0.86]);
+      const sc = tall ? Math.min((mb.w / 1.95) * 1.12, mb.h / 1.28) : Math.min(mb.w / 1.95, mb.h / 1.3);
       const mx = x => mb.cx + (x - 0.01) * sc, my = y => mb.cy + y * sc;
-      const u0 = sc * 0.0068;
+      const u0 = Math.max(sc * 0.0068, pxw * 1.9);
+      const grow = tall ? 0.8 : 1.4;
       for (let i = 0; i < N; i++) {
-        put(0, i, mx(mapRaw[2 * i]), my(mapRaw[2 * i + 1]), sizeNorm[i] * 0.22 + jz[i] * 0.02, riskColor(pd[i]), u0 * (1 + 1.4 * sizeNorm[i]), 0.9);
+        put(0, i, mx(mapRaw[2 * i]), my(mapRaw[2 * i + 1]), sizeNorm[i] * 0.22 + jz[i] * 0.02, riskColor(pd[i]), u0 * (1 + grow * sizeNorm[i]), 0.9);
       }
       pivot = { x: mb.cx, y: mb.cy };
-      for (const name of MAIN_CITIES) {
+      tiltX = tall ? -0.3 : -0.46;
+      driftY = tall ? 0.05 : 0.07;
+      for (const name of tall ? ['Ljubljana', 'Maribor', 'Celje', 'Kranj', 'Novo mesto'] : MAIN_CITIES) {
         const [x, y] = proj(CITY[name][0], CITY[name][1]);
-        if (mobile && !['Ljubljana', 'Maribor', 'Koper', 'Celje'].includes(name)) continue;
         label(0, mx(x) + 0.05, my(y) + 0.09, name, 'city', 'left');
       }
       routes = ROUTES.map(r => {
@@ -414,108 +443,223 @@
         cloud[3 * i + 2] = cloudN[3 * i + 2] * 3;
       }
 
-      // 1 · Annual accounts on a time axis
-      const months = 33;
-      const X1 = m => chart.x0 + (m / months) * chart.w;
-      const yb = chart.y0 + chart.h * 0.14, top = chart.y0 + chart.h * 0.86;
-      const ry0 = yb + (top - yb) * 0.04, ry1 = ry0 + (top - yb) * 0.72;
+      // 1 · Annual accounts on a time axis (left to right, or top to bottom).
+      const F1 = frameFor(1);
+      const months = 33, today = 32.9;
       const onTime = [], stale = [];
       for (let i = 0; i < N; i++) (res[i].finAgeMonths > 18 ? stale : onTime).push(i);
-      const cell = Math.sqrt(((X1(24) - X1(12)) * (ry1 - ry0)) / onTime.length);
-      const fill = (ids, x0, x1, y0, y1) => {
+      const oldGrey = mix3(PAPER, GREY, 0.45);
+      const fill = (ids, x0, x1, y0, y1, cell) => {
         const w = x1 - x0, h = y1 - y0;
         const cols = Math.max(1, Math.round(Math.sqrt((ids.length * w) / h)));
         const rows = Math.ceil(ids.length / cols);
         ids.forEach((i, j) => {
           const cx = j % cols, cy = Math.floor(j / cols);
-          put(1, i, x0 + (cx + 0.5 + jx[i] * 0.5) * (w / cols), y0 + (cy + 0.5 + jy[i] * 0.5) * (h / rows), 0, mix3(PAPER, GREY, 0.45), cell * 0.62, 0.62);
+          put(1, i, x0 + (cx + 0.5 + jx[i] * 0.5) * (w / cols), y0 + (cy + 0.5 + jy[i] * 0.5) * (h / rows), 0, oldGrey, dot(cell * 0.62), 0.62);
         });
       };
-      const gap = chart.w * 0.008;
-      fill(stale, X1(0) + gap, X1(12) - gap, ry0, ry1);
-      fill(onTime, X1(12) + gap, X1(24) - gap, ry0, ry1);
-      seg(1, X1(0), yb, X1(months), yb);
-      for (let m = 0; m <= 33; m += 3) seg(1, X1(m), yb, X1(m), yb - (m % 12 === 0 ? 0.07 : 0.03), m % 12 === 0 ? PAPER : GREY);
-      const today = 32.9;
-      dashed(1, X1(today), yb, X1(today), ry1 + 0.12, 24, PAPER);
-      const yBr = (ry0 + ry1) / 2;
-      seg(1, X1(24) + gap * 2, yBr, X1(today) - gap * 2, yBr, AMBER);
-      seg(1, X1(24) + gap * 2, yBr - 0.04, X1(24) + gap * 2, yBr + 0.04, AMBER);
-      seg(1, X1(today) - gap * 2, yBr - 0.04, X1(today) - gap * 2, yBr + 0.04, AMBER);
-      label(1, X1(6), yb - 0.17, '2024');
-      label(1, X1(18), yb - 0.17, '2025');
-      label(1, X1(28.5), yb - 0.17, '2026');
-      label(1, X1(today) + 0.02, ry1 + 0.24, `Today · ${asOf.split('-').map(Number).reverse().join('. ')}`, 'strong', 'right');
-      label(1, X1(12) + gap, ry1 + 0.12, `Accounts for 2025 · ${Math.round((onTime.length / N) * 100)} %`, '', 'left');
-      label(1, X1(0) + gap, ry1 + 0.12, `Still on 2024 · ${Math.round((stale.length / N) * 100)} %`, '', 'left');
-      label(1, (X1(24) + X1(today)) / 2, yBr + 0.14, '9 months unseen', 'strong amber');
+      const pctOn = Math.round((onTime.length / N) * 100);
+      const todayText = `Today · ${asOf.split('-').map(Number).reverse().join('. ')}`;
+      if (!upright(F1)) {
+        const X1 = m => F1.x0 + (m / months) * F1.w;
+        const yb = F1.y0 + F1.h * 0.14, top = F1.y0 + F1.h * 0.86;
+        const ry0 = yb + (top - yb) * 0.04, ry1 = ry0 + (top - yb) * 0.72;
+        const gap = F1.w * 0.008;
+        const cell = Math.sqrt(((X1(24) - X1(12)) * (ry1 - ry0)) / onTime.length);
+        fill(stale, X1(0) + gap, X1(12) - gap, ry0, ry1, cell);
+        fill(onTime, X1(12) + gap, X1(24) - gap, ry0, ry1, cell);
+        seg(1, X1(0), yb, X1(months), yb);
+        for (let m = 0; m <= 33; m += 3) seg(1, X1(m), yb, X1(m), yb - (m % 12 === 0 ? 0.07 : 0.03), m % 12 === 0 ? PAPER : GREY);
+        dashed(1, X1(today), yb, X1(today), ry1 + 0.12, 24, PAPER);
+        const yBr = (ry0 + ry1) / 2;
+        seg(1, X1(24) + gap * 2, yBr, X1(today) - gap * 2, yBr, AMBER);
+        seg(1, X1(24) + gap * 2, yBr - 0.04, X1(24) + gap * 2, yBr + 0.04, AMBER);
+        seg(1, X1(today) - gap * 2, yBr - 0.04, X1(today) - gap * 2, yBr + 0.04, AMBER);
+        label(1, X1(6), yb - 0.17, '2024');
+        label(1, X1(18), yb - 0.17, '2025');
+        label(1, X1(28.5), yb - 0.17, '2026');
+        label(1, X1(today) + 0.02, ry1 + 0.24, todayText, 'strong', 'right');
+        label(1, X1(12) + gap, ry1 + 0.12, `Accounts for 2025 · ${pctOn} %`, '', 'left');
+        label(1, X1(0) + gap, ry1 + 0.12, `Still on 2024 · ${100 - pctOn} %`, '', 'left');
+        label(1, (X1(24) + X1(today)) / 2, yBr + 0.14, '9 months unseen', 'strong amber');
+      } else {
+        const axisX = F1.x0 + F1.w * 0.15;
+        const top = F1.y1 - F1.h * 0.03, bot = F1.y0 + F1.h * 0.07;
+        const Y = m => top - (m / months) * (top - bot);
+        const gapY = F1.h * 0.035;
+        const bx0 = axisX + F1.w * 0.05, bx1 = F1.x1;
+        const cell = Math.sqrt(((bx1 - bx0) * (Y(12) - Y(24) - gapY * 2)) / onTime.length);
+        fill(stale, bx0, bx1, Y(12) + gapY, Y(0) - gapY, cell);
+        fill(onTime, bx0, bx1, Y(24) + gapY, Y(12) - gapY, cell);
+        seg(1, axisX, Y(0), axisX, Y(months));
+        for (let m = 0; m <= 33; m += 3) seg(1, axisX, Y(m), axisX - (m % 12 === 0 ? 0.07 : 0.03), Y(m), m % 12 === 0 ? PAPER : GREY);
+        dashed(1, axisX, Y(today), bx1, Y(today), 22, PAPER);
+        const xBr = bx0 + (bx1 - bx0) * 0.1;
+        const yA = Y(24) - gapY * 0.4, yB = Y(today) + gapY * 0.4;
+        seg(1, xBr, yA, xBr, yB, AMBER);
+        seg(1, xBr - 0.04, yA, xBr + 0.04, yA, AMBER);
+        seg(1, xBr - 0.04, yB, xBr + 0.04, yB, AMBER);
+        label(1, axisX - 0.1, Y(6), '2024', '', 'right');
+        label(1, axisX - 0.1, Y(18), '2025', '', 'right');
+        label(1, axisX - 0.1, Y(28.5), '2026', '', 'right');
+        label(1, bx0, Y(0) - gapY * 0.5, `Still on 2024 · ${100 - pctOn} %`, '', 'left');
+        label(1, bx0, Y(12), `Accounts for 2025 · ${pctOn} %`, '', 'left');
+        label(1, xBr + 0.07, (yA + yB) / 2, '9 months unseen', 'strong amber', 'left');
+        label(1, bx1, Y(today) - 0.09, todayText, 'strong', 'right');
+      }
 
-      // 2 · Payment delays as a dot histogram
+      // 2 · Payment delays: columns on wide frames, bars on upright ones.
+      // The dot spacing is chosen to fill the frame as fully as possible.
+      const F2 = frameFor(2);
       const coveredIdx = [], noneIdx = [];
       for (let i = 0; i < N; i++) (dbt[i] == null ? noneIdx : coveredIdx).push(i);
-      const B = 21, binCols = 6, noneCols = 12, gapCols = 5;
+      const B = 21;
       const bins = Array.from({ length: B }, () => []);
       coveredIdx.forEach(i => bins[Math.min(B - 1, Math.floor(dbt[i] / 2))].push(i));
       bins.forEach(b => b.sort((a, c) => dbt[a] - dbt[c]));
-      const totalCols = noneCols + gapCols + B * (binCols + 1) - 1;
-      const maxRows = Math.max(Math.ceil(noneIdx.length / noneCols), ...bins.map(b => Math.ceil(b.length / binCols)));
-      const s2 = Math.min(chart.w / totalCols, (chart.h * 0.66) / maxRows);
-      const x2 = chart.cx - (totalCols * s2) / 2;
-      const yb2 = chart.y0 + chart.h * 0.18;
-      noneIdx.forEach((i, j) => put(2, i, x2 + ((j % noneCols) + 0.5) * s2, yb2 + (Math.floor(j / noneCols) + 0.5) * s2, 0, GREY, s2 * 0.74, 0.34));
-      const binX = bi => x2 + (noneCols + gapCols + bi * (binCols + 1)) * s2;
-      bins.forEach((b, bi) => b.forEach((i, j) => put(2, i, binX(bi) + ((j % binCols) + 0.5) * s2, yb2 + (Math.floor(j / binCols) + 0.5) * s2, 0, delayColor(dbt[i]), s2 * 0.74, 0.96)));
-      seg(2, binX(0), yb2 - s2 * 0.3, binX(B - 1) + binCols * s2, yb2 - s2 * 0.3);
-      seg(2, x2, yb2 - s2 * 0.3, x2 + noneCols * s2, yb2 - s2 * 0.3, GREY);
-      [0, 5, 10, 15, 20].forEach(bi => label(2, binX(bi) + (binCols * s2) / 2, yb2 - 0.16, bi === 20 ? '40+' : String(bi * 2)));
-      label(2, (binX(0) + binX(B - 1) + binCols * s2) / 2, yb2 - 0.36, 'Days past due · average of the last 3 months');
-      label(2, x2 + (noneCols * s2) / 2, yb2 + Math.ceil(noneIdx.length / noneCols) * s2 + 0.14, `No invoices yet · ${intFmt.format(noneIdx.length)}`);
-      const onTimeRows = Math.ceil(bins[0].length / binCols);
-      label(2, binX(0), yb2 + onTimeRows * s2 + 0.14, `On time · ${intFmt.format(bins[0].length)}`, 'strong', 'left');
-
-      // 3 · Default probability, one beeswarm on a log scale
-      const axX0 = chart.x0 + chart.w * 0.02, axX1 = chart.x0 + chart.w * 0.84;
-      const lo = Math.log(0.001), hi = Math.log(0.6);
-      const XP = p => axX0 + ((Math.log(clamp(p, 0.001, 0.6)) - lo) / (hi - lo)) * (axX1 - axX0);
-      const nb = 96, binW = (axX1 - axX0) / nb;
-      const sw = Array.from({ length: nb }, () => []);
-      const dflt = [];
-      for (let i = 0; i < N; i++) {
-        if (res[i].inDefault) dflt.push(i);
-        else sw[clamp(Math.floor((XP(pd[i]) - axX0) / binW), 0, nb - 1)].push(i);
+      const noneText = `${tall ? 'No data' : 'No invoices yet'} · ${intFmt.format(noneIdx.length)}`;
+      if (!upright(F2)) {
+        let best = null;
+        for (let bc = 2; bc <= 16; bc++) {
+          const nc = bc * 2, gc = Math.max(2, Math.round(bc * 0.8));
+          const cols = nc + gc + B * (bc + 1) - 1;
+          const rows = Math.max(Math.ceil(noneIdx.length / nc), ...bins.map(b => Math.ceil(b.length / bc)));
+          const sz = Math.min((F2.w * 0.96) / cols, (F2.h * 0.66) / rows);
+          if (!best || sz > best.sz) best = { bc, nc, gc, cols, sz };
+        }
+        const { bc: binCols, nc: noneCols, gc: gapCols, cols: totalCols, sz: s2 } = best;
+        const x2 = F2.cx - (totalCols * s2) / 2;
+        const yb2 = F2.y0 + F2.h * 0.18;
+        noneIdx.forEach((i, j) => put(2, i, x2 + ((j % noneCols) + 0.5) * s2, yb2 + (Math.floor(j / noneCols) + 0.5) * s2, 0, GREY, dot(s2 * 0.74), 0.34));
+        const binX = bi => x2 + (noneCols + gapCols + bi * (binCols + 1)) * s2;
+        bins.forEach((b, bi) => b.forEach((i, j) => put(2, i, binX(bi) + ((j % binCols) + 0.5) * s2, yb2 + (Math.floor(j / binCols) + 0.5) * s2, 0, delayColor(dbt[i]), dot(s2 * 0.74), 0.96)));
+        seg(2, binX(0), yb2 - s2 * 0.3, binX(B - 1) + binCols * s2, yb2 - s2 * 0.3);
+        seg(2, x2, yb2 - s2 * 0.3, x2 + noneCols * s2, yb2 - s2 * 0.3, GREY);
+        [0, 5, 10, 15, 20].forEach(bi => label(2, binX(bi) + (binCols * s2) / 2, yb2 - 0.16, bi === 20 ? '40+' : String(bi * 2)));
+        label(2, (binX(0) + binX(B - 1) + binCols * s2) / 2, yb2 - 0.36, 'Days past due · average of the last 3 months');
+        label(2, x2 + noneCols * s2, yb2 + Math.ceil(noneIdx.length / noneCols) * s2 + 0.13, noneText, '', 'right');
+        label(2, binX(0), yb2 + Math.ceil(bins[0].length / binCols) * s2 + 0.13, `On time · ${intFmt.format(bins[0].length)}`, 'strong', 'left');
+      } else {
+        const x0 = F2.x0 + F2.w * 0.1;
+        let best = null;
+        for (let br = 2; br <= 12; br++) {
+          const nr = Math.round(br * 1.6), sr = Math.max(4, br + 2);
+          const rows = B * (br + 1) - 1 + sr + nr;
+          const len = Math.max(Math.ceil(noneIdx.length / nr), ...bins.map(b => Math.ceil(b.length / br)));
+          const sz = Math.min((F2.x1 - x0) / len, (F2.h * 0.84) / rows);
+          if (!best || sz > best.sz) best = { br, nr, sr, sz };
+        }
+        const { br: binRows, nr: noneRows, sr: sepRows, sz: s } = best;
+        const yTop = F2.y1 - F2.h * 0.08;
+        const rowY = r => yTop - (r + 0.5) * s;
+        const barTop = bi => bi * (binRows + 1);
+        bins.forEach((b, bi) => b.forEach((i, j) => put(2, i, x0 + (Math.floor(j / binRows) + 0.5) * s, rowY(barTop(bi) + (j % binRows)), 0, delayColor(dbt[i]), dot(s * 0.74), 0.96)));
+        const noneTop = B * (binRows + 1) - 1 + sepRows;
+        noneIdx.forEach((i, j) => put(2, i, x0 + (Math.floor(j / noneRows) + 0.5) * s, rowY(noneTop + (j % noneRows)), 0, GREY, dot(s * 0.74), 0.34));
+        seg(2, x0 - s * 0.7, rowY(0) + s * 0.5, x0 - s * 0.7, rowY(barTop(B - 1) + binRows - 1) - s * 0.5);
+        [0, 5, 10, 15, 20].forEach(bi => label(2, x0 - 0.07, rowY(barTop(bi) + (binRows - 1) / 2), bi === 20 ? '40+' : String(bi * 2), '', 'right'));
+        label(2, x0, yTop + 0.1, 'Days past due', '', 'left');
+        label(2, x0 + Math.ceil(bins[0].length / binRows) * s, yTop + 0.1, `On time · ${intFmt.format(bins[0].length)}`, 'strong', 'right');
+        label(2, x0, rowY(noneTop - sepRows / 2), noneText, '', 'left');
       }
-      sw.forEach(b => b.sort((a, c) => pd[a] - pd[c]));
-      const maxHalf = Math.max(...sw.map(b => Math.ceil(Math.ceil(b.length / 2) / 2)));
-      const s3 = Math.min(binW / 2, (chart.h * 0.6) / (2 * maxHalf + 1));
-      const cy3 = chart.y0 + chart.h * 0.6;
-      sw.forEach((b, bi) => b.forEach((i, j) => {
-        const r = Math.floor(j / 2), sub = j % 2;
-        const lvl = r === 0 ? 0 : (r % 2 ? 1 : -1) * Math.ceil(r / 2);
-        put(3, i, axX0 + (bi + 0.5) * binW + (sub - 0.5) * s3 + jx[i] * s3 * 0.3, cy3 + lvl * s3, 0, riskColor(pd[i]), s3 * 0.82, 0.96);
-      }));
-      const dcols = 4, dx0 = chart.x0 + chart.w * 0.91;
-      dflt.forEach((i, j) => put(3, i, dx0 + (j % dcols) * s3 * 1.2, cy3 + (Math.floor(j / dcols) - Math.ceil(dflt.length / dcols) / 2) * s3 * 1.2, 0, RED, s3 * 0.82, 0.96));
-      const yb3 = cy3 - (maxHalf + 2.5) * s3;
-      let prevMax = 0.001;
-      E.GRADES.forEach(g => {
-        const a = XP(Math.max(prevMax, 0.001)), b = XP(Math.min(g.max, 0.6));
-        const col = riskColor(Math.sqrt(Math.max(prevMax, 0.0012) * Math.min(g.max, 0.6)));
-        if (b - a > 0.02) {
+
+      // 3 · Default probability as one beeswarm on a log scale, packed to fit.
+      const F3 = frameFor(3);
+      const lo = Math.log(0.001), hi = Math.log(0.6);
+      const frac = p => (Math.log(clamp(p, 0.001, 0.6)) - lo) / (hi - lo);
+      const dflt = [], alive = [];
+      for (let i = 0; i < N; i++) (res[i].inDefault ? dflt : alive).push(i);
+      const packSwarm = (axisLen, crossLen) => {
+        let best = null;
+        for (let nb = 24; nb <= 150; nb += 3) {
+          const counts = new Uint16Array(nb);
+          for (const i of alive) counts[Math.min(nb - 1, Math.floor(frac(pd[i]) * nb))]++;
+          let cmax = 0;
+          for (const c of counts) if (c > cmax) cmax = c;
+          for (let per = 1; per <= 5; per++) {
+            const sz = Math.min(axisLen / nb / per, crossLen / (Math.ceil(cmax / per) + 1));
+            if (!best || sz > best.sz) best = { nb, per, sz, cmax };
+          }
+        }
+        const sb = Array.from({ length: best.nb }, () => []);
+        for (const i of alive) sb[Math.min(best.nb - 1, Math.floor(frac(pd[i]) * best.nb))].push(i);
+        sb.forEach(b => b.sort((a, c) => pd[a] - pd[c]));
+        best.bins = sb;
+        best.half = Math.ceil((Math.ceil(best.cmax / best.per) - 1) / 2) * best.sz;
+        return best;
+      };
+      const swarmSpot = (j, per) => {
+        const r = Math.floor(j / per);
+        return { sub: j % per, lvl: r === 0 ? 0 : (r % 2 ? 1 : -1) * Math.ceil(r / 2) };
+      };
+      const gradeBands = (place) => {
+        let prevMax = 0.001;
+        E.GRADES.forEach(g => {
+          const col = riskColor(Math.sqrt(Math.max(prevMax, 0.0012) * Math.min(g.max, 0.6)));
+          place(frac(Math.max(prevMax, 0.001)), frac(Math.min(g.max, 0.6)), g.grade, col);
+          prevMax = g.max;
+        });
+      };
+      if (!upright(F3)) {
+        const axX0 = F3.x0 + F3.w * 0.03, axX1 = F3.x0 + F3.w * 0.84;
+        const pk = packSwarm(axX1 - axX0, F3.h * 0.56);
+        const cy3 = F3.y0 + F3.h * 0.62;
+        const binW = (axX1 - axX0) / pk.nb;
+        pk.bins.forEach((b, bi) => b.forEach((i, j) => {
+          const { sub, lvl } = swarmSpot(j, pk.per);
+          put(3, i, axX0 + bi * binW + (sub + 0.5) * (binW / pk.per) + jx[i] * pk.sz * 0.25, cy3 + lvl * pk.sz, 0, riskColor(pd[i]), dot(pk.sz * 0.82), 0.96);
+        }));
+        const dcols = 4, dsz = pk.sz * 1.25, drows = Math.ceil(dflt.length / dcols);
+        const dx0 = F3.x0 + F3.w * 0.91;
+        dflt.forEach((i, j) => put(3, i, dx0 + (j % dcols) * dsz, cy3 + (Math.floor(j / dcols) - drows / 2) * dsz, 0, RED, dot(pk.sz * 0.82), 0.96));
+        const yb3 = cy3 - pk.half - pk.sz * 2.5;
+        const XP = f => axX0 + f * (axX1 - axX0);
+        gradeBands((fa, fb, grade, col) => {
+          const a = XP(fa), b = XP(fb);
+          if (b - a <= 0.02) return;
           seg(3, a + 0.012, yb3, b - 0.012, yb3, col);
           seg(3, a + 0.012, yb3 + 0.008, b - 0.012, yb3 + 0.008, col);
-          label(3, (a + b) / 2, yb3 - 0.13, g.grade, 'strong', 'center', { color: css(col) });
-        }
-        prevMax = g.max;
-      });
-      [[0.001, '0,1 %'], [0.01, '1 %'], [0.1, '10 %'], [0.5, '50 %']].forEach(([p, t]) => label(3, XP(p), yb3 - 0.34, t));
-      dashed(3, XP(medianPd), yb3 + 0.06, XP(medianPd), cy3 + (maxHalf + 1.5) * s3, 18, PAPER);
-      label(3, XP(medianPd), cy3 + (maxHalf + 1.5) * s3 + 0.12, `Median ${pdNum(medianPd)} %`, 'strong');
-      if (dflt.length) label(3, dx0 + s3 * 1.8, yb3 - 0.13, `In default · ${dflt.length}`, 'strong red');
+          label(3, (a + b) / 2, yb3 - 0.13, grade, 'strong', 'center', { color: css(col) });
+        });
+        [[0.001, '0,1 %', 'left'], [0.01, '1 %'], [0.1, '10 %'], [0.5, '50 %']].forEach(([p, t, al]) => label(3, XP(frac(p)), yb3 - 0.34, t, '', al || 'center'));
+        const topY = cy3 + pk.half + pk.sz * 1.5;
+        dashed(3, XP(frac(medianPd)), yb3 + 0.06, XP(frac(medianPd)), topY, 18, PAPER);
+        label(3, XP(frac(medianPd)), topY + 0.12, `Median ${pdNum(medianPd)} %`, 'strong');
+        if (dflt.length) label(3, F3.x1, cy3 + (drows / 2) * dsz + 0.14, `In default · ${dflt.length}`, 'strong red', 'right');
+      } else {
+        const ayTop = F3.y1 - F3.h * 0.05, ayBot = F3.y0 + F3.h * 0.2;
+        // Leave room at the right for the median label so it never sits on the dots.
+        const cx3 = F3.x0 + F3.w * 0.52;
+        const room = F3.x1 - pxw * 96 - cx3;
+        const pk = packSwarm(ayTop - ayBot, Math.min(F3.w * 0.56, room * 2));
+        const binH = (ayTop - ayBot) / pk.nb;
+        pk.bins.forEach((b, bi) => b.forEach((i, j) => {
+          const { sub, lvl } = swarmSpot(j, pk.per);
+          put(3, i, cx3 + lvl * pk.sz + jx[i] * pk.sz * 0.25, ayTop - bi * binH - (sub + 0.5) * (binH / pk.per), 0, riskColor(pd[i]), dot(pk.sz * 0.82), 0.96);
+        }));
+        const dcols = 14, dsz = pk.sz * 1.3, dy0 = F3.y0 + F3.h * 0.03;
+        dflt.forEach((i, j) => put(3, i, cx3 + ((j % dcols) - (dcols - 1) / 2) * dsz, dy0 + Math.floor(j / dcols) * dsz, 0, RED, dot(pk.sz * 0.82), 0.96));
+        const YP = f => ayTop - f * (ayTop - ayBot);
+        const xb = F3.x0 + F3.w * 0.09;
+        gradeBands((fa, fb, grade, col) => {
+          const a = YP(fa), b = YP(fb);
+          if (a - b <= 0.02) return;
+          seg(3, xb, a - 0.012, xb, b + 0.012, col);
+          seg(3, xb + 0.008, a - 0.012, xb + 0.008, b + 0.012, col);
+          label(3, xb - 0.06, (a + b) / 2, grade, 'strong', 'right', { color: css(col) });
+        });
+        [[0.001, '0,1 %'], [0.01, '1 %'], [0.1, '10 %'], [0.5, '50 %']].forEach(([p, t]) => label(3, xb + 0.06, YP(frac(p)), t, '', 'left'));
+        const half = pk.half + pk.sz;
+        dashed(3, cx3 - half, YP(frac(medianPd)), cx3 + half + pxw * 6, YP(frac(medianPd)), 16, PAPER);
+        label(3, cx3 + half + pxw * 10, YP(frac(medianPd)), `Median ${pdNum(medianPd)} %`, 'strong', 'left');
+        if (dflt.length) label(3, cx3, dy0 + Math.ceil(dflt.length / dcols) * dsz + 0.1, `In default · ${dflt.length}`, 'strong red');
+      }
 
-      // 4 · One company, its links, and everyone else in orbit
-      const ob = mobile ? chart : worldBox([0.04, 0.92, -0.74, 0.74]);
-      const R = Math.min(ob.w, ob.h) * 0.46;
-      orbit = { cx: ob.cx, cy: ob.cy, R, others: new Uint8Array(N) };
+      // 4 · One company, its links, and everyone else in orbit.
+      const F4 = frameFor(4);
+      const R = Math.min(F4.w, F4.h) * 0.46;
+      const ey = tall ? 1 : 0.92;
+      orbit = { cx: F4.cx, cy: F4.cy, R, ey, others: new Uint8Array(N) };
       const linked = new Set();
       F.net.viaDirector.forEach(v => { if (indexOf.has(v.id)) linked.add(indexOf.get(v.id)); });
       F.net.parents.concat(F.net.children).forEach(id => { if (indexOf.has(id)) linked.add(indexOf.get(id)); });
@@ -525,23 +669,27 @@
       for (let i = 0; i < N; i++) {
         orbit.others[i] = 1;
         const rad = R * (0.62 + 0.38 * Math.sqrt(rs[i]));
-        put(4, i, ob.cx + Math.cos(ra[i]) * rad, ob.cy + Math.sin(ra[i]) * rad * 0.92, jz[i] * 0.25, mix3(riskColor(pd[i]), GREY, 0.35), u0 * 1.05, 0.5);
+        put(4, i, F4.cx + Math.cos(ra[i]) * rad, F4.cy + Math.sin(ra[i]) * rad * ey, jz[i] * 0.25, mix3(riskColor(pd[i]), GREY, 0.35), dot(u0 * 1.05), 0.5);
       }
       orbit.others[focus] = 0;
-      put(4, focus, ob.cx, ob.cy, 0.3, riskColor(pd[focus]), R * 0.085, 1);
+      put(4, focus, F4.cx, F4.cy, 0.3, riskColor(pd[focus]), R * 0.085, 1);
       L4.forEach((i, j) => {
         orbit.others[i] = 0;
         const a = (j / L4.length) * Math.PI * 2 + 0.5;
-        const x = ob.cx + Math.cos(a) * r1, y = ob.cy + Math.sin(a) * r1;
-        put(4, i, x, y, 0.15, statusColor(i), R * 0.024, 1);
-        seg(4, ob.cx, ob.cy, x, y, GREY);
+        const x = F4.cx + Math.cos(a) * r1, y = F4.cy + Math.sin(a) * r1;
+        put(4, i, x, y, 0.15, statusColor(i), dot(R * 0.024), 1);
+        seg(4, F4.cx, F4.cy, x, y, GREY);
       });
-      label(4, ob.cx, ob.cy - R * 0.085 - 0.16, F.name, 'strong');
-      if (L4.length) label(4, ob.cx, ob.cy + r1 + 0.16, `Linked through its people · ${L4.length}`);
+      label(4, F4.cx, F4.cy - R * 0.085 - 0.16, F.name, 'strong');
+      if (L4.length) {
+        if (tall) label(4, F4.cx, F4.cy - R * 0.085 - 0.32, `${L4.length} linked`);
+        else label(4, F4.cx, F4.cy + r1 + 0.16, `Linked through its people · ${L4.length}`);
+      }
 
-      // 5 · The back-test as two curves (placeholder until it has run)
-      const side = Math.min(ob.w, ob.h) * 0.84;
-      const ox = ob.cx - side / 2, oy = ob.cy - side / 2;
+      // 5 · The back-test as curves (placeholder until it has run).
+      const F5 = frameFor(5);
+      const side = Math.min(F5.w, F5.h) * 0.84;
+      const ox = F5.cx - side / 2 + (tall ? side * 0.05 : 0), oy = F5.cy - side / 2 + (tall ? side * 0.04 : 0);
       const RX = f => ox + f * side, RY = t => oy + t * side;
       const fb = worldBox([-1, 1, -1, 1]);
       if (backtest) {
@@ -568,7 +716,7 @@
           const [x, y, nx, ny] = along(curves[g], (j + 0.5) / ids.length);
           const off = jx[i] * (g === 0 ? 0.028 : 0.016);
           const col = g === 0 ? riskColor(pd[i]) : g === 1 ? mix3(PAPER, GREY, 0.5) : GREY;
-          put(5, i, x + nx * off, y + ny * off, jz[i] * 0.04, col, u0 * (g === 2 ? 0.8 : 1.15), g === 0 ? 0.95 : g === 1 ? 0.55 : 0.28);
+          put(5, i, x + nx * off, y + ny * off, jz[i] * 0.04, col, dot(u0 * (g === 2 ? 0.8 : 1.15)), g === 0 ? 0.95 : g === 1 ? 0.55 : 0.28);
         }));
         seg(5, RX(0), RY(0), RX(1), RY(0));
         seg(5, RX(0), RY(0), RX(0), RY(1));
@@ -584,7 +732,7 @@
         label(5, fx + 0.1, fy - 0.12, `Accounts only · ${backtest.aucO.toFixed(3)}`, '', 'left');
       }
 
-      // 6 · A quiet field behind pricing
+      // 6 · A quiet field behind pricing.
       for (let i = 0; i < N; i++) {
         put(6, i, fieldN[3 * i] * fb.vw * 0.62, fieldN[3 * i + 1] * fb.vh * 0.62, -5 + fieldN[3 * i + 2] * 6, mix3(riskColor(pd[i]), GREY, 0.5), u0 * 1.1, 0.22);
         if (!backtest) {
@@ -629,7 +777,6 @@
         return Object.assign(d, { el, shown: -1 });
       });
       dirty = true;
-      return unitPx;
     }
 
     function resize() {
@@ -642,6 +789,8 @@
       const px = (h * renderer.getPixelRatio()) / vh;
       pointMat.uniforms.uPx.value = px;
       flowMat.uniforms.uPx.value = px;
+      pointMat.uniforms.uMin.value = 1.5 * renderer.getPixelRatio();
+      flowMat.uniforms.uMin.value = 1.2 * renderer.getPixelRatio();
       relayout();
     }
 
@@ -664,7 +813,7 @@
           if (orbit.others[i] && (k === 4 || k + 1 === 4)) {
             const rad = orbit.R * (0.62 + 0.38 * Math.sqrt(rs[i]));
             const ang = ra[i] + spin * (1.6 - rs[i]);
-            const ox = orbit.cx + Math.cos(ang) * rad, oy = orbit.cy + Math.sin(ang) * rad * 0.92;
+            const ox = orbit.cx + Math.cos(ang) * rad, oy = orbit.cy + Math.sin(ang) * rad * orbit.ey;
             if (k === 4) { ax = ox; ay = oy; } else { bx = ox; by = oy; }
           }
           let x = ax + (bx - ax) * tt, y = ay + (by - ay) * tt, z = az + (bz - az) * tt + Math.sin(Math.PI * tt) * lift[i];
@@ -720,8 +869,8 @@
       const we = easeInOut(w0);
       outer.position.set(pivot.x * we, pivot.y * we, 0);
       inner.position.set(-pivot.x * we, -pivot.y * we, 0);
-      outer.rotation.x = we * (-0.46 + ptr.y * 0.06);
-      outer.rotation.y = we * ((reduce ? 0 : 0.07 * Math.sin(t * 0.15)) + ptr.x * 0.1);
+      outer.rotation.x = we * (tiltX + ptr.y * 0.06);
+      outer.rotation.y = we * ((reduce ? 0 : driftY * Math.sin(t * 0.15)) + ptr.x * 0.1);
       const amp = 0.08 + 0.16 * we;
       camera.position.x += (ptr.x * amp - camera.position.x) * 0.05;
       camera.position.y += (ptr.y * amp * 0.7 - camera.position.y) * 0.05;
@@ -805,7 +954,7 @@
   let setW = 0;
   const measure = () => { setW = track.firstElementChild ? track.firstElementChild.offsetWidth : 0; };
   measure();
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); if (field) field.relayout(); });
   window.addEventListener('resize', measure);
 
   // Cursor, tooltip and magnetic buttons.
@@ -898,11 +1047,13 @@
     heroInner.style.opacity = (1 - smooth(0, vh * 0.8, scrollY)).toFixed(3);
 
     // Chapter headings settle word by word; text fades as its chapter ends.
+    const tall = isTall();
     chapters.forEach((ch, n) => {
       const r = rects[n];
       const enter = clamp((vh * 0.95 - r.top) / (vh * 0.6), 0, 1);
-      const exit = clamp((r.bottom - vh * 0.25) / (vh * 0.35), 0, 1);
+      const exit = tall ? clamp((r.bottom - vh * 0.7) / (vh * 0.3), 0, 1) : clamp((r.bottom - vh * 0.25) / (vh * 0.35), 0, 1);
       ch.text.style.opacity = exit.toFixed(3);
+      ch.text.style.setProperty('--p', clamp((vh - r.top) / r.height, 0, 1).toFixed(3));
       const J = ch.words.length;
       ch.words.forEach((w, j) => {
         const tw = reduce ? 1 : easeOut(clamp(enter * 1.7 - (j / J) * 0.7, 0, 1));
