@@ -35,52 +35,12 @@
 
   const GRADE_KEY = { 'A+': 'Ap', A: 'A', 'B+': 'Bp', B: 'B', 'C+': 'Cp', C: 'C', D: 'D', E: 'E', X: 'X' };
   const gvar = g => `var(--g-${GRADE_KEY[g]})`;
-  const gradeChip = r => `<span class="grade" style="--g:${gvar(r.grade.grade)}">${r.grade.grade}</span>`;
+  const gradeChip = (r, lg) => `<span class="grade${lg ? ' lg' : ''}" style="--g:${gvar(r.grade.grade)}">${r.grade.grade}</span>`;
 
   const ICON = {
     check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>',
-    shield: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M8 1.8 2.8 3.8v4c0 3 2.2 5.2 5.2 6.4 3-1.2 5.2-3.4 5.2-6.4v-4Z"/></svg>',
-    cross: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
     plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
   };
-
-  // ---------- guilloché (banknote engraving) ----------
-  function guilloche(R, amp, lobes, strands, amp2 = 0, lobes2 = 0) {
-    const out = [];
-    const points = 540;
-    for (let s = 0; s < strands; s++) {
-      const ph = (s / strands) * 2 * Math.PI;
-      let d = '';
-      for (let i = 0; i <= points; i++) {
-        const t = (i / points) * 2 * Math.PI;
-        const r = R + amp * Math.sin(lobes * t + ph) + amp2 * Math.sin(lobes2 * t - 2 * ph);
-        d += (i ? 'L' : 'M') + (r * Math.cos(t)).toFixed(2) + ',' + (r * Math.sin(t)).toFixed(2);
-      }
-      out.push(d + 'Z');
-    }
-    return out;
-  }
-  const RING_OUTER = guilloche(64, 9, 18, 9, 1.5, 6);
-  const RING_INNER = guilloche(48, 4.5, 28, 6);
-  const MARK = guilloche(30, 12, 7, 5);
-
-  function seal(r) {
-    const g = r.grade.grade;
-    const circ = (2 * Math.PI * 87).toFixed(1);
-    const ring = `Rok grade · 12-month default probability · ${fmtDate(asOf)} · `;
-    return `<svg class="seal" viewBox="-100 -100 200 200" role="img" aria-label="Rok grade ${g}" style="--g:${gvar(g)}">
-      <defs><path id="seal-arc" d="M 0,-87 a 87,87 0 1,1 -0.01,0"/></defs>
-      <circle r="97" fill="none" stroke="currentColor" stroke-width="0.6" opacity="0.5"/>
-      <circle r="94.5" fill="none" stroke="currentColor" stroke-width="0.3" opacity="0.5"/>
-      <text class="ring-text"><textPath href="#seal-arc" textLength="${circ}" lengthAdjust="spacing">${esc(ring.toUpperCase())}</textPath></text>
-      <circle r="79" fill="none" stroke="currentColor" stroke-width="0.4" opacity="0.6"/>
-      <g class="rings">${RING_OUTER.map(d => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="0.42" opacity="0.8"/>`).join('')}</g>
-      <g class="rings rings-2">${RING_INNER.map(d => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="0.35" opacity="0.55"/>`).join('')}</g>
-      <circle r="39" fill="var(--card)" stroke="currentColor" stroke-width="0.8"/>
-      <circle r="35.5" fill="none" stroke="currentColor" stroke-width="0.3"/>
-      <text class="letter" text-anchor="middle" y="${g.length > 1 ? 19 : 23}" style="font-size:${g.length > 1 ? 52 : 64}px">${g}</text>
-    </svg>`;
-  }
 
   // ---------- storage (per-viewer convenience only) ----------
   const store = {
@@ -175,47 +135,78 @@
       : `${int.format(list.length)} ${list.length === 1 ? 'company' : 'companies'}`;
   }
 
-  // ---------- dossier: certificate ----------
-  function certificate(c, r) {
+  // ---------- dossier: hero ----------
+  const activePds = live.filter(c => c.status === 'active').map(c => results.get(c.id).pd);
+
+  // Where the company sits among every scored company, on a log scale.
+  function distribution(c, r) {
+    const W = 640, L = 4, R = 4;
+    const lo = Math.log(0.001), hi = Math.log(0.6);
+    const x = pd => L + ((Math.log(Math.min(0.6, Math.max(0.001, pd))) - lo) / (hi - lo)) * (W - L - R);
+    const ticks = activePds.map(p => `<line x1="${x(p).toFixed(1)}" x2="${x(p).toFixed(1)}" y1="30" y2="54" stroke="currentColor" stroke-opacity="0.13"/>`).join('');
+    let prev = 0.001;
+    const bands = E.GRADES.map(g => {
+      const a = x(prev), b = x(Math.min(g.max, 0.6));
+      prev = g.max;
+      const w = b - a;
+      return `<rect x="${(a + 1).toFixed(1)}" y="62" width="${Math.max(0, w - 2).toFixed(1)}" height="3" rx="1.5" fill="${gvar(g.grade)}"/>` +
+        (w > 22 ? `<text x="${((a + b) / 2).toFixed(1)}" y="80" text-anchor="middle">${g.grade}</text>` : '');
+    }).join('');
+    const axis = [[0.001, '0,1 %'], [0.01, '1 %'], [0.1, '10 %'], [0.5, '50 %']]
+      .map(([p, t], i, arr) => `<text x="${x(p).toFixed(1)}" y="100" text-anchor="${i === 0 ? 'start' : i === arr.length - 1 ? 'end' : 'middle'}">${t}</text>`).join('');
     const med = sectorMedian.get(c.sector.code);
+    const medLine = med != null ? `<line x1="${x(med).toFixed(1)}" x2="${x(med).toFixed(1)}" y1="26" y2="58" stroke="var(--muted)" stroke-dasharray="2 2"/>` : '';
+    let marker = '';
+    if (!r.inDefault) {
+      const mx = x(r.pd);
+      const anchor = mx > W * 0.75 ? 'end' : mx < W * 0.25 ? 'start' : 'middle';
+      marker = `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="18" y2="58" stroke="var(--ink)" stroke-width="2"/>
+        <circle cx="${mx.toFixed(1)}" cy="18" r="3" fill="var(--ink)"/>
+        <text class="mk" x="${(anchor === 'start' ? mx - 3 : anchor === 'end' ? mx + 3 : mx).toFixed(1)}" y="8" text-anchor="${anchor}">${esc(c.name.split(',')[0])}</text>`;
+    }
+    return `<svg viewBox="0 0 ${W} 104" role="img" aria-label="Position among ${activePds.length} scored companies">${ticks}${medLine}${bands}${marker}${axis}</svg>`;
+  }
+
+  function hero(c, r) {
     const watched = watch[c.id] != null;
-    const g = r.grade.grade;
+    const med = sectorMedian.get(c.sector.code);
     const directors = c.directors.map(p => esc(personById.get(p).name)).join(', ');
     const name = c.form === 's.p.' ? esc(c.name) : `${esc(c.name)} <span class="form">${c.form}</span>`;
-    const ribbon = E.GRADES.map(x => `<span class="${x.grade === g ? 'on' : ''}" style="--g:${gvar(x.grade)}"></span>`).join('');
-    const keys = E.GRADES.map(x => `<span class="${x.grade === g ? 'on' : ''}">${x.grade}</span>`).join('');
     const finFresh = c.fin && r.finAgeMonths <= 12;
     const sources = [
-      c.fin ? `<span class="source"><span class="flag" style="background:${finFresh ? 'var(--good)' : 'var(--warn)'}"></span>Accounts FY${c.fin.periodEnd.slice(0, 4)} · ${r.finAgeMonths} months old</span>` : '',
+      c.fin ? `<span><span class="flag" style="background:${finFresh ? 'var(--good)' : 'var(--warn)'}"></span>Accounts FY${c.fin.periodEnd.slice(0, 4)}, ${r.finAgeMonths} months old</span>` : '',
       c.pay
-        ? `<span class="source"><span class="flag" style="background:var(--good)"></span>Invoices ${fmtDate(c.pay.updated)} · ${c.pay.suppliers} suppliers</span>`
-        : `<span class="source"><span class="flag" style="background:var(--faint)"></span>No invoice data yet</span>`,
-      `<span class="source"><span class="flag" style="background:var(--good)"></span>Registers ${fmtDate(asOf)}</span>`,
+        ? `<span><span class="flag" style="background:var(--good)"></span>Invoices to ${fmtDate(c.pay.updated)}, ${c.pay.suppliers} suppliers</span>`
+        : `<span><span class="flag" style="background:var(--faint)"></span>No invoice data yet</span>`,
+      `<span><span class="flag" style="background:var(--good)"></span>Registers checked ${fmtDate(asOf)}</span>`,
     ].join('');
     const pd = r.inDefault
-      ? `<div class="pd-big" style="--pdc:${gvar(g)}">Default</div><div class="pd-caption">${c.status === 'insolvency' ? 'Insolvency proceedings are open. File claims with the court.' : 'Company is bankrupt.'}</div>`
-      : `<div class="pd-big" style="--pdc:${gvar(g)}">${pdNumber(r.pd)}<small>%</small></div>
-         <div class="pd-caption">chance of default in the next 12 months${med != null ? `. Sector median ${fmtPd(med)}` : ''}.</div>`;
-    return `<section class="panel cert" aria-label="Company and grade">
-      <div>
-        <div class="cert-top"><div class="label">${esc(c.sector.code)} · ${esc(c.sector.label)}</div></div>
-        <h1 class="cert-name">${name}</h1>
-        <div class="facts">
-          <div><span class="label">Reg. no.</span><span class="v num">${c.ms}</span></div>
-          <div><span class="label">VAT no.</span><span class="v num">${c.ds}</span></div>
-          <div><span class="label">Seat</span><span class="v">${esc(c.city)}</span></div>
-          <div><span class="label">Founded</span><span class="v">${c.founded}</span></div>
-          <div><span class="label">Director</span><span class="v" title="${directors}">${directors}</span></div>
-          <div><span class="label">Status</span><span class="v" style="color:${c.status === 'insolvency' ? 'var(--crit)' : 'var(--good)'}">${c.status === 'insolvency' ? 'Insolvency' : 'Active'}</span></div>
+      ? `<div class="pd">${gradeChip(r, true)}<div class="pd-num" style="color:var(--crit)">Default</div>
+         <div class="pd-cap">${c.status === 'insolvency' ? 'Insolvency proceedings are open' : 'Bankrupt'}</div></div>`
+      : `<div class="pd">${gradeChip(r, true)}<div class="pd-num">${pdNumber(r.pd)}<small>%</small></div>
+         <div class="pd-cap">Probability of default within 12 months</div></div>`;
+    return `<section class="hero" aria-label="Company and grade">
+      <div class="hero-top">
+        <div>
+          <div class="crumb">${esc(c.sector.label)} · ${esc(c.sector.code)}</div>
+          <h1 class="name">${name}</h1>
+          <dl class="facts">
+            <div><dt>Registration no.</dt><dd class="mono">${c.ms}</dd></div>
+            <div><dt>VAT no.</dt><dd class="mono">${c.ds}</dd></div>
+            <div><dt>Seat</dt><dd>${esc(c.city)}</dd></div>
+            <div><dt>Founded</dt><dd>${c.founded}</dd></div>
+            <div><dt>Director</dt><dd>${directors}</dd></div>
+            <div><dt>Status</dt><dd>${c.status === 'insolvency' ? 'Insolvency' : 'Active'}</dd></div>
+          </dl>
         </div>
-        <div class="pd-block">${pd}</div>
-        <div class="ribbon" aria-hidden="true"><div class="ribbon-bar">${ribbon}</div><div class="ribbon-keys">${keys}</div></div>
-        <div class="sources">${sources}</div>
+        <button class="btn toggle" type="button" data-watch="${c.id}" aria-pressed="${watched}">${watched ? ICON.check + 'Monitoring' : ICON.plus + 'Monitor'}</button>
       </div>
-      <div class="seal-wrap">
-        ${seal(r)}
-        <button class="toggle" type="button" data-watch="${c.id}" aria-pressed="${watched}">${watched ? ICON.check + 'Monitoring' : ICON.plus + 'Monitor'}</button>
+      <div class="score-row">
+        ${pd}
+        <div class="dist">${distribution(c, r)}
+          <div class="dist-cap">Among ${int.format(activePds.length)} scored companies${med != null ? `. Dashed line: sector median, ${fmtPd(med)}` : ''}.</div></div>
       </div>
+      <div class="sources">${sources}</div>
     </section>`;
   }
 
@@ -223,13 +214,12 @@
   function verdictHtml(c, r, exposure) {
     const rec = E.recommend(c, r, exposure);
     const tone = rec.verdict.code === 'approve' ? 'var(--good)' : rec.verdict.code === 'cover' ? 'var(--warn)' : 'var(--crit)';
-    const icon = rec.verdict.code === 'approve' ? ICON.check : rec.verdict.code === 'cover' ? ICON.shield : ICON.cross;
-    return `<div class="verdict"><span class="verdict-mark" style="background:${tone}">${icon}</span><span class="verdict-text">${rec.verdict.label}</span></div>`;
+    return `<div class="verdict"><span class="flag" style="background:${tone}"></span>${rec.verdict.label}</div>`;
   }
   function figuresHtml(c, r, exposure) {
     const rec = E.recommend(c, r, exposure);
     const insure = rec.premiumRate == null ? '' : `<div class="insure">
-        <span>Insure ${fmtEur(rec.exposure)} for about <b class="num">${fmtEur(rec.exposure * rec.premiumRate)}</b> a year</span>
+        <span>Credit insurance on ${fmtEur(rec.exposure)} costs about ${fmtEur(rec.exposure * rec.premiumRate)} a year.</span>
         <button class="btn" type="button" data-quote="${c.id}">Get quotes</button>
       </div>`;
     return `<div class="figures">
@@ -242,11 +232,11 @@
   function decisionPanel(c, r, exposure) {
     const rec = E.recommend(c, r, exposure);
     const max = Math.max(50000, rec.limit * 3, rec.exposure);
-    return `<section class="panel decide" aria-label="Credit decision">
-      <div class="sec-head" style="margin-bottom:0"><h2 class="sec-title">Credit decision</h2><span class="label">For your exposure</span></div>
+    return `<section class="cell tint" aria-label="Credit decision">
+      <div class="sec-head"><h2 class="sec-title">Credit decision</h2></div>
       <div id="verdict" aria-live="polite">${verdictHtml(c, r, rec.exposure)}</div>
       <div class="field">
-        <label class="label" for="exposure">Most they will owe you at once</label>
+        <label class="label" for="exposure">The most they will owe you at once</label>
         <div class="money"><input id="exposure" type="number" min="0" step="1000" value="${rec.exposure}"><span>€</span></div>
         <input id="exposure-range" type="range" min="0" max="${max}" step="1000" value="${Math.min(rec.exposure, max)}" aria-label="Exposure slider">
       </div>
@@ -279,24 +269,24 @@
     }
   }
   function reasonsSection(c, r) {
-    const head = `<div class="sec-head"><h2 class="sec-title">Why <i>this grade</i></h2><span class="label">Largest effect first</span></div>`;
+    const head = `<div class="sec-head"><h2 class="sec-title">Why this grade</h2><span class="label">Largest effect first</span></div>`;
     if (r.inDefault) {
-      return `<section class="plain">${head}<div class="empty">The company is ${c.status === 'insolvency' ? 'in insolvency proceedings' : 'bankrupt'}. Creditors have three months from the notice on AJPES to file claims with the court.</div></section>`;
+      return `<section class="cell">${head}<div class="empty">The company is ${c.status === 'insolvency' ? 'in insolvency proceedings' : 'bankrupt'}. Creditors have three months from the notice on AJPES to file claims with the court.</div></section>`;
     }
     const top = r.contributions.filter(x => Math.abs(x.contribution) >= 0.03).slice(0, 7);
     const maxAbs = Math.max(0.5, ...top.map(x => Math.abs(x.contribution)));
     const rows = top.map(x => {
-      const w = (Math.abs(x.contribution) / maxAbs) * 46;
+      const w = (Math.abs(x.contribution) / maxAbs) * 50;
       const up = x.contribution > 0;
       const typical = describeTypical(x);
       return `<div class="reason">
-        <div><div class="reason-name">${esc(x.label)}</div><div class="reason-val"><b>${describeValue(x, c)}</b>${typical ? ` · typical ${typical}` : ''}</div></div>
+        <div><div class="reason-name">${esc(x.label)}</div><div class="reason-val">${describeValue(x, c)}${typical ? `, typical ${typical}` : ''}</div></div>
         <div class="bar" title="${up ? 'Raises' : 'Lowers'} risk"><i class="${up ? 'up' : 'down'}" style="width:${w.toFixed(1)}%"></i></div>
       </div>`;
     }).join('');
-    return `<section class="plain" aria-label="Reasons">${head}
+    return `<section class="cell" aria-label="Reasons">${head}
       <div class="reasons">${rows || '<div class="muted">Close to a typical company on every factor.</div>'}</div>
-      <div class="axis-keys"><div></div><div><span>← lowers risk</span><span>raises risk →</span></div></div>
+      <div class="axis-keys"><div></div><div><span>Lowers risk</span><span>Raises risk</span></div></div>
     </section>`;
   }
 
@@ -312,15 +302,15 @@
     return d;
   }
   function paymentsPanel(c) {
-    const head = `<div class="sec-head"><h2 class="sec-title">How they <i>pay suppliers</i></h2><span class="label">Days past due, monthly</span></div>`;
+    const head = `<div class="sec-head"><h2 class="sec-title">How they pay suppliers</h2><span class="label">Average days past due, by month</span></div>`;
     if (!c.pay) {
-      return `<section class="panel" aria-label="Payment behaviour">${head}
-        <div class="empty">None of this company's suppliers share invoices with Rok yet, so the grade rests on filings and registers.<br><br>
-        <b>Do you supply them?</b> Connect your e-invoicing or accounting tool and your invoices to them appear here. Your Pro plan is then free. E-invoicing becomes mandatory for all B2B trade in Slovenia on 1 January 2028.</div>
+      return `<section class="cell" aria-label="Payment behaviour">${head}
+        <div class="empty"><p>None of this company's suppliers share invoices with Rok yet, so the grade rests on filings and registers.</p>
+        <p><b>Do you supply them?</b> Connect your e-invoicing or accounting tool and your invoices to them appear here, and Pro becomes free. E-invoicing is mandatory for all B2B trade in Slovenia from 1 January 2028.</p></div>
       </section>`;
     }
     const dbt = c.pay.dbt;
-    const W = 600, H = 210, L = 28, R = 38, T = 16, B = 26;
+    const W = 600, H = 200, L = 24, R = 64, T = 16, B = 26;
     const yMax = Math.max(20, Math.ceil(Math.max(...dbt) / 10) * 10);
     const x = i => L + (i * (W - L - R)) / (dbt.length - 1);
     const y = v => T + (1 - v / yMax) * (H - T - B);
@@ -332,24 +322,23 @@
     const last = dbt[dbt.length - 1];
     const recent = avg(dbt.slice(-3)), earlier = avg(dbt.slice(0, 9));
     const delta = recent - earlier;
-    const tone = recent > 20 || delta >= 10 ? 'var(--crit)' : recent > 8 || delta >= 4 ? 'var(--warn)' : 'var(--accent)';
-    const grid = [yMax / 2, yMax].map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--rule)" stroke-dasharray="2 4"/><text class="tick" x="${L - 8}" y="${y(t) + 3.5}" text-anchor="end">${t}</text>`).join('');
+    const tone = recent > 20 || delta >= 10 ? 'var(--crit)' : recent > 8 || delta >= 4 ? 'var(--warn)' : 'var(--ink)';
+    const grid = [yMax / 2, yMax].map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text class="tick" x="${L - 8}" y="${y(t) + 3.5}" text-anchor="end">${t}</text>`).join('');
     const svg = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Average days past due, last 12 months">
-      <defs><linearGradient id="payfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tone}" stop-opacity="0.28"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></linearGradient></defs>
+      <defs><linearGradient id="payfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tone}" stop-opacity="0.10"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></linearGradient></defs>
       ${grid}
-      <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--rule-strong)"/>
+      <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-2)"/>
       <text class="note" x="${W - R + 6}" y="${y(0) + 3.5}">on time</text>
       <path d="${area}" fill="url(#payfill)"/>
-      <path d="${line}" fill="none" stroke="${tone}" stroke-width="2.2" stroke-linecap="round"/>
-      <circle cx="${x(dbt.length - 1)}" cy="${y(last)}" r="7" fill="${tone}" opacity="0.18"/>
-      <circle cx="${x(dbt.length - 1)}" cy="${y(last)}" r="3.6" fill="${tone}" stroke="var(--card)" stroke-width="1.5"/>
-      <text class="note" x="${x(dbt.length - 1) + 10}" y="${y(last) - 8}" style="fill:${tone}">${last.toFixed(0)} d</text>
+      <path d="${line}" fill="none" stroke="${tone}" stroke-width="1.75" stroke-linecap="round"/>
+      <circle cx="${x(dbt.length - 1)}" cy="${y(last)}" r="3" fill="${tone}"/>
+      <text class="note" x="${x(dbt.length - 1) + 8}" y="${y(last) - 8}" style="fill:${tone};font-weight:500">${last.toFixed(0)} days</text>
       ${dbt.map((_, i) => (i % 2 === 1 ? `<text class="tick" x="${x(i)}" y="${H - 6}" text-anchor="middle">${label(i)}</text>` : '')).join('')}
     </svg>`;
-    return `<section class="panel" aria-label="Payment behaviour">${head}${svg}
+    return `<section class="cell" aria-label="Payment behaviour">${head}${svg}
       <div class="stats">
         <div><span class="label">Last 3 months</span><span class="v">${recent.toFixed(0)} days</span></div>
-        <div><span class="label">Versus before</span><span class="v" style="color:${delta >= 4 ? tone : 'var(--ink)'}">${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(0)} days</span></div>
+        <div><span class="label">Change on earlier months</span><span class="v" style="color:${delta >= 4 ? tone : 'var(--ink)'}">${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(0)} days</span></div>
         <div><span class="label">Paid 30+ days late</span><span class="v">${fmtPct(c.pay.lateShare30)}</span></div>
       </div>
     </section>`;
@@ -384,7 +373,7 @@
 
     const curve = (x1, y1, x2, y2) => {
       const mx = (x1 + x2) / 2;
-      return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="var(--rule-strong)" stroke-width="1.2"/>`;
+      return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="var(--line-2)" stroke-width="1"/>`;
     };
     const chip = (co, x, y, align) => {
       const dead = co.status === 'bankrupt';
@@ -393,8 +382,8 @@
       const w = Math.round(label.length * 6.7 + sub.length * 6.4 + 40);
       const x0 = align === 'end' ? x - w : align === 'start' ? x : x - w / 2;
       return `<g class="co${dead ? ' dead' : ''}" ${dead ? 'role="img"' : `data-open="${co.id}" tabindex="0" role="link"`} aria-label="${esc(co.name)}">
-        <rect class="chip" x="${x0}" y="${y - 13}" width="${w}" height="26" rx="13" fill="var(--card)" stroke="var(--rule-strong)"/>
-        <circle cx="${x0 + 14}" cy="${y}" r="4" fill="${statusColor(co)}"/>
+        <rect class="chip" x="${x0}" y="${y - 13}" width="${w}" height="26" rx="6" fill="var(--surface)" stroke="var(--line-2)"/>
+        <circle cx="${x0 + 14}" cy="${y}" r="3" fill="${statusColor(co)}"/>
         <text x="${x0 + 25}" y="${y + 4}">${esc(label)} <tspan class="gsub" dx="4">${sub}</tspan></text>
       </g>`;
     };
@@ -413,7 +402,7 @@
     for (const f of farPos) nodes += chip(byId.get(f.id), f.x, f.y, 'end');
     for (const p of ringPos) {
       if (p.kind === 'person') {
-        nodes += `<g class="person"><circle cx="${p.x}" cy="${p.y}" r="5" fill="var(--card)" stroke="var(--ink-2)" stroke-width="1.4"/>
+        nodes += `<g class="person"><circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
           <text x="${p.x}" y="${p.y - 11}" text-anchor="middle">${esc(personById.get(p.id).name)}</text>
           <text class="gsub" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${p.rel}</text></g>`;
       } else {
@@ -421,19 +410,19 @@
       }
     }
     for (const s of subPos) nodes += chip(byId.get(s.id), s.x, s.y, 'start');
-    nodes += `<g><rect x="${X.center - cw / 2}" y="${cy - 16}" width="${cw}" height="32" rx="16" fill="var(--ink)"/>
-      <text x="${X.center}" y="${cy + 4.5}" text-anchor="middle" style="fill:var(--paper);font-weight:600">${esc(cname)}</text></g>`;
+    nodes += `<g><rect x="${X.center - cw / 2}" y="${cy - 16}" width="${cw}" height="32" rx="8" fill="var(--ink)"/>
+      <text x="${X.center}" y="${cy + 4.5}" text-anchor="middle" style="fill:var(--surface);font-weight:500">${esc(cname)}</text></g>`;
 
-    const heads = `<text class="gsub" x="${X.far}" y="16" text-anchor="end">OTHER COMPANIES OF THE SAME PEOPLE</text>
-      <text class="gsub" x="${X.ring}" y="16" text-anchor="middle">PEOPLE AND OWNERS</text>
-      ${subs.length ? `<text class="gsub" x="${X.sub}" y="16">SUBSIDIARIES</text>` : ''}`;
-    const svg = `<svg class="chart graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="Directors, owners and linked companies" style="min-width:640px">${far.length ? heads : heads.replace(/<text[^>]*>OTHER[^<]*<\/text>/, '')}${edges}${nodes}</svg>`;
+    const heads = `<text class="ghead" x="${X.far}" y="16" text-anchor="end">Their other companies</text>
+      <text class="ghead" x="${X.ring}" y="16" text-anchor="middle">People and owners</text>
+      ${subs.length ? `<text class="ghead" x="${X.sub}" y="16">Subsidiaries</text>` : ''}`;
+    const svg = `<svg class="chart graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="Directors, owners and linked companies" style="min-width:640px">${far.length ? heads : heads.replace(/<text[^>]*>Their other[^<]*<\/text>/, '')}${edges}${nodes}</svg>`;
 
     const tags = [];
     if (c.net.directorBankruptcies) tags.push(`<span class="tag crit">${c.net.directorBankruptcies} past ${c.net.directorBankruptcies === 1 ? 'bankruptcy' : 'bankruptcies'} through directors</span>`);
     if (c.net.relatedDistress) tags.push(`<span class="tag warn">${c.net.relatedDistress} related ${c.net.relatedDistress === 1 ? 'company' : 'companies'} in distress</span>`);
-    return `<section class="panel" aria-label="Network">
-      <div class="sec-head"><h2 class="sec-title">People <i>and linked companies</i></h2><div class="tags">${tags.join('') || '<span class="tag good">No distress in the network</span>'}</div></div>
+    return `<section class="cell" aria-label="Network">
+      <div class="sec-head"><h2 class="sec-title">People and linked companies</h2><div class="tags">${tags.join('') || '<span class="tag good">No distress among linked companies</span>'}</div></div>
       <div class="table-wrap">${svg}</div>
       <div class="keys"><span><i style="background:var(--good)"></i>Clean</span><span><i style="background:var(--warn)"></i>Blocked account or tax debt</span><span><i style="background:var(--crit)"></i>Bankrupt or insolvent</span></div>
     </section>`;
@@ -459,9 +448,9 @@
     }
     ev.push({ date: `${c.founded}-01-01`, color: 'var(--faint)', text: `Registered as ${c.form}`, yearOnly: true });
     ev.sort((a, b) => b.date.localeCompare(a.date));
-    return `<section class="plain" aria-label="Events">
+    return `<section class="cell" aria-label="Events">
       <div class="sec-head"><h2 class="sec-title">Events</h2><span class="label">Newest first</span></div>
-      <ul class="timeline">${ev.map(e => `<li><time>${e.yearOnly ? e.date.slice(0, 4) : fmtDate(e.date)}</time><span class="node" style="background:${e.color}"></span><span>${esc(e.text)}</span></li>`).join('')}</ul>
+      <ul class="timeline">${ev.map(e => `<li><span class="node" style="background:${e.color}"></span><div><span class="t">${esc(e.text)}</span><time>${e.yearOnly ? e.date.slice(0, 4) : fmtDate(e.date)}</time></div></li>`).join('')}</ul>
     </section>`;
   }
 
@@ -483,8 +472,8 @@
       return `<td class="num ${Math.abs(ch) < 0.005 ? '' : good ? 'pos' : 'neg'}">${ch > 0 ? '+' : ch < 0 ? '−' : ''}${Math.abs(ch * 100).toFixed(0)} %</td>`;
     };
     const ratio = (f, fn) => fn(f).toFixed(2).replace('.', ',');
-    return `<section class="plain" aria-label="Annual accounts">
-      <div class="sec-head"><h2 class="sec-title">Annual <i>accounts</i></h2><span class="label">AJPES · EUR</span></div>
+    return `<section class="cell" aria-label="Annual accounts">
+      <div class="sec-head"><h2 class="sec-title">Annual accounts</h2><span class="label">Source AJPES, in euros</span></div>
       <div class="table-wrap"><table>
         <thead><tr><th></th><th>FY${a.periodEnd.slice(0, 4)}</th><th>FY${b.periodEnd.slice(0, 4)}</th><th>Change</th></tr></thead>
         <tbody>
@@ -503,12 +492,13 @@
     state.current = id;
     const r = results.get(id);
     const exposure = keepExposure != null ? keepExposure : watch[id] != null ? watch[id] : null;
-    $('#dossier').innerHTML = `
-      ${certificate(c, r)}
-      <div class="row-2">${decisionPanel(c, r, exposure)}${reasonsSection(c, r)}</div>
-      <div class="row-2b">${paymentsPanel(c)}${eventsSection(c, r)}</div>
+    $('#dossier').innerHTML = `<div class="sheet">
+      ${hero(c, r)}
+      <div class="cells c-5-7">${decisionPanel(c, r, exposure)}${reasonsSection(c, r)}</div>
+      <div class="cells c-7-5">${paymentsPanel(c)}${eventsSection(c, r)}</div>
       ${networkPanel(c)}
-      ${accountsSection(c)}`;
+      ${accountsSection(c)}
+    </div>`;
     document.querySelectorAll('#results button[data-open]').forEach(b => b.setAttribute('aria-current', String(b.dataset.open === id)));
   }
 
@@ -537,7 +527,7 @@
     rows.sort((a, b) => b.rec.expectedLoss - a.rec.expectedLoss);
 
     $('#view-portfolio').innerHTML = `
-      <div class="page-head"><div class="label">Portfolio</div><h1 class="page-title">Your <i>customers</i></h1>
+      <div class="page-head"><h1 class="page-title">Portfolio</h1>
         <p class="lede">Each company you monitor is re-scored when a register, a filing or an invoice changes. Exposure is the most a customer can owe you at once. Change it on the company page.</p></div>
       <div class="strip">
         <div><span class="label">Total exposure</span><span class="v">${fmtEurShort(total)}</span><span class="sub">${rows.length} companies monitored</span></div>
@@ -545,8 +535,8 @@
         <div><span class="label">Default probability</span><span class="v">${fmtPd(wpd)}</span><span class="sub">Weighted by exposure</span></div>
         <div><span class="label">Over their limit</span><span class="v" style="color:${over.length ? 'var(--crit)' : 'var(--good)'}">${over.length}</span><span class="sub">${fmtEurShort(over.reduce((s, x) => s + x.exposure - x.rec.limit, 0))} above recommended limits</span></div>
       </div>
-      <div class="row-2b">
-        <section class="panel"><div class="sec-head"><h2 class="sec-title">Monitored <i>companies</i></h2><span class="label">Largest expected loss first</span></div>
+      <div class="split">
+        <section class="card"><div class="sec-head"><h2 class="sec-title">Monitored companies</h2><span class="label">Largest expected loss first</span></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Company</th><th>Grade</th><th>PD</th><th>Exposure</th><th>Limit</th><th>Exp. loss</th></tr></thead>
             <tbody>${rows.map(x => `<tr class="go" data-open="${x.c.id}" tabindex="0">
@@ -555,7 +545,7 @@
               <td class="num">${fmtEur(x.rec.limit)}</td><td class="num">${fmtEur(x.rec.expectedLoss)}</td></tr>`).join('')}</tbody>
           </table></div>
         </section>
-        <section class="plain"><div class="sec-head"><h2 class="sec-title">Alerts</h2><span class="label">${allAlerts.length} open</span></div>
+        <section><div class="sec-head"><h2 class="sec-title">Alerts</h2><span class="label">${allAlerts.length} open</span></div>
           <ul class="alerts">${allAlerts.map(a => `<li><button data-open="${a.c.id}"><span class="flag" style="background:${levelColor[a.level]}"></span>
             <span><span class="a-co">${esc(a.c.name)}</span><br><span class="a-msg">${esc(a.text)}</span></span><span class="a-lvl" style="color:${levelColor[a.level]}">${levelWord[a.level]}</span></button></li>`).join('') || '<li class="empty">No alerts on your customers.</li>'}</ul>
           <p class="fine">Alerts go out by email, Slack or Teams, and as webhooks into your ERP.</p>
@@ -594,53 +584,54 @@
       for (const i of idx) { if (y[i]) tp++; else fp++; pts.push([fp / Nn, tp / P]); }
       return pts.filter((p, i) => i % 6 === 0 || i === pts.length - 1);
     };
-    const S = 300, M = 36;
+    const S = 300, M = 44;
     const px = v => M + v * (S - M - 12), py = v => S - M - v * (S - M - 12);
     const path = pts => pts.map((p, i) => `${i ? 'L' : 'M'}${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`).join('');
     const fullPts = roc(full);
     const rocSvg = `<svg class="chart" viewBox="0 0 ${S} ${S}" style="max-width:380px" role="img" aria-label="ROC curves for both models">
-      <defs><linearGradient id="rocfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity="0.2"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
-      ${[0.5, 1].map(t => `<line x1="${px(0)}" x2="${px(1)}" y1="${py(t)}" y2="${py(t)}" stroke="var(--rule)" stroke-dasharray="2 4"/>`).join('')}
+      
+      ${[0.5, 1].map(t => `<line x1="${px(0)}" x2="${px(1)}" y1="${py(t)}" y2="${py(t)}" stroke="var(--line)"/>`).join('')}
       ${[0, 0.5, 1].map(t => `<text class="tick" x="${px(0) - 8}" y="${py(t) + 3.5}" text-anchor="end">${t}</text><text class="tick" x="${px(t)}" y="${S - M + 16}" text-anchor="middle">${t}</text>`).join('')}
-      <line x1="${px(0)}" y1="${py(0)}" x2="${px(1)}" y2="${py(0)}" stroke="var(--rule-strong)"/>
+      <line x1="${px(0)}" y1="${py(0)}" x2="${px(1)}" y2="${py(0)}" stroke="var(--line-2)"/>
       <line x1="${px(0)}" y1="${py(0)}" x2="${px(1)}" y2="${py(1)}" stroke="var(--faint)" stroke-dasharray="3 4"/>
-      <path d="${path(fullPts)}L${px(1)},${py(0)}Z" fill="url(#rocfill)"/>
-      <path d="${path(roc(filings))}" fill="none" stroke="var(--faint)" stroke-width="1.6"/>
-      <path d="${path(fullPts)}" fill="none" stroke="var(--accent)" stroke-width="2.4"/>
+      
+      <path d="${path(roc(filings))}" fill="none" stroke="var(--faint)" stroke-width="1.5"/>
+      <path d="${path(fullPts)}" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      <text class="note" x="${px(0.16)}" y="${py(0.9)}" style="fill:var(--ink);font-weight:500">Rok</text>
+      <text class="note" x="${px(0.34)}" y="${py(0.62)}">Annual accounts only</text>
       <text class="note" x="${px(0.5)}" y="${S - 4}" text-anchor="middle">Share of healthy companies flagged</text>
-      <text class="note" x="12" y="${py(0.5)}" text-anchor="middle" transform="rotate(-90 12 ${py(0.5)})">Share of defaults caught</text>
+      <text class="note" x="6" y="${py(0.5)}" text-anchor="middle" transform="rotate(-90 6 ${py(0.5)})">Share of defaults caught</text>
     </svg>`;
     const maxRate = Math.max(...cal.filter(g => g.n).map(g => Math.max(g.predicted, g.observed)));
     const weightRows = E.FEATURES.map(f => {
       const w = E.MODELS.full.weights[f.key], wo = E.MODELS.filings.weights[f.key];
       const fmt = v => (v == null ? '<span class="muted">not used</span>' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(3));
-      return `<tr><td>${esc(f.label)}</td><td class="muted">${f.group}</td><td class="num">${fmt(w)}</td><td class="num">${fmt(wo)}</td></tr>`;
+      return `<tr><td>${esc(f.label)}</td><td class="muted">${f.group[0].toUpperCase() + f.group.slice(1)}</td><td class="num">${fmt(w)}</td><td class="num">${fmt(wo)}</td></tr>`;
     }).join('');
 
     modelHtml = `
-      <div class="page-head"><div class="label">Model card · published every quarter</div><h1 class="page-title">How good is <i>the score?</i></h1>
+      <div class="page-head"><div class="label">Model card, published every quarter</div><h1 class="page-title">How good is the score?</h1>
         <p class="lede">Registry-based scores in Slovenia don't publish how often they are right. Rok does. Here Rok's model is tested against a model that only sees annual accounts and company age, the inputs registry-only scores rely on. Both are tested on ${int.format(y.length)} companies they were not trained on, and ${defaults} of those defaulted within 12 months.</p></div>
       <div class="versus">
-        <div class="panel"><span class="label">Rok · AUC</span><span class="v accent">${aucF.toFixed(3)}</span><span class="sub">Gini ${(2 * aucF - 1).toFixed(2)}</span></div>
-        <div class="panel"><span class="label">Annual accounts only · AUC</span><span class="v">${aucO.toFixed(3)}</span><span class="sub">Gini ${(2 * aucO - 1).toFixed(2)}</span></div>
-        <div class="panel"><span class="label">Defaults in the riskiest 10 %</span><span class="v">${fmtPct(capture(full))}</span><span class="sub">versus ${fmtPct(capture(filings))} with accounts only</span></div>
+        <div><span class="label">Rok, AUC</span><span class="v">${aucF.toFixed(3)}</span><span class="sub">Gini ${(2 * aucF - 1).toFixed(2)}</span></div>
+        <div><span class="label">Annual accounts only, AUC</span><span class="v dim">${aucO.toFixed(3)}</span><span class="sub">Gini ${(2 * aucO - 1).toFixed(2)}</span></div>
+        <div><span class="label">Defaults caught in the riskiest 10 %</span><span class="v">${fmtPct(capture(full))}</span><span class="sub">${fmtPct(capture(filings))} with annual accounts only</span></div>
       </div>
-      <div class="row-2">
-        <section class="panel"><div class="sec-head"><h2 class="sec-title">Ranking <i>power</i></h2><span class="label">ROC curve</span></div>
+      <div class="split">
+        <section class="card"><div class="sec-head"><h2 class="sec-title">Ranking power</h2><span class="label">ROC curve</span></div>
           ${rocSvg}
-          <div class="keys"><span><i style="background:var(--accent)"></i>Rok</span><span><i style="background:var(--faint)"></i>Annual accounts only</span></div>
           <p class="fine">A curve closer to the top-left corner catches more defaults for the same number of false alarms.</p>
         </section>
-        <section class="plain"><div class="sec-head"><h2 class="sec-title">Calibration</h2><span class="label">Predicted against actual</span></div>
+        <section><div class="sec-head"><h2 class="sec-title">Calibration</h2><span class="label">Predicted against actual</span></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Grade</th><th>Companies</th><th>Predicted</th><th>Actual</th><th></th></tr></thead>
-            <tbody>${cal.filter(g => g.n).map(g => `<tr><td><span class="grade" style="--g:${gvar(g.grade)}">${g.grade}</span></td><td class="num">${int.format(g.n)}</td><td class="num">${fmtPd(g.predicted)}</td><td class="num">${fmtPd(g.observed)}</td>
+            <tbody>${cal.filter(g => g.n).map(g => `<tr><td>${gradeChip({ grade: { grade: g.grade } })}</td><td class="num">${int.format(g.n)}</td><td class="num">${fmtPd(g.predicted)}</td><td class="num">${fmtPd(g.observed)}</td>
               <td><span class="cal-bars"><i style="width:${(g.predicted / maxRate) * 100}%;background:var(--faint)"></i><i style="width:${Math.max(1, (g.observed / maxRate) * 100)}%;background:${gvar(g.grade)}"></i></span></td></tr>`).join('')}</tbody>
           </table></div>
           <p class="fine">Grey bars show the predicted rate, coloured bars what actually happened. When they match, a 4 % PD means about 4 defaults in every 100 companies, so you can price and provision on it directly.</p>
         </section>
       </div>
-      <section class="plain" style="margin-top:28px"><div class="sec-head"><h2 class="sec-title">Every weight, <i>in the open</i></h2><span class="label">Log-odds per unit above typical</span></div>
+      <section class="section"><div class="sec-head"><h2 class="sec-title">Every weight, in the open</h2><span class="label">Log-odds per unit above typical</span></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Factor</th><th>Source</th><th>Rok</th><th>Accounts only</th></tr></thead>
           <tbody>${weightRows}</tbody>
@@ -654,20 +645,20 @@
   // ---------- pricing ----------
   function renderPricing() {
     $('#view-pricing').innerHTML = `
-      <div class="page-head"><div class="label">Proposed pricing · monthly · cancel any time</div><h1 class="page-title">Pay for what <i>you check</i></h1>
+      <div class="page-head"><div class="label">Proposed pricing</div><h1 class="page-title">Pay for what you check</h1>
         <p class="lede">No sales call and no 12-month contract. Share your invoices and Pro is free, because your data makes every score better.</p></div>
       <div class="tiers">
-        <section class="panel tier"><div class="tier-name">Free</div><div class="tier-price">0 €</div><div class="for">For a quick look before a first order.</div>
+        <section class="tier"><div class="tier-name">Free</div><div class="tier-price">0 €</div><div class="for">A quick check before a first order.</div>
           <ul><li>Search every Slovenian company</li><li>Grade and alerts on 3 dossiers a month</li><li>Blocked-account and FURS checks</li></ul></section>
-        <section class="panel tier hero"><div class="tier-name">Pro</div><div class="tier-price">29 €<small>/ month</small></div><div class="for">For owners and credit controllers.</div>
+        <section class="tier pick"><div class="tier-name">Pro <span>Most chosen</span></div><div class="tier-price">29 €<small>per month</small></div><div class="for">For owners and credit controllers.</div>
           <ul><li>Unlimited dossiers with reasons</li><li>Monitor 100 companies</li><li>Credit limits and payment terms</li><li>Payment behaviour from invoices</li><li>Email alerts</li></ul>
           <div class="coop"><b>Free</b> when you connect your e-invoicing or accounting tool.</div></section>
-        <section class="panel tier"><div class="tier-name">Team</div><div class="tier-price">119 €<small>/ month</small></div><div class="for">For finance teams with a customer book.</div>
+        <section class="tier"><div class="tier-name">Team</div><div class="tier-price">119 €<small>per month</small></div><div class="for">For finance teams with a customer book.</div>
           <ul><li>5 seats, 1,000 monitored companies</li><li>API, webhooks, Slack and Teams</li><li>ERP plugins</li><li>Bulk portfolio re-score</li></ul></section>
-        <section class="panel tier"><div class="tier-name">Single report</div><div class="tier-price">3,90 €<small>/ dossier</small></div><div class="for">For a tender or a one-off deal.</div>
-          <ul><li>Card payment, no account needed</li><li>Full dossier as PDF</li></ul></section>
+        <section class="tier"><div class="tier-name">Single report</div><div class="tier-price">3,90 €<small>per dossier</small></div><div class="for">For a tender or a one-off deal.</div>
+          <ul><li>Pay by card, no account</li><li>Full dossier as PDF</li></ul></section>
       </div>
-      <section class="plain" style="margin-top:36px"><div class="sec-head"><h2 class="sec-title">Against <i>the market</i></h2><span class="label">Public information, September 2026</span></div>
+      <section class="section"><div class="sec-head"><h2 class="sec-title">Against the market</h2><span class="label">Public information, September 2026</span></div>
         <div class="table-wrap"><table>
           <thead><tr><th></th><th>Rok</th><th>AJPES eS.BON</th><th>D&amp;B (Bisnode)</th><th>EBONITETE.SI</th></tr></thead>
           <tbody>
@@ -740,7 +731,6 @@
   window.addEventListener('hashchange', route);
 
   // ---------- boot ----------
-  $('#brand-mark').innerHTML = MARK.map(d => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="2.4" opacity="0.9"/>`).join('');
   watch = store.get('rok.watch', null);
   if (!watch || typeof watch !== 'object' || Object.keys(watch).some(id => !byId.has(id))) watch = defaultWatchlist();
   const firstAlerting = Object.keys(watch).find(id => alertCache.get(id).some(a => a.level === 'warn' || a.level === 'crit') && byId.get(id).status === 'active' && byId.get(id).pay);
