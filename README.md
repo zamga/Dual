@@ -16,9 +16,10 @@ teardown and strategy are in [`research/prva-bonitetna-agencija.md`](research/pr
 
 ## Layout
 
+- `app/index.html`, `app/landing.js`: the public page. Every WebGL point is one company from the demo universe; scrolling re-arranges the same points into a map of Slovenia, the age of annual accounts, payment delays, grades, a live credit decision and the back-test curve. Hover a point to see the company, click to open its dossier. Uses three.js r159 and Lenis from jsDelivr.
+- `app/desk.html`, `app/app.js`: the credit desk (Companies, Portfolio, Model, Pricing).
 - `app/engine.js`: scoring engine (UMD). Transparent logistic model, reason codes, credit decision, network stats, AUC and calibration.
 - `app/data.js`: seeded generator of **fictional** Slovenian companies. It stands in for AJPES, FURS, the blocked-account register and the invoice co-op until those feeds are connected.
-- `app/index.html`, `app/app.js`: the credit desk UI (Companies, Portfolio, Model, Pricing).
 - `scripts/fit.js`: fits both models with sign-constrained logistic regression on training seeds and writes the weights into `engine.js`.
 - `tests/`: engine tests, including the check that payment data beats filings-only on held-out data.
 
@@ -27,7 +28,7 @@ teardown and strategy are in [`research/prva-bonitetna-agencija.md`](research/pr
 ```sh
 npm test          # engine tests
 npm run fit       # refit model weights
-npm start         # serve app/ on http://localhost:8080
+npm start         # serve app/ on http://localhost:8080 (landing at /, desk at /desk.html)
 ```
 
 ## Demo data caveat

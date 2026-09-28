@@ -42,6 +42,16 @@
     'Krško', 'Slovenj Gradec', 'Postojna', 'Izola'];
   const FIRST = ['Ana', 'Maja', 'Nina', 'Eva', 'Mojca', 'Petra', 'Katja', 'Urška', 'Tina', 'Barbara', 'Špela',
     'Luka', 'Jan', 'Marko', 'Matej', 'Rok', 'Tomaž', 'Gregor', 'Andrej', 'Primož', 'Boštjan', 'Žiga', 'Aleš'];
+  // Extra names, used only for universes larger than 600 companies so that the
+  // 600-company seeds the model was fitted on stay byte-for-byte identical.
+  const FIRST_MORE = ['Sara', 'Lara', 'Zala', 'Neža', 'Tjaša', 'Polona', 'Mateja', 'Vesna', 'Irena', 'Alenka',
+    'Nejc', 'Miha', 'Blaž', 'Klemen', 'Uroš', 'Jure', 'Anže', 'Domen', 'Simon', 'Janez'];
+  const LAST_MORE = ['Vovk', 'Kuhar', 'Lešnik', 'Hočevar', 'Jereb', 'Rupnik', 'Mavrič', 'Ferjan', 'Babič', 'Kranjc',
+    'Pavlič', 'Černe', 'Kokalj', 'Debeljak', 'Zorko', 'Šinkovec', 'Kotnik', 'Mohorič', 'Jug', 'Tomažič',
+    'Vidic', 'Rant', 'Štrukelj', 'Leban', 'Humar', 'Čuk', 'Gorjup', 'Oman', 'Marolt', 'Fras',
+    'Kristan', 'Logar', 'Robnik', 'Sever', 'Stopar', 'Toplak', 'Urbanc', 'Zadravec', 'Ambrožič', 'Bergant'];
+  const TAILS = ['Plus', 'Pro', 'Center', 'Group', 'Invest', 'Trade', 'Tech', 'Line', 'Nova', 'Alpe', 'Adria',
+    'Commerce', 'Design', 'Energija', 'Storitve'];
   const LAST = ['Novak', 'Horvat', 'Kovačič', 'Krajnc', 'Zupančič', 'Potočnik', 'Kovač', 'Mlakar', 'Kos',
     'Vidmar', 'Golob', 'Turk', 'Kralj', 'Božič', 'Korošec', 'Bizjak', 'Zupan', 'Hribar', 'Kavčič', 'Rozman',
     'Kastelic', 'Oblak', 'Petek', 'Žagar', 'Kolar', 'Košir', 'Koren', 'Medved', 'Zajc', 'Pirc'];
@@ -73,13 +83,17 @@
 
     // People. The first ten are serial directors who keep reappearing
     // behind companies that went bankrupt.
+    const n = count || 600;
+    const big = n > 600;
+    const firstNames = big ? FIRST.concat(FIRST_MORE) : FIRST;
+    const lastNames = big ? LAST.concat(LAST_MORE) : LAST;
     const people = [];
     const usedNames = new Set();
-    while (people.length < 260) {
-      const name = `${pick(FIRST)} ${pick(LAST)}`;
+    while (people.length < (big ? Math.round(n * 0.45) : 260)) {
+      const name = `${pick(firstNames)} ${pick(lastNames)}`;
       if (usedNames.has(name)) continue;
       usedNames.add(name);
-      people.push({ id: `p${String(people.length + 1).padStart(3, '0')}`, name, serial: people.length < 10 });
+      people.push({ id: `p${String(people.length + 1).padStart(3, '0')}`, name, serial: people.length < (big ? Math.round(n / 60) : 10) });
     }
     const serial = people.filter(p => p.serial);
     const regular = people.filter(p => !p.serial);
@@ -87,8 +101,9 @@
     const usedCompanyNames = new Set();
     function companyName() {
       for (;;) {
-        const n = pick(ROOTS) + pick(SUFFIXES);
-        const name = n.charAt(0) + n.slice(1).toLowerCase();
+        const base = pick(ROOTS) + pick(SUFFIXES);
+        let name = base.charAt(0) + base.slice(1).toLowerCase();
+        if (big && usedCompanyNames.size >= 600) name += ' ' + pick(TAILS);
         if (!usedCompanyNames.has(name)) { usedCompanyNames.add(name); return name; }
       }
     }
@@ -123,7 +138,7 @@
     let seq = 0;
 
     // Companies that already went bankrupt. They appear only as network links.
-    for (let i = 0; i < 45; i++) {
+    for (let i = 0; i < (big ? Math.round(n * 0.075) : 45); i++) {
       const directors = [rand() < 0.65 ? pick(serial).id : pick(regular).id];
       const closed = I(2018, 2025);
       companies.push({
@@ -136,7 +151,7 @@
     }
     const active = [];
 
-    for (let i = 0; i < (count || 600); i++) {
+    for (let i = 0; i < n; i++) {
       const h = N(0, 1);
       const d = N(0, 0.75);
       const c_ = h + d;
@@ -236,5 +251,8 @@
     return { asOf: AS_OF, companies, people };
   }
 
-  return { generate, AS_OF, SECTORS };
+  // Size of the shared demo universe used by the landing page and the desk.
+  const DEMO_COUNT = 3000;
+
+  return { generate, AS_OF, SECTORS, DEMO_COUNT };
 });

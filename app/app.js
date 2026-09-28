@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.RokEngine;
-  const { companies, people, asOf } = window.RokData.generate(2026, 600);
+  const { companies, people, asOf } = window.RokData.generate(2026, window.RokData.DEMO_COUNT);
   E.attachNetwork(companies);
 
   const byId = new Map(companies.map(c => [c.id, c]));

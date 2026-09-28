@@ -84,3 +84,20 @@ test('payment data beats filings-only on held-out seeds', () => {
   }
   assert.ok(E.auc(full, y) > E.auc(filings, y) + 0.03);
 });
+
+test('600-company seeds are unchanged, so the fitted weights stay valid', () => {
+  const crypto = require('crypto');
+  const hash = seed => crypto.createHash('sha1').update(JSON.stringify(D.generate(seed, 600))).digest('hex');
+  assert.strictEqual(hash(11), 'fe9f2186534268665e2b86a8aed472dbe7dae487');
+  assert.strictEqual(hash(101), '093f4b2942b7a978263df5c9fc021a21a3b20fca');
+});
+
+test('the shared demo universe has unique names and a realistic network', () => {
+  const d = D.generate(2026, D.DEMO_COUNT);
+  E.attachNetwork(d.companies);
+  assert.strictEqual(new Set(d.companies.map(c => c.name)).size, d.companies.length);
+  const live = d.companies.filter(c => c.status !== 'bankrupt');
+  assert.strictEqual(live.length, D.DEMO_COUNT);
+  const linked = live.reduce((s, c) => s + c.net.viaDirector.length, 0) / live.length;
+  assert.ok(linked < 6, `companies link to ${linked.toFixed(1)} others on average`);
+});
