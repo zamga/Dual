@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-top="karst">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Quorum · We only text when the models agree.</title>
+    <meta name="description" content="Quorum scores about 1,300 liquid US stocks every trading day with four independent model families and texts only when three agree. A simulated demo with fictional companies." />
+    <meta name="theme-color" content="#E3E6E4" />
+    <meta name="color-scheme" content="light" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=Martian+Mono:wdth,wght@75..112.5,100..800&display=swap" />
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/pages.css" />
+    <link rel="modulepreload" href="js/app.js" />
+    <link rel="modulepreload" href="js/shell.js" />
+    <link rel="modulepreload" href="js/dom.js" />
+    <link rel="modulepreload" href="js/i18n.js" />
+    <link rel="modulepreload" href="js/router.js" />
+    <link rel="modulepreload" href="js/clock.js" />
+    <link rel="modulepreload" href="js/core/calendar.js" />
+    <link rel="modulepreload" href="js/core/format.js" />
+    <script type="module" src="js/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#view">Skip to content</a>
+
+    <!-- The four column rules: painted once, never re-rendered. The grid of every page. -->
+    <div class="rules" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+    <div class="demo-bar grid" id="demo-bar" role="region" aria-label="Demo notice">
+      <p class="demo-bar__text label">Simulated market · fictional companies · demo — not a real service, not investment advice</p>
+    </div>
+
+    <header class="site-header grid" id="site-header" data-surface="karst"></header>
+
+    <main id="view" tabindex="-1">
+      <noscript>
+        <section class="grid state">
+          <h1 class="display d2 c-head">Quorum needs JavaScript for this demo.</h1>
+          <p class="lede c-body">Simulated market · fictional companies · demo — not a real service, not investment advice.</p>
+        </section>
+      </noscript>
+    </main>
+
+    <footer class="site-footer grid ruled" id="site-footer"></footer>
+
+    <div class="sheet ruled" id="sheet" role="dialog" aria-modal="true" aria-label="Site menu" hidden></div>
+    <div class="plinths" id="plinths" data-surface="karst"></div>
+    <div class="rule-tip" id="rule-tip" role="tooltip" hidden></div>
+    <div id="announcer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+    <div id="announcer-assertive" class="visually-hidden" aria-live="assertive" aria-atomic="true"></div>
+  </body>
+</html>

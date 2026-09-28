@@ -1,0 +1,594 @@
+/* Reset, type, the grid of four column rules, focus, motion preferences, utilities. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--karst);
+  color: var(--graphite);
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-ui);
+  font-variant-numeric: tabular-nums;
+  font-kerning: normal;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  hanging-punctuation: first;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--karst);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  overflow-x: clip;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd,
+ol,
+ul {
+  margin: 0;
+}
+
+ol,
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 560;
+  line-height: var(--lh-tight);
+  text-wrap: balance;
+}
+
+p,
+li,
+dd {
+  text-wrap: pretty;
+}
+
+img,
+svg,
+canvas,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+abbr[title] {
+  text-decoration: none;
+}
+
+::selection {
+  background: var(--select-bg);
+  color: var(--select-fg);
+}
+
+a {
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  transition: text-decoration-color var(--t-fast) var(--ease), text-decoration-thickness var(--t-fast) var(--ease);
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 2px;
+}
+
+/* ---- focus: 2 px Graphite (Mist on Chamber), 2 px offset ------------------------------------- */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
+/* ---- the grid: four column rules ---------------------------------------------------------------
+   Phones: 16 px outer gutters, rules 1 and 4 on the gutters, three equal bays (a 4-column grid).
+   Tablet: 40 px gutters. Desktop: bays of min(25%, 460px), centred; margins take the rest.
+   Every full-width element uses the same template, so its lines coincide with the fixed rules. */
+:root {
+  --cols: [full-start] var(--gutter) [r1] minmax(0, 1fr) [r2] minmax(0, 1fr) [r3] minmax(0, 1fr) [r4] var(--gutter) [full-end];
+}
+
+@media (min-width: 640px) {
+  :root {
+    --cols: [full-start] 40px [r1] minmax(0, 1fr) [r2] minmax(0, 1fr) [r3] minmax(0, 1fr) [r4] 40px [full-end];
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --bay: min(25%, 460px);
+    --cols: [full-start] minmax(0, 1fr) [r1] var(--bay) [r2] var(--bay) [r3] var(--bay) [r4] minmax(0, 1fr) [full-end];
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: var(--cols);
+  align-items: start;
+}
+
+.grid > * {
+  min-width: 0;
+  padding-inline: var(--inset);
+}
+
+.grid > .flush {
+  padding-inline: 0;
+}
+
+/* placement */
+.c-full {
+  grid-column: full-start / full-end;
+}
+.c-head {
+  grid-column: r1 / full-end;
+}
+.c-wide {
+  grid-column: r1 / r4;
+}
+.c-body {
+  grid-column: r1 / r3;
+}
+.c-meta {
+  grid-column: r3 / r4;
+}
+.c-b1 {
+  grid-column: r1 / r2;
+}
+.c-b2 {
+  grid-column: r2 / r3;
+}
+.c-b3 {
+  grid-column: r3 / r4;
+}
+.c-b23 {
+  grid-column: r2 / r4;
+}
+.c-r4 {
+  grid-column: r4 / full-end;
+}
+.c-margin {
+  grid-column: full-start / r1;
+}
+
+@media (max-width: 1023.98px) {
+  .c-margin {
+    grid-column: r1 / r4;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .c-body,
+  .c-meta,
+  .c-b1,
+  .c-b2,
+  .c-b3,
+  .c-b23 {
+    grid-column: r1 / r4;
+  }
+  .c-r4 {
+    grid-column: r1 / r4;
+  }
+}
+
+/* The fixed rules. They are painted once by index.html and never re-render. */
+.rules {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: var(--cols);
+  pointer-events: none;
+}
+
+.rules > i {
+  grid-row: 1;
+  border-left: 1px solid var(--hairline);
+  transition: border-color var(--t-mid) var(--ease);
+}
+
+.rules > i:nth-child(1) {
+  grid-column: r1 / r2;
+}
+.rules > i:nth-child(2) {
+  grid-column: r2 / r3;
+}
+.rules > i:nth-child(3) {
+  grid-column: r3 / r4;
+}
+.rules > i:nth-child(4) {
+  grid-column: r4 / full-end;
+}
+
+.rules > i.is-lit {
+  border-left-color: var(--graphite);
+}
+
+/* Opaque full-width surfaces continue the rules themselves (Mist at low alpha on Chamber). */
+.ruled {
+  position: relative;
+  isolation: isolate;
+}
+
+.ruled::before,
+.ruled::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: -1px;
+  border-inline: 1px solid var(--rule);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.ruled::before {
+  grid-column: r1 / r4;
+}
+
+.ruled::after {
+  grid-column: r2 / r3;
+}
+
+.ruled.is-lit-rules::before,
+.ruled.is-lit-rules::after {
+  border-color: var(--rule-dark-strong);
+}
+
+#view,
+.site-header,
+.site-footer,
+.demo-bar {
+  position: relative;
+  z-index: 1;
+}
+
+/* Reserve the first viewport so nothing below the view moves when the first page arrives (CLS). */
+#view {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+/* ---- type ------------------------------------------------------------------------------------- */
+.display {
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-display);
+  font-weight: 580;
+  line-height: var(--lh-display);
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  margin-left: -0.04em; /* optical: stems sit on the inset line, not the side bearing */
+}
+
+.d-hero {
+  font-size: var(--fs-hero);
+  font-stretch: var(--wdth-display-tight);
+  font-weight: 600;
+  letter-spacing: -0.018em;
+}
+.d1 {
+  font-size: var(--fs-d1);
+}
+.d2 {
+  font-size: var(--fs-d2);
+}
+.d3 {
+  font-size: var(--fs-d3);
+  line-height: 0.95;
+}
+.d4 {
+  font-size: var(--fs-d4);
+  font-stretch: var(--wdth-sub);
+  line-height: 1.05;
+  font-weight: 560;
+  letter-spacing: -0.005em;
+}
+
+.lede {
+  font-size: var(--fs-lede);
+  line-height: 1.38;
+  font-weight: 400;
+  letter-spacing: -0.004em;
+  max-width: 44ch;
+}
+
+.serif,
+.prose--serif {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+}
+
+.lede.serif {
+  font-size: calc(var(--fs-lede) * 1.08);
+  line-height: 1.34;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: var(--fs-label);
+  font-weight: 450;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  line-height: 1.4;
+  color: var(--fg-2);
+}
+
+.mono,
+.num {
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: var(--fs-mono);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+.muted {
+  color: var(--fg-2);
+}
+
+.small {
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.prose {
+  max-width: 68ch;
+}
+
+.prose > * + * {
+  margin-top: 1em;
+}
+
+.prose h2,
+.prose h3 {
+  margin-top: 2.2em;
+}
+
+.prose h2 {
+  font-size: var(--fs-d4);
+  font-stretch: var(--wdth-sub);
+  line-height: 1.05;
+}
+
+.prose h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.prose ul,
+.prose ol {
+  display: grid;
+  gap: 0.5em;
+}
+
+.prose ul > li,
+.prose ol > li {
+  position: relative;
+  padding-left: 1.4em;
+}
+
+.prose ul > li::before {
+  content: '';
+  position: absolute;
+  left: 0.1em;
+  top: 0.78em;
+  width: 0.7em;
+  border-top: 1px solid currentColor;
+}
+
+.prose ol {
+  counter-reset: li;
+}
+
+.prose ol > li::before {
+  counter-increment: li;
+  content: counter(li, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.25em;
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  color: var(--fg-2);
+}
+
+.prose--serif {
+  font-size: calc(var(--fs-body) * 1.1);
+  line-height: var(--lh-serif);
+}
+
+strong,
+b {
+  font-weight: 620;
+}
+
+/* ---- utilities -------------------------------------------------------------------------------- */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---- motion ----------------------------------------------------------------------------------- */
+@keyframes q-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes q-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes q-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Section reveals ride the scroll with CSS scroll-driven animations. No support: no animation. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    :root:not([data-motion='reduce']) .reveal {
+      animation: q-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 55%;
+    }
+    :root:not([data-motion='reduce']) .draw {
+      transform-origin: left center;
+      animation: q-draw linear both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 40%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:root[data-motion='reduce'] *,
+:root[data-motion='reduce'] *::before,
+:root[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* View Transitions. The root snapshot is viewport-sized (cheap); the rules, the plinths and the
+   header are their own groups and do not animate, so only the content moves between the rules. */
+.rules {
+  view-transition-name: rules;
+}
+.plinths {
+  view-transition-name: plinths;
+}
+.site-header {
+  view-transition-name: chrome;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: q-vt-out 160ms var(--ease) both;
+  }
+  ::view-transition-new(root) {
+    animation: q-vt-in 300ms var(--ease) 40ms both;
+  }
+}
+
+::view-transition-group(rules),
+::view-transition-group(plinths),
+::view-transition-group(chrome),
+::view-transition-new(rules),
+::view-transition-new(plinths),
+::view-transition-new(chrome) {
+  animation: none;
+}
+
+::view-transition-old(rules),
+::view-transition-old(plinths),
+::view-transition-old(chrome) {
+  display: none;
+}
+
+@keyframes q-vt-out {
+  to {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+@keyframes q-vt-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+}

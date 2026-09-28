@@ -1,0 +1,157 @@
+/* Quorum design tokens. Colonnade (docs/BRIEF.md §5). The palette is exact; do not add colours.
+   Semantic tokens (--bg, --fg, --rule, --quorum …) switch per surface: Karst (default), Paper, Chamber. */
+
+:root {
+  /* ---- palette (brief §5, exact) ------------------------------------------------------------ */
+  --karst: #e3e6e4;
+  --paper: #f4f5f3;
+  --graphite: #111418;
+  --slate: #545c63;
+  --hairline: #aeb6b9;
+  --chamber: #0d1014;
+  --mist: #c9cfd2;
+  --ultramarine: #1f2ee0; /* ONLY for a quorum: lintel, pick badge, SMS bubble, favicon */
+  --lift: #8c96ff; /* the same role on Chamber */
+  --gain: #0b6e4f;
+  --loss: #b3261e;
+  --gain-dark: #4fd1a1;
+  --loss-dark: #ff8a7a;
+
+  /* derived, same hues (documented in DESIGN.md) */
+  --mist-2: #9aa3a8; /* secondary text on Chamber, 7.4:1 */
+  --rule-dark: rgb(201 207 210 / 0.17); /* Mist at low alpha: rules on Chamber */
+  --rule-dark-strong: rgb(201 207 210 / 0.32);
+  --hairline-soft: rgb(174 182 185 / 0.55); /* inner table rules */
+
+  /* ---- semantic (Karst surface) ------------------------------------------------------------- */
+  --bg: var(--karst);
+  --surface: var(--paper);
+  --fg: var(--graphite);
+  --fg-2: var(--slate);
+  --rule: var(--hairline);
+  --rule-inner: var(--hairline-soft);
+  --quorum: var(--ultramarine);
+  --on-quorum: #ffffff;
+  --gain-c: var(--gain);
+  --loss-c: var(--loss);
+  --focus: var(--graphite);
+  --select-bg: var(--graphite);
+  --select-fg: var(--karst);
+
+  /* ---- type ---------------------------------------------------------------------------------- */
+  --font-sans: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-serif: 'Newsreader', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-mono: 'Martian Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --wdth-display: 64%; /* headlines: tall, like columns (62–70) */
+  --wdth-display-tight: 62%;
+  --wdth-sub: 78%; /* sub-heads */
+  --wdth-ui: 100%;
+  --wdth-mono: 87.5%;
+
+  /* fluid scale: min at 360 px, max at 1920 px */
+  --fs-hero: clamp(4.9rem, 1.2rem + 10.4vw, 11rem);
+  --fs-d1: clamp(3.6rem, 1.6rem + 6.6vw, 8.5rem);
+  --fs-d2: clamp(2.8rem, 1.5rem + 4.4vw, 6rem);
+  --fs-d3: clamp(2rem, 1.3rem + 2.4vw, 3.75rem);
+  --fs-d4: clamp(1.5rem, 1.2rem + 1vw, 2.25rem);
+  --fs-lede: clamp(1.1875rem, 1.05rem + 0.5vw, 1.5rem);
+  --fs-body: clamp(1rem, 0.96rem + 0.18vw, 1.125rem);
+  --fs-small: 0.875rem;
+  --fs-xs: 0.8125rem;
+  --fs-label: 0.6875rem; /* mono labels, uppercase, tracked */
+  --fs-mono: 0.8125rem;
+  --fs-stat: clamp(1.5rem, 1.25rem + 0.8vw, 2rem); /* headline stats: never the largest element */
+
+  --lh-display: 0.88;
+  --lh-tight: 1.1;
+  --lh-body: 1.55;
+  --lh-serif: 1.5;
+  --track-label: 0.09em;
+
+  /* ---- space (4 px base) --------------------------------------------------------------------- */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
+  --s-8: 4rem;
+  --s-9: 6rem;
+  --s-10: 8rem;
+  --section: clamp(5rem, 3rem + 7vw, 11rem); /* vertical rhythm between sections */
+
+  /* ---- motion -------------------------------------------------------------------------------- */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --t-fast: 150ms;
+  --t-mid: 250ms;
+  --t-slow: 400ms;
+
+  /* ---- grid: four column rules (see base.css) ------------------------------------------------ */
+  --gutter: 16px; /* phone outer gutter */
+  --inset: 12px; /* distance from a rule to the text that sits beside it */
+  --header-h: 72px;
+  --demo-h: 36px;
+  --radius: 2px; /* architecture, not pills: almost square */
+  --radius-pill: 999px;
+
+  color-scheme: light;
+}
+
+/* Chamber (dark data surfaces): hero, ledger chain, research. */
+.chamber,
+[data-surface='chamber'] {
+  --bg: var(--chamber);
+  --surface: #151a1f;
+  --fg: var(--mist);
+  --fg-2: var(--mist-2);
+  --rule: var(--rule-dark);
+  --rule-inner: rgb(201 207 210 / 0.12);
+  --quorum: var(--lift);
+  --on-quorum: var(--chamber);
+  --gain-c: var(--gain-dark);
+  --loss-c: var(--loss-dark);
+  --focus: var(--mist);
+  --select-bg: var(--mist);
+  --select-fg: var(--chamber);
+  color-scheme: dark;
+}
+
+/* Paper sheets inside Chamber return to light semantics. */
+.paper {
+  --bg: var(--paper);
+  --fg: var(--graphite);
+  --fg-2: var(--slate);
+  --rule: var(--hairline);
+  --rule-inner: var(--hairline-soft);
+  --quorum: var(--ultramarine);
+  --on-quorum: #ffffff;
+  --gain-c: var(--gain);
+  --loss-c: var(--loss);
+  --focus: var(--graphite);
+  color-scheme: light;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --inset: 14px;
+  }
+}
+
+@media (min-width: 1200px) {
+  :root {
+    --inset: 16px;
+    --header-h: 76px;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --hairline: #7d878c;
+    --hairline-soft: #7d878c;
+    --slate: #3a4147;
+    --rule-dark: rgb(201 207 210 / 0.4);
+    --mist-2: #c0c7cb;
+  }
+}

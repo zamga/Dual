@@ -250,13 +250,20 @@ All numbers are plain JSON numbers (fractions, not percent: `0.018` = 1.8%). Dat
   "equity": [["2009-01-30", 1, 1, 1, 1, 1, 1, 1]], "equityCols": ["quorum","bench","twoOfFour","A","B","C","D"],
   "annual": [{"year": 2009, "quorum": 0.1, "bench": 0.2, "n": 50}],
   "stats": {"picksPerMonth": 4.4, "hitRate": 0.56, "medianExcess": 0.01, "meanExcess": 0.008, "sharpe": 0.9, "maxDrawdown": -0.2},
-  "crashSwitchPeriods": [["2009-03-09", "2009-06-30"]] }
+  "crashSwitchPeriods": [["2009-03-09", "2009-06-30"]],
+  "launch": {
+    "status": "pre-launch | ready", "asOf": "2026-09-28",
+    "holdoutGates": [{"id": "d", "pass": false}],
+    "amendment": {"id": "A-1", "date": "2025-09-30", "text": {"en": "…", "sl": "…"}},
+    "pooled": {"from": "2022-10-03", "to": "2026-09-28", "months": 48, "sharpe": 0.9, "dsr": 0.9, "dsrRaw": 0.3, "nTrialsRaw": 480, "nTrialsEff": 12, "pass": false},
+    "remaining": {"en": "…", "sl": "…"} } }
 ```
+Launch gate E needs all five holdout gates. Gate (d) as written cannot pass on a 36-month holdout at the brief's own expected edge (a Sharpe near 1 gives a probabilistic Sharpe of about 0.94 before any deflation), so amendment A-1, dated at the freeze and disclosed on the site, re-tests (d) monthly on the pooled out-of-sample record (holdout + sealed forward record) with the same deflation. The DSR deflates by the **effective** number of independent trials (clustered variants), and the raw-count figure is published beside it. `launch.status` is `ready` only when (a)–(c), (e) passed on the holdout and (d) passes on the pooled record. The rule threshold is `meta.rule.topPct` (0.95 after calibration: "top 5%"); no copy may hard-code "top decile".
 
 ## 4. server/
 
 - `server/index.js` — `createApp({db, config, transports}) → {server, close}`; `node server/index.js` starts it. Serves `web/` (injecting `<meta name="quorum-mode" content="live">` into index.html) and `/api/*`. Security headers on every response (CSP without inline script, `frame-ancestors 'none'`, HSTS when https, `Referrer-Policy: same-origin`).
-- `server/config.js` — env: `PORT`, `DB_PATH`, `PUBLIC_BASE_URL`, `LINK_BASE` (default `https://qrm.si`), `SMS_TRANSPORT=console|twilio`, `EMAIL_TRANSPORT=console`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID`, `TWILIO_VERIFY_SERVICE_SID`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_SIGNAL_M`, `STRIPE_PRICE_SIGNAL_Y`, `STRIPE_PRICE_RESEARCH_M`, `STRIPE_PRICE_RESEARCH_Y`, `ANTHROPIC_API_KEY`, `EXPLAINER_MODEL` (default `claude-opus-5-5`), `SESSION_SECRET`, `ADMIN_TOKEN`, `SMS_COUNTRIES=SI,AT,DE,HR,IT`, `SCHEDULER=off|on`.
+- `server/config.js` — env: `PORT`, `DB_PATH`, `PUBLIC_BASE_URL`, `LINK_BASE` (default `https://qrm.si`), `SMS_TRANSPORT=console|twilio`, `EMAIL_TRANSPORT=console`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID`, `TWILIO_VERIFY_SERVICE_SID`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_SIGNAL_M`, `STRIPE_PRICE_SIGNAL_Y`, `STRIPE_PRICE_RESEARCH_M`, `STRIPE_PRICE_RESEARCH_Y`, `ANTHROPIC_API_KEY`, `EXPLAINER_MODEL` (the pinned Claude model id; no default, the explainer is off until it is set), `SESSION_SECRET`, `ADMIN_TOKEN`, `SMS_COUNTRIES=SI,AT,DE,HR,IT`, `SCHEDULER=off|on`.
 - `server/db.js` + `server/schema.sql` — `node:sqlite` `DatabaseSync`; the tables of brief §4.5; append-only tables (`consent_events`, `recommendations`, `ledger_entries`, `processed_events`, `delivery_events`, `opt_outs`, `access_log`) get `BEFORE UPDATE` / `BEFORE DELETE` triggers that `RAISE(ABORT, 'append-only')`.
 - Vendors are called with `fetch` (Twilio REST form-encoded with Basic auth; Stripe REST form-encoded with `Stripe-Version: 2026-08-26.dahlia`). Every vendor module takes an injectable `fetch` so tests run offline. Signature checks: Twilio `X-Twilio-Signature` (HMAC-SHA1 over URL + sorted params, base64); Stripe `Stripe-Signature` (`t=`, `v1=` HMAC-SHA256 of `${t}.${rawBody}`, 300 s tolerance).
 - `server/explainer.js` — Claude via `@anthropic-ai/sdk`, model from config, adaptive thinking, structured output (Zod schema), numeric validator, one regeneration, then hand-off to the approver. Also the 48-hour veto scan. Refusal and API errors are handled explicitly. Every prompt and output is logged with its SHA-256.
