@@ -301,6 +301,36 @@
     }
     return d;
   }
+  // Invisible month columns; hovering one shows that month's exact value.
+  function readouts(dbt, x, y, g, tone) {
+    const colW = (g.W - g.L - g.R) / (dbt.length - 1);
+    return dbt.map((v, i) => {
+      const d = new Date(asOf);
+      d.setDate(1);
+      d.setMonth(d.getMonth() - (dbt.length - 1 - i));
+      const anchor = i >= dbt.length - 3 ? 'end' : i <= 1 ? 'start' : 'middle';
+      const x0 = Math.max(g.L - 6, x(i) - colW / 2), x1 = Math.min(g.W - g.R + 6, x(i) + colW / 2);
+      return `<g class="mo"><rect x="${x0.toFixed(1)}" y="0" width="${(x1 - x0).toFixed(1)}" height="${g.H - g.B}" fill="transparent"/>
+        <g class="mo-tip"><line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${g.T}" y2="${y(0).toFixed(1)}" stroke="var(--line-2)"/>
+        <rect x="${(anchor === 'end' ? x(i) - 150 : anchor === 'start' ? x(i) : x(i) - 75).toFixed(1)}" y="-8" width="150" height="20" fill="var(--surface)"/>
+        <circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.5" fill="var(--surface)" stroke="${tone}" stroke-width="1.5"/>
+        <text class="note tip" x="${x(i).toFixed(1)}" y="6" text-anchor="${anchor}">${MONTHS[d.getMonth()]} ${d.getFullYear()} · ${v.toFixed(0)} days</text></g></g>`;
+    }).join('');
+  }
+
+  function spark(c) {
+    if (!c.pay) return '<span class="muted">No data</span>';
+    const d = c.pay.dbt, W = 84, H = 22;
+    const top = Math.max(20, ...d);
+    const pts = d.map((v, i) => [2 + (i * (W - 4)) / (d.length - 1), H - 2 - (v / top) * (H - 4)]);
+    const recent = avg(d.slice(-3)), delta = recent - avg(d.slice(0, 9));
+    const tone = recent > 20 || delta >= 10 ? 'var(--crit)' : recent > 8 || delta >= 4 ? 'var(--warn)' : 'var(--muted)';
+    const [lx, ly] = pts[pts.length - 1];
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Payment delays, 12 months, now ${d[d.length - 1].toFixed(0)} days">
+      <polyline points="${pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="${tone}" stroke-width="1.25" stroke-linejoin="round"/>
+      <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2" fill="${tone}"/></svg>`;
+  }
+
   function paymentsPanel(c) {
     const head = `<div class="sec-head"><h2 class="sec-title">How they pay suppliers</h2><span class="label">Average days past due, by month</span></div>`;
     if (!c.pay) {
@@ -334,6 +364,7 @@
       <circle cx="${x(dbt.length - 1)}" cy="${y(last)}" r="3" fill="${tone}"/>
       <text class="note" x="${x(dbt.length - 1) + 8}" y="${y(last) - 8}" style="fill:${tone};font-weight:500">${last.toFixed(0)} days</text>
       ${dbt.map((_, i) => (i % 2 === 1 ? `<text class="tick" x="${x(i)}" y="${H - 6}" text-anchor="middle">${label(i)}</text>` : '')).join('')}
+      ${readouts(dbt, x, y, { W, L, R, T, B, H }, tone)}
     </svg>`;
     return `<section class="cell" aria-label="Payment behaviour">${head}${svg}
       <div class="stats">
@@ -535,20 +566,20 @@
         <div><span class="label">Default probability</span><span class="v">${fmtPd(wpd)}</span><span class="sub">Weighted by exposure</span></div>
         <div><span class="label">Over their limit</span><span class="v" style="color:${over.length ? 'var(--crit)' : 'var(--good)'}">${over.length}</span><span class="sub">${fmtEurShort(over.reduce((s, x) => s + x.exposure - x.rec.limit, 0))} above recommended limits</span></div>
       </div>
-      <div class="split">
+      <div class="stack">
+        <section><div class="sec-head"><h2 class="sec-title">Alerts</h2><span class="label">${allAlerts.length} open</span></div>
+          <ul class="alerts cols">${allAlerts.map(a => `<li><button data-open="${a.c.id}"><span class="flag" style="background:${levelColor[a.level]}"></span>
+            <span><span class="a-co">${esc(a.c.name)}</span><br><span class="a-msg">${esc(a.text)}</span></span><span class="a-lvl" style="color:${levelColor[a.level]}">${levelWord[a.level]}</span></button></li>`).join('') || '<li class="empty">No alerts on your customers.</li>'}</ul>
+          <p class="fine">Alerts go out by email, Slack or Teams, and as webhooks into your ERP.</p>
+        </section>
         <section class="card"><div class="sec-head"><h2 class="sec-title">Monitored companies</h2><span class="label">Largest expected loss first</span></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Company</th><th>Grade</th><th>PD</th><th>Exposure</th><th>Limit</th><th>Exp. loss</th></tr></thead>
+            <thead><tr><th>Company</th><th>Grade</th><th>Payment delays</th><th>PD</th><th>Exposure</th><th>Limit</th><th>Exp. loss</th></tr></thead>
             <tbody>${rows.map(x => `<tr class="go" data-open="${x.c.id}" tabindex="0">
-              <td>${esc(x.c.name)}</td><td>${gradeChip(x.r)}</td><td class="num">${fmtPd(x.r.pd)}</td>
+              <td>${esc(x.c.name)}</td><td>${gradeChip(x.r)}</td><td>${spark(x.c)}</td><td class="num">${fmtPd(x.r.pd)}</td>
               <td class="num" style="${x.exposure > x.rec.limit ? 'color:var(--crit)' : ''}">${fmtEur(x.exposure)}</td>
               <td class="num">${fmtEur(x.rec.limit)}</td><td class="num">${fmtEur(x.rec.expectedLoss)}</td></tr>`).join('')}</tbody>
           </table></div>
-        </section>
-        <section><div class="sec-head"><h2 class="sec-title">Alerts</h2><span class="label">${allAlerts.length} open</span></div>
-          <ul class="alerts">${allAlerts.map(a => `<li><button data-open="${a.c.id}"><span class="flag" style="background:${levelColor[a.level]}"></span>
-            <span><span class="a-co">${esc(a.c.name)}</span><br><span class="a-msg">${esc(a.text)}</span></span><span class="a-lvl" style="color:${levelColor[a.level]}">${levelWord[a.level]}</span></button></li>`).join('') || '<li class="empty">No alerts on your customers.</li>'}</ul>
-          <p class="fine">Alerts go out by email, Slack or Teams, and as webhooks into your ERP.</p>
         </section>
       </div>`;
   }
@@ -689,6 +720,7 @@
   }
   function open(id) {
     if (!id || !byId.has(id)) return;
+    $('.ledger').classList.remove('open');
     if (location.hash === `#${id}`) route(); else location.hash = id;
     window.scrollTo({ top: 0 });
   }
@@ -705,25 +737,173 @@
       return;
     }
     const w = e.target.closest('[data-watch]');
-    if (w) {
-      const id = w.dataset.watch;
-      const input = document.getElementById('exposure');
-      const current = input ? Number(input.value) || 0 : 0;
-      if (watch[id] != null) delete watch[id];
-      else watch[id] = current;
-      store.set('rok.watch', watch);
-      renderDossier(id, current);
-      renderResults();
-      return;
-    }
+    if (w) { toggleWatch(w.dataset.watch); return; }
+    if (e.target.closest('[data-palette]')) { openPalette(); return; }
+    if (!e.target.closest('.ledger')) $('.ledger').classList.remove('open');
     const q = e.target.closest('[data-quote]');
     if (q) { q.textContent = 'Requested from 3 insurers'; q.disabled = true; }
   });
-  document.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    const o = e.target.closest && e.target.closest('[data-open]');
-    if (o && o.dataset.open) open(o.dataset.open);
+  function toggleWatch(id) {
+    const input = document.getElementById('exposure');
+    const current = input ? Number(input.value) || 0 : E.recommend(byId.get(id), results.get(id)).limit;
+    if (watch[id] != null) delete watch[id];
+    else watch[id] = current;
+    store.set('rok.watch', watch);
+    if (state.current === id) renderDossier(id, current);
+    renderResults();
+  }
+
+  // ---------- command bar ----------
+  const pal = { items: [], idx: 0, returnTo: null };
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  $('#kbar-key').textContent = isMac ? '⌘K' : 'Ctrl K';
+
+  function matchScore(text, q) {
+    const t = text.toLowerCase();
+    if (t.startsWith(q)) return 4;
+    if (t.split(/[\s,.-]+/).some(w => w.startsWith(q))) return 3;
+    if (t.includes(q)) return 2;
+    let i = 0;
+    for (const ch of t) if (ch === q[i]) i++;
+    return i === q.length ? 1 : 0;
+  }
+  function highlight(text, q) {
+    if (!q) return esc(text);
+    const i = text.toLowerCase().indexOf(q);
+    if (i < 0) return esc(text);
+    return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+  }
+  function paletteItems(raw) {
+    const q = raw.trim().toLowerCase();
+    const pages = [
+      { kind: 'page', id: 'companies', label: 'Companies' },
+      { kind: 'page', id: 'portfolio', label: 'Portfolio' },
+      { kind: 'page', id: 'model', label: 'Model and back-test' },
+      { kind: 'page', id: 'pricing', label: 'Pricing' },
+    ];
+    let cos;
+    if (q) {
+      cos = live.map(c => ({ c, s: Math.max(matchScore(c.name, q), c.ms.startsWith(q) || c.ds.toLowerCase().startsWith(q) ? 4 : 0, matchScore(c.city, q) ? 1 : 0) }))
+        .filter(x => x.s > 0).sort((a, b) => b.s - a.s || a.c.name.localeCompare(b.c.name, 'sl')).slice(0, 8).map(x => x.c);
+    } else {
+      cos = Object.keys(watch).map(id => byId.get(id)).slice(0, 5);
+    }
+    const out = cos.map(c => ({ kind: 'company', id: c.id, label: c.name, group: q ? 'Companies' : 'Monitored' }));
+    for (const p of pages) if (!q || matchScore(p.label, q)) out.push({ ...p, group: 'Pages' });
+    if (state.current) {
+      const c = byId.get(state.current);
+      const label = watch[c.id] != null ? `Stop monitoring ${c.name}` : `Monitor ${c.name}`;
+      if (!q || matchScore(label, q)) out.push({ kind: 'action', id: c.id, label, group: 'Actions' });
+    }
+    return { q, out };
+  }
+  function renderPalette() {
+    const { q, out } = paletteItems($('#palette-input').value);
+    pal.items = out;
+    pal.idx = Math.min(pal.idx, Math.max(0, out.length - 1));
+    let group = null;
+    $('#palette-list').innerHTML = out.map((it, i) => {
+      let head = '';
+      if (it.group !== group) { group = it.group; head = `<li class="pal-group" role="presentation">${group}</li>`; }
+      let main, side;
+      if (it.kind === 'company') {
+        const c = byId.get(it.id);
+        main = `<span class="pal-name">${highlight(c.name, q)}</span><span class="pal-meta">${esc(c.city)} · ${esc(c.sector.label)} · <span class="mono">${c.ms}</span></span>`;
+        side = gradeChip(results.get(c.id));
+      } else {
+        main = `<span class="pal-name">${highlight(it.label, q)}</span>`;
+        side = `<span class="pal-side">${it.kind === 'page' ? 'Page' : 'Action'}</span>`;
+      }
+      return `${head}<li class="pal-item" role="option" id="pal-${i}" data-pal="${i}" aria-selected="${i === pal.idx}"><span class="pal-main">${main}</span>${side}</li>`;
+    }).join('') || `<li class="pal-empty">Nothing matches “${esc($('#palette-input').value)}”. Try a registration number or a town.</li>`;
+    $('#palette-input').setAttribute('aria-activedescendant', out.length ? `pal-${pal.idx}` : '');
+    const sel = document.getElementById(`pal-${pal.idx}`);
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+  }
+  function openPalette() {
+    pal.returnTo = document.activeElement;
+    pal.idx = 0;
+    $('#palette').hidden = false;
+    $('#palette-input').value = '';
+    renderPalette();
+    $('#palette-input').focus();
+  }
+  function closePalette() {
+    $('#palette').hidden = true;
+    if (pal.returnTo && pal.returnTo.focus) pal.returnTo.focus();
+  }
+  function runPalette(i) {
+    const it = pal.items[i];
+    if (!it) return;
+    closePalette();
+    if (it.kind === 'company') open(it.id);
+    else if (it.kind === 'page') { location.hash = it.id; window.scrollTo({ top: 0 }); }
+    else toggleWatch(it.id);
+  }
+  $('#palette').addEventListener('click', e => {
+    const li = e.target.closest('[data-pal]');
+    if (li) runPalette(Number(li.dataset.pal));
+    else if (e.target.id === 'palette') closePalette();
   });
+  $('#palette').addEventListener('pointermove', e => {
+    const li = e.target.closest('[data-pal]');
+    if (!li || Number(li.dataset.pal) === pal.idx) return;
+    pal.idx = Number(li.dataset.pal);
+    document.querySelectorAll('#palette-list [data-pal]').forEach(el => el.setAttribute('aria-selected', String(el === li)));
+    $('#palette-input').setAttribute('aria-activedescendant', li.id);
+  });
+
+  // ---------- keyboard ----------
+  function step(dir) {
+    const ids = [...document.querySelectorAll('#results button[data-open]')].map(b => b.dataset.open);
+    if (!ids.length) return;
+    const i = ids.indexOf(state.current);
+    const next = ids[i < 0 ? 0 : Math.min(ids.length - 1, Math.max(0, i + dir))];
+    if (next === state.current) return;
+    open(next);
+    const row = document.querySelector(`#results button[data-open="${next}"]`);
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if ($('#palette').hidden) openPalette(); else closePalette();
+      return;
+    }
+    if (!$('#palette').hidden) {
+      if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const n = pal.items.length;
+        if (n) { pal.idx = (pal.idx + (e.key === 'ArrowDown' ? 1 : -1) + n) % n; renderPalette(); }
+      } else if (e.key === 'Enter') { e.preventDefault(); runPalette(pal.idx); }
+      else if (e.key === 'Tab') e.preventDefault();
+      return;
+    }
+    const typing = e.target.matches && e.target.matches('input, textarea, select, [contenteditable]');
+    if (e.key === 'Enter') {
+      const o = e.target.closest && e.target.closest('[data-open]');
+      if (o && o.dataset.open && o.tagName !== 'BUTTON') open(o.dataset.open);
+      return;
+    }
+    if (typing || e.metaKey || e.ctrlKey || e.altKey) {
+      if (e.key === 'Escape' && e.target.id === 'search') e.target.blur();
+      return;
+    }
+    const onDesk = !$('#view-companies').hidden;
+    if (e.key === '/') {
+      e.preventDefault();
+      if (!onDesk) location.hash = state.current || 'companies';
+      $('#search').focus();
+    } else if (onDesk && (e.key === 'j' || e.key === 'k')) {
+      e.preventDefault();
+      step(e.key === 'j' ? 1 : -1);
+    }
+  });
+  document.addEventListener('focusin', e => {
+    if (e.target.id === 'search') $('.ledger').classList.add('open');
+  });
+  $('#palette-input').addEventListener('input', () => { pal.idx = 0; renderPalette(); });
   document.addEventListener('input', e => {
     if (e.target.id === 'search') { state.query = e.target.value.trim(); renderResults(); }
     if (e.target.id === 'exposure' || e.target.id === 'exposure-range') updateDecision(Math.max(0, Number(e.target.value) || 0), e.target.id);

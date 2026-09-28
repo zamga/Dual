@@ -393,7 +393,11 @@
   .strip .v { font-size: 28px; line-height: 36px; font-weight: 500; letter-spacing: -0.03em; }
   .strip .sub { font-size: 12px; color: var(--muted); }
   .split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 32px; align-items: start; }
+  .stack { display: grid; gap: 40px; }
   .alerts { list-style: none; margin: 0; padding: 0; }
+  .alerts.cols { columns: 2 320px; column-gap: 40px; }
+  .alerts.cols li { break-inside: avoid; border-top: 1px solid var(--line); }
+  .alerts.cols li + li { border-top: 1px solid var(--line); }
   .alerts li + li { border-top: 1px solid var(--line); }
   .alerts button {
     width: 100%;
@@ -444,6 +448,86 @@
   td.wrap { white-space: normal; min-width: 150px; }
   .section { margin-top: 56px; }
 
+
+  /* ---------- command bar ---------- */
+  kbd {
+    font: 500 11px/1 var(--font);
+    color: var(--muted);
+    border: 1px solid var(--line-2);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 2px 5px;
+    background: var(--surface);
+    min-width: 18px;
+    text-align: center;
+    display: inline-block;
+  }
+  .kbar {
+    margin-left: auto;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    gap: 24px;
+    padding: 0 6px 0 12px;
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .kbar:hover { color: var(--ink); border-color: var(--faint); }
+  .stamp { margin-left: 0; }
+  .palette {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--ink) 18%, transparent);
+    display: grid;
+    justify-items: center;
+    align-items: start;
+    padding: max(12vh, env(safe-area-inset-top, 0px)) 16px 16px;
+  }
+  .palette[hidden] { display: none; }
+  .palette-box {
+    width: min(640px, 100%);
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: 14px;
+    box-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+  }
+  .palette-field { display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 56px; border-bottom: 1px solid var(--line); }
+  .palette-field svg { width: 16px; height: 16px; color: var(--faint); flex: none; }
+  .palette-field input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font-size: 16px; }
+  .palette-field input::placeholder { color: var(--faint); }
+  #palette-list { list-style: none; margin: 0; padding: 8px; max-height: min(420px, 55vh); overflow-y: auto; }
+  .pal-group { font-size: 12px; color: var(--faint); padding: 10px 10px 6px; }
+  .pal-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .pal-item[aria-selected="true"] { background: var(--sunken); }
+  .pal-main { display: grid; min-width: 0; }
+  .pal-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pal-name mark { background: none; color: var(--ink); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
+  .pal-meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pal-side { font-size: 12px; color: var(--muted); }
+  .pal-empty { padding: 24px 10px; color: var(--muted); font-size: 14px; }
+  .palette-foot { display: flex; gap: 20px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .palette-foot span { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* ---------- chart readouts ---------- */
+  .mo-tip { opacity: 0; transition: opacity 0.12s ease; pointer-events: none; }
+  .mo:hover .mo-tip { opacity: 1; }
+  .chart .tip { fill: var(--ink); font-weight: 500; }
+  .spark { display: block; margin-left: auto; overflow: visible; }
+
   /* ---------- responsive ---------- */
   @media (max-width: 1180px) {
     .cells.c-5-7, .cells.c-7-5, .split { grid-template-columns: minmax(0, 1fr); }
@@ -453,8 +537,14 @@
     .tier:nth-child(n+3) { border-top: 1px solid var(--line); }
   }
   @media (max-width: 960px) {
-    .desk { grid-template-columns: minmax(0, 1fr); }
-    .ledger { position: static; max-height: 360px; }
+    .desk { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .ledger { position: static; max-height: none; }
+    .ledger .filters, .ledger .rows, .ledger .ledger-foot { display: none; }
+    .ledger.open .filters { display: flex; }
+    .ledger.open .rows { display: block; max-height: 340px; }
+    .ledger.open .ledger-foot { display: block; }
+    .ledger-head { padding-bottom: 0; }
+    .ledger.open .ledger-head { padding-bottom: 12px; }
     .score-row { grid-template-columns: minmax(0, 1fr); gap: 24px; }
     .versus, .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .versus > div:nth-child(3), .strip > div:nth-child(3) { border-left: 0; }
@@ -474,6 +564,8 @@
     .tiers, .versus, .strip { grid-template-columns: minmax(0, 1fr); }
     .tier + .tier, .versus > div + div, .strip > div + div { border-left: 0; border-top: 1px solid var(--line); }
     .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kbar { gap: 8px; }
+    .kbar kbd, .stamp { display: none; }
   }
 </style>
 
@@ -491,6 +583,7 @@
       <a href="#model" data-view="model">Model</a>
       <a href="#pricing" data-view="pricing">Pricing</a>
     </nav>
+    <button class="kbar" type="button" data-palette aria-label="Go to a company or page">Go to… <kbd id="kbar-key">⌘K</kbd></button>
     <div class="stamp">Demo data, fictional companies</div>
   </div>
 </header>
@@ -522,6 +615,20 @@
   <section class="view" id="view-model" hidden></section>
   <section class="view" id="view-pricing" hidden></section>
 </main>
+
+<div class="palette" id="palette" hidden>
+  <div class="palette-box" role="dialog" aria-modal="true" aria-label="Go to a company or page">
+    <div class="palette-field">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5" stroke-linecap="round"/></svg>
+      <input id="palette-input" type="text" placeholder="Company, registration no. or page" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-label="Go to">
+      <kbd>Esc</kbd>
+    </div>
+    <ul id="palette-list" role="listbox" aria-label="Results"></ul>
+    <div class="palette-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>/</kbd> filter the list</span><span><kbd>J</kbd><kbd>K</kbd> next or previous company</span>
+    </div>
+  </div>
+</div>
 
 <script src="engine.js"></script>
 <script src="data.js"></script>
