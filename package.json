@@ -1,0 +1,11 @@
+{
+  "name": "rok-credit-desk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Credit risk desk for Slovenian B2B trade: live payment data, explainable PD, credit decisions.",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\"",
+    "fit": "node scripts/fit.js",
+    "start": "python3 -m http.server 8080 --directory app"
+  }
+}
