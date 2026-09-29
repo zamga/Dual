@@ -398,7 +398,8 @@ export function createLevel(ctx, hero, opts = {}) {
   const lj = formatInZone(new Date(hero.smsAt), LJUBLJANA);
   const tz = lj.offset === '+02:00' ? 'CEST' : 'CET';
   const X = {
-    n: fmt.int(Math.round(hero.nScored / 100) * 100),
+    // rounded down, like the site's standing copy ("about 1,300 liquid US stocks"): 1,351 scored reads "about 1,300"
+    n: fmt.int(Math.floor(hero.nScored / 100) * 100),
     issueNo: hero.issueNo,
     date: fmtDDMMYY(hero.issueDate),
     nScored: fmt.int(hero.nScored),

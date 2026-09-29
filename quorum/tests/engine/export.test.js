@@ -146,7 +146,9 @@ test('every exported SMS passes validateSms and names the pick', () => {
         const v = validateSms(t);
         assert.equal(v.ok, true, `${t}: ${v.errors.join('; ')}`);
         assert.ok(t.includes(`#${p.no} `) && t.includes(` ${p.ticker} `));
-        assert.ok(t.includes('/u/7Kq2xZ'));
+        // the demo stop token has the length of a real one: 8 base62 characters
+        assert.ok(t.includes('/u/7Kq2xZ4m'), t);
+        assert.match(t, /\/u\/[0-9A-Za-z]{8}(\s|$)/);
         n++;
       }
     }
@@ -228,6 +230,42 @@ test('published outcomes recompute from the published prices and the records lin
     if (p.closeSms) perMonth[p.exit.date.slice(0, 7)] = (perMonth[p.exit.date.slice(0, 7)] ?? 0) + 1;
   }
   assert.ok(Math.max(...Object.values(perMonth)) <= 16);
+});
+
+test('issues publish why stocks that met the rule were not issued: already open, cooldown, each cap', () => {
+  let blocked = 0;
+  for (const x of files.issues) {
+    const b = x.blocked;
+    assert.equal(b.cooldown + b.capIssue + b.capMonth + b.capSector + b.capSms, x.vetoes.capped, x.date);
+    // what met the rule without a veto: new picks, the caps and cooldowns, removals, and picks already open
+    assert.equal(b.alreadyOpen, x.reached - x.buys.length - x.vetoes.capped - x.vetoes.human - x.unissued, x.date);
+    assert.ok(b.alreadyOpen >= x.renews.length, `${x.date}: a renewal is an open pick that met the rule`);
+    blocked += b.alreadyOpen + x.vetoes.capped;
+  }
+  assert.ok(blocked > 0);
+});
+
+test('meta discloses the simulation and its 29 Sep 2026 revision in both languages', () => {
+  const n = files.meta.notes.simulation;
+  assert.ok(n.en.includes('29 Sep 2026') && n.sl.includes('29. 9. 2026'));
+  assert.ok(/simulated/i.test(n.en) && /simulir/i.test(n.sl));
+  assert.ok(/family D/.test(n.en) && /družino D/.test(n.sl));
+  for (const t of [n.en, n.sl]) assert.ok(t.split(/[.:]\s/).length >= 3 && t.length < 600, t);
+});
+
+test('the scoreboard carries the validation correlation matrix and D\'s highest correlation', () => {
+  const v = files.scoreboard.correlations.validation;
+  assert.deepEqual(v.order, ['A', 'B', 'C', 'D']);
+  assert.equal(v.matrix.length, 4);
+  for (let a = 0; a < 4; a++) {
+    assert.equal(v.matrix[a][a], 1);
+    for (let b = 0; b < 4; b++) assert.equal(v.matrix[a][b], v.matrix[b][a]);
+  }
+  assert.equal(v.maxD, Math.max(v.matrix[3][0], v.matrix[3][1], v.matrix[3][2]));
+  assert.equal(v.period.to, run1.model.periods.research[1]);
+  assert.equal(v.limit, 0.5);
+  assert.ok(v.independenceCheck && v.independenceCheck.limit === 0.5);
+  assert.deepEqual(v.proxyScreen.inputs, run1.model.dModel.features);
 });
 
 test('hero is the issue of the most recently closed pick, with integer percentiles for every scored stock', () => {

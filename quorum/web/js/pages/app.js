@@ -13,6 +13,7 @@ import { quorumBadge, hashChip, signed, timestamp, smsBody } from '../ui.js';
 import { indexPicks, isSealedFor, issueCounts } from './_records.js';
 import { loadMe, tierOf, channelsPanel, modeNote, signInPanel } from './_member.js';
 import { launchInfo, smsModel } from './_join.js';
+import { launchCopy } from '../launch.js';
 import { analyze } from '../core/gsm7.js';
 import { fmtUsd } from '../core/format.js';
 import { formatInZone, LJUBLJANA, nextIssueSlot, issueSlot, countTradingDays } from '../core/calendar.js';
@@ -37,6 +38,7 @@ export async function render(ctx) {
   const signedIn = !!me?.authenticated;
   const tier = signedIn ? tierOf(ctx, me) : 'free';
   const launch = launchInfo(backtest);
+  const LC = launchCopy(launch, locale);
   const byNo = indexPicks(picks);
   const clock = ctx.clock ?? (meta?.asOf ? createClock({ asOf: meta.asOf, flagsNow: ctx.flags?.now }) : null);
   const now = clock ? clock.now() : new Date();
@@ -51,7 +53,7 @@ export async function render(ctx) {
   const nCloses = issue?.closes?.length ?? 0;
   const tierName = { free: 'Ledger', signal: 'Signal', research: 'Research' }[tier];
 
-  const pre = !launch.ready; // before launch no text is sent
+  const pre = launch.prelaunch; // before launch no text is sent (the engine gate passing does not launch SMS)
   const k = issue ? issueCounts(issue, meta?.rule?.minAgree ?? 3) : null;
   const h1Text = issue
     ? issue.quorum
@@ -108,8 +110,8 @@ export async function render(ctx) {
       ? h(
           'div',
           { class: 'app-pre' },
-          h('p', { class: 'label' }, launch.ready ? L('Demo reader', 'Demo bralec') : L('Pre-launch preview', 'Predogled pred zagonom')),
-          h('p', { class: 'small' }, launch.ready ? L(`A fictional ${tierName} reader. Switch “View as” to see the other tiers.`, `Izmišljeni bralec paketa ${tierName}. Z »Pogled kot« vidite druge pakete.`) : L(`No subscriber exists yet. This is what a ${tierName} reader will see; switch “View as” for the other tiers.`, `Naročnikov še ni. Tako bo videl bralec paketa ${tierName}; z »Pogled kot« vidite druge pakete.`)),
+          h('p', { class: 'label' }, LC.appLabel),
+          h('p', { class: 'small' }, LC.appNote(tierName)),
         )
       : null,
   );

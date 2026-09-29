@@ -1674,6 +1674,12 @@
   align-content: start;
 }
 
+/* lists of short text lines are one ground (DESIGN.md §4): no stub of a rule between their items */
+:where(#view) :is(.tier__items, .jn-list, .sc-legend) {
+  background-color: var(--bg);
+  background-clip: content-box;
+}
+
 .tier__items li {
   padding-left: 18px;
   position: relative;
@@ -2177,6 +2183,13 @@
   display: grid;
   gap: 10px;
   justify-items: start;
+}
+
+/* the masthead strip on #pricing: the billing switch, then the launch note */
+.pricing-meta {
+  display: grid;
+  gap: var(--s-6);
+  align-content: start;
 }
 
 .seg--light {
@@ -3439,11 +3452,16 @@
   align-content: start;
 }
 
-.lg-csv__row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 20px;
-  align-items: center;
+/* two copies, labelled apart: the hash chain (every record with its hashes) and the picks table */
+.lg-csv__item {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.lg-csv .btn {
+  white-space: normal;
+  text-align: left;
 }
 
 @media (min-width: 1024px) {
@@ -3584,6 +3602,15 @@
   font-weight: 600;
 }
 
+/* an open row and a hovered row are grounds of their own: text grounds inside follow them (--bg) */
+.lg-row.is-open {
+  --bg: color-mix(in srgb, var(--paper) 55%, var(--karst));
+}
+
+.lg-row:hover {
+  --bg: var(--paper);
+}
+
 .lg-row.is-open td,
 .lg-row.is-open th {
   background: color-mix(in srgb, var(--paper) 55%, transparent);
@@ -3595,7 +3622,7 @@
   }
   .lg-row.is-open td,
   .lg-row.is-open th {
-    background: color-mix(in srgb, var(--paper) 55%, var(--bg));
+    background: var(--bg); /* the open row's own ground: Paper 55% over Karst */
   }
 }
 
@@ -4263,6 +4290,8 @@
   grid-column: r1 / r2;
   padding: 10px var(--inset);
   font-size: var(--fs-small);
+  background-color: var(--bg);
+  background-clip: content-box;
 }
 
 .ic-plot {
@@ -5063,6 +5092,7 @@
   display: grid;
   grid-template-columns: var(--cols);
   background: var(--shade);
+  --bg: var(--shade);
   border-bottom: 1px dashed var(--graphite);
 }
 
@@ -5083,6 +5113,7 @@
   padding: 18px 20px;
   border: 2px dashed var(--graphite);
   background: var(--shade);
+  --bg: var(--shade);
   font-size: var(--fs-small);
   line-height: 1.55;
   max-width: 100%;
@@ -5346,6 +5377,12 @@
   .bt-launch > .bt-launch__gates {
     grid-row: 2 / span 2;
   }
+}
+
+.bt-launch__text {
+  display: grid;
+  gap: var(--s-4);
+  align-content: start;
 }
 
 .bt-launch__gates > div {
@@ -6413,15 +6450,19 @@ p.bt-lv {
   border-top: 1px solid var(--graphite);
   border-bottom: 1px solid var(--rule);
   cursor: pointer;
+  background-color: var(--bg); /* a tier is a block of text: the rules pass behind it (DESIGN.md §4) */
+  background-clip: content-box;
   transition: background-color var(--t-mid) var(--ease), color var(--t-mid) var(--ease);
 }
 
 .jn-tier:hover {
   background: var(--paper);
+  --bg: var(--paper);
 }
 
 .jn-tier.is-on {
   background: var(--graphite);
+  --bg: var(--graphite);
   color: var(--karst);
   border-bottom-color: var(--graphite);
   --fg: var(--karst);
@@ -6906,18 +6947,6 @@ p.bt-lv {
   flex-wrap: wrap;
   gap: 14px 28px;
   align-items: center;
-}
-
-.us-support {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  align-items: center;
-}
-
-.us-mail {
-  font-size: 1rem;
-  user-select: all;
 }
 
 .us-phone {

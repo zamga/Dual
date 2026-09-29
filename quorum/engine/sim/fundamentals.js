@@ -2,11 +2,15 @@
 // and an SEC-style filing date 25-60 days later. The simulation records the latent state at each
 // period end; this module turns it into statements. The economic scale of a company follows its
 // latent value path plus the smoothed economy, so valuation ratios carry the mispricing M.
+// Each filing also carries the four components of its text embedding (emb1..emb4, released on the
+// filing date with the statements); the disclosure latent behind them stays in `hidden`.
 import { makeRng } from '../lib/prng.js';
 
-const FIELDS = ['revenue', 'grossProfit', 'ebit', 'netIncome', 'fcf', 'assets', 'bookEquity', 'intangibles', 'debt', 'cash', 'eps', 'epsConsensus', 'sue', 'shares'];
+const EMB_FIELDS = ['emb1', 'emb2', 'emb3', 'emb4'];
+const FIELDS = ['revenue', 'grossProfit', 'ebit', 'netIncome', 'fcf', 'assets', 'bookEquity', 'intangibles', 'debt', 'cash', 'eps', 'epsConsensus', 'sue', 'shares', ...EMB_FIELDS];
 
-export function buildFundamentals({ fl, c, dates, S, N, mk, sec }) {
+export function buildFundamentals({ fl, c, dates, S, N, mk, sec, H = {} }) {
+  const lag = H.assetLag ?? 0.5;
   const keep = [];
   for (let f = 0; f < fl.F; f++) if (fl.filed[f]) keep.push(f);
   const F = keep.length;
@@ -22,6 +26,8 @@ export function buildFundamentals({ fl, c, dates, S, N, mk, sec }) {
     end: new Int32Array(N),
   };
   for (const k of FIELDS) out[k] = new Float64Array(F);
+  // hidden truth, never a feature: the disclosure latent and its attention multiplier per filing
+  out.hidden = { disc: new Float64Array(F), discMult: new Float64Array(F) };
   const seed = 0x51f0;
   let prevCompany = -1;
   let rng = null;
@@ -53,7 +59,7 @@ export function buildFundamentals({ fl, c, dates, S, N, mk, sec }) {
     const ebit = rev * emBase * Math.exp(mg);
     const gp = rev * gm;
     const target = (4 * rev) / c.turn[i];
-    const assets = assetsPrev === assetsPrev ? assetsPrev ** 0.5 * target ** 0.5 : target;
+    const assets = assetsPrev === assetsPrev ? assetsPrev ** lag * target ** (1 - lag) : target;
     assetsPrev = assets;
     const debt = c.lev[i] * assets;
     const cash = 0.08 * assets * Math.exp(0.1 * rng.n());
@@ -94,6 +100,9 @@ export function buildFundamentals({ fl, c, dates, S, N, mk, sec }) {
     out.epsConsensus[n] = cons;
     out.sue[n] = sue;
     out.shares[n] = sh;
+    for (let k2 = 0; k2 < EMB_FIELDS.length; k2++) out[EMB_FIELDS[k2]][n] = fl.emb[f * EMB_FIELDS.length + k2];
+    out.hidden.disc[n] = fl.disc[f];
+    out.hidden.discMult[n] = fl.discMult[f];
   }
   if (prevCompany >= 0) out.end[prevCompany] = F;
   // companies without filings: empty range

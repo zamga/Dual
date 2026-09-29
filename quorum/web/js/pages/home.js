@@ -4,11 +4,12 @@ import { h, announce } from '../dom.js';
 import { href } from '../router.js';
 import { createLevel } from '../hero/level.js';
 import { silenceCalendar } from '../charts/silence-calendar.js';
-import { hashChip, timestamp, statStrip, trackRecordLabel, sectionHead, familyName, familyDef } from '../ui.js';
+import { hashChip, timestamp, statStrip, trackRecordLabel, sectionHead, familyName, familyDef, launchNote } from '../ui.js';
 import { ruleLabels } from '../rule.js';
 import { issueCounts } from './_records.js';
 import { axisTicks, HIT_DOMAIN } from '../charts/scoreboard.js';
 import { quorumExample } from '../charts/quorum-example.js';
+import { launchCopy } from '../launch.js';
 
 const T = {
   en: {
@@ -17,7 +18,7 @@ const T = {
       kicker: 'The daily issue',
       title: 'Most days: no new pick.',
       lede: (x) =>
-        `An issue is published at 14:00 Ljubljana time on every US trading day, pick or not. Since the sealed record began on ${x.since}: ${x.issues} issues, ${x.q} with a new pick or a renewal. ${x.metAll ? 'On every issue at least one stock met the rule' : `On ${x.met} issues at least one stock met the rule`}; on the days without a new pick, those stocks were already open picks, capped or cooling down. ${x.pre ? `A text was due on ${x.texted} days (a BUY, RENEW or CLOSE); SMS alerts have not launched, so none was sent.` : `Texts went out on ${x.texted} days; on the other ${x.silent}, nobody’s phone moved.`}`,
+        `An issue is published at 14:00 Ljubljana time on every US trading day, pick or not. Since the sealed record began on ${x.since}: ${x.issues} issues, ${x.q} with a new pick or a renewal. ${x.metAll ? 'On every issue at least one stock met the rule' : `On ${x.met} issues at least one stock met the rule`}; on the days without a new pick, those stocks were already open picks, capped or cooling down. ${x.pre ? x.texts : `Texts went out on ${x.texted} days; on the other ${x.silent}, nobody’s phone moved.`}`,
       legend: (pre) => ['No new pick', 'Quorum: a pick', pre ? 'Exit, text due' : 'Exit texted'],
       readout: 'Selected issue',
       how: 'Arrow keys move through the issues; Enter opens one.',
@@ -102,7 +103,7 @@ const T = {
       title: 'Is agreement worth waiting for?',
       lede: 'The 2/4 shadow set is every stock exactly two families liked: published after close as the control. If quorum picks do not beat it, the gate adds nothing.',
       verdict: (x) =>
-        `${x.fail ? 'So far it does not' : x.level ? 'So far the evidence is mixed' : 'So far it does'}: on the holdout the gate ${x.fail ? 'failed' : 'passed'} its test (quorum ${x.hq} a pick against ${x.h2} for the 2/4 set), and in the sealed record the two are ${x.level ? 'level' : x.ahead ? 'apart, quorum ahead' : 'apart, quorum behind'} (${x.sq} against ${x.s2} beating the benchmark).`,
+        `${x.mixed ? 'So far the evidence is mixed' : x.fail ? 'So far it does not' : 'So far it does'}: on the holdout the gate ${x.fail ? 'failed' : 'passed'} its test (quorum ${x.hq} a pick against ${x.h2} for the 2/4 set), and in the sealed record the two are ${x.level ? 'level' : x.ahead ? 'apart, quorum ahead' : 'apart, quorum behind'} (${x.sq} against ${x.s2} beating the benchmark).`,
       gateLink: 'The gate test (b)',
       axis: 'Share of picks that beat the benchmark over 21 trading days',
       coin: 'coin flip',
@@ -131,7 +132,7 @@ const T = {
       kicker: 'Dnevna izdaja',
       title: 'Večino dni: brez nove izbire.',
       lede: (x) =>
-        `Izdaja izide ob 14:00 po ljubljanskem času vsak dan trgovanja v ZDA, z izbiro ali brez nje. Od začetka zapečatenega zapisa ${x.since}: ${x.issues} izdaj, ${x.q} z novo izbiro ali podaljšanjem. ${x.metAll ? 'V vsaki izdaji je vsaj ena delnica izpolnila pravilo' : `V ${x.met} izdajah je vsaj ena delnica izpolnila pravilo`}; na dneve brez nove izbire so bile te delnice že odprte izbire, omejene ali v premoru. ${x.pre ? `SMS bi bil predviden ${x.texted} dni (NAKUP, PODALJŠANJE ali ZAPRTJE); obvestila SMS še niso zagnana, zato ni bil poslan noben.` : `SMS je šel ven ${x.texted} dni; ostalih ${x.silent} se ni zganil noben telefon.`}`,
+        `Izdaja izide ob 14:00 po ljubljanskem času vsak dan trgovanja v ZDA, z izbiro ali brez nje. Od začetka zapečatenega zapisa ${x.since}: ${x.issues} izdaj, ${x.q} z novo izbiro ali podaljšanjem. ${x.metAll ? 'V vsaki izdaji je vsaj ena delnica izpolnila pravilo' : `V ${x.met} izdajah je vsaj ena delnica izpolnila pravilo`}; na dneve brez nove izbire so bile te delnice že odprte izbire, omejene ali v premoru. ${x.pre ? x.texts : `SMS je šel ven ${x.texted} dni; ostalih ${x.silent} se ni zganil noben telefon.`}`,
       legend: (pre) => ['Brez nove izbire', 'Kvorum: izbira', pre ? 'Izstop, predviden SMS' : 'Poslan izstop'],
       readout: 'Izbrana izdaja',
       how: 'S puščicami se premikate med izdajami; Enter jo odpre.',
@@ -184,7 +185,7 @@ const T = {
       title: 'Se soglasje splača počakati?',
       lede: 'Senčni niz 2/4 so vse delnice, ki sta jih izbrali natanko dve družini: objavimo ga po zaprtju kot kontrolo. Če izbire s kvorumom ne premagajo tega niza, pravilo ne doda ničesar.',
       verdict: (x) =>
-        `${x.fail ? 'Doslej ga ne' : x.level ? 'Doslej so dokazi mešani' : 'Doslej ga'}: na preizkusnem obdobju pravilo preizkusa ${x.fail ? 'ni prestalo' : 'je prestalo'} (kvorum ${x.hq} na izbiro proti ${x.h2} za niz 2/4), v zapečatenem zapisu pa sta ${x.level ? 'izenačena' : x.ahead ? 'narazen, kvorum spredaj' : 'narazen, kvorum zadaj'} (${x.sq} proti ${x.s2} nad merilom).`,
+        `${x.mixed ? 'Doslej so dokazi mešani' : x.fail ? 'Doslej ga ne' : 'Doslej ga'}: na preizkusnem obdobju pravilo preizkusa ${x.fail ? 'ni prestalo' : 'je prestalo'} (kvorum ${x.hq} na izbiro proti ${x.h2} za niz 2/4), v zapečatenem zapisu pa sta ${x.level ? 'izenačena' : x.ahead ? 'narazen, kvorum spredaj' : 'narazen, kvorum zadaj'} (${x.sq} proti ${x.s2} nad merilom).`,
       gateLink: 'Preizkus pravila (b)',
       axis: 'Delež izbir, ki so v 21 trgovalnih dneh premagale merilo',
       coin: 'met kovanca',
@@ -221,7 +222,7 @@ export async function render(ctx) {
     howSection(ctx, C.how, hero, meta),
     ledgerSection(ctx, C.ledger, meta),
     scoreSection(ctx, C.score),
-    priceSection(ctx, C.price),
+    priceSection(ctx, C.price, launch),
   );
   return {
     title: C.title,
@@ -260,7 +261,7 @@ function calendarSection(ctx, C, launch) {
       const q = issues.filter((r) => r.quorum).length;
       const texted = issues.filter((r) => r.buys?.length || r.renews?.length || r.closes?.length).length;
       const met = issues.filter((r) => issueCounts(r).quorumMet).length;
-      lede.textContent = C.lede({ since: fmt.date(issues[0].date), issues: fmt.int(issues.length), q: fmt.int(q), met: fmt.int(met), metAll: met === issues.length, texted: fmt.int(texted), silent: fmt.int(issues.length - texted), pre: launch.prelaunch });
+      lede.textContent = C.lede({ since: fmt.date(issues[0].date), issues: fmt.int(issues.length), q: fmt.int(q), met: fmt.int(met), metAll: met === issues.length, texted: fmt.int(texted), silent: fmt.int(issues.length - texted), pre: launch.prelaunch, texts: launchCopy(launch, ctx.locale).homeTexts(fmt.int(texted)) });
       caption.textContent = C.caption({ from: fmt.date(issues[0].date), to: fmt.date(issues[issues.length - 1].date) });
       const cal = silenceCalendar(issues, {
         fmt,
@@ -479,11 +480,14 @@ function scoreSection(ctx, C) {
       const qHit = summary?.hitRate;
       if (gate?.values && two && Number.isFinite(qHit)) {
         const diff = qHit - two.hit;
+        const level = Math.abs(diff) < 0.02;
         verdict.replaceChildren(
           C.verdict({
             fail: !gate.pass,
-            level: Math.abs(diff) < 0.02,
+            level,
             ahead: diff > 0,
+            // the holdout test and the sealed record point the same way, or the headline says "mixed"
+            mixed: level || gate.pass !== diff > 0,
             hq: fmt.pct(gate.values.quorum, { sign: true, digits: 2 }),
             h2: fmt.pct(gate.values.twoOfFour, { sign: true, digits: 2 }),
             sq: fmt.pct(qHit),
@@ -533,7 +537,7 @@ function scoreSection(ctx, C) {
 }
 
 // ---- 05 Pricing teaser: three tiers on three rules -----------------------------------------------------
-function priceSection(ctx, C) {
+function priceSection(ctx, C, launch) {
   const tiers = C.tiers.map((tier, i) =>
     h(
       'article',
@@ -553,6 +557,8 @@ function priceSection(ctx, C) {
     h('p', { class: 'c-meta honest' }, C.honest),
     ...tiers,
     h('p', { class: 'c-body small muted' }, C.policies),
+    // the launch state, computed (web/js/launch.js): paid tiers are not on sale before launch
+    h('div', { class: 'c-body home-price__launch' }, launchNote(launch, ctx.locale)),
     h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('pricing') }, C.link, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
   );
 }

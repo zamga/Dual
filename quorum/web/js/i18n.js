@@ -111,6 +111,7 @@ const EN = {
   'footer.label': 'Footer',
   'footer.demo':
     'This site is a demonstration. Every company, ticker, price and person in it is fictional and every result comes from a simulated market.',
+  'footer.simLink': 'About the simulation',
   'footer.all12m': 'All recommendations, last 12 months',
   'footer.conflicts': 'Conflicts & trading policy',
   'footer.terms': 'Terms',
@@ -233,6 +234,7 @@ const SL = {
   'footer.label': 'Noga strani',
   'footer.demo':
     'Ta stran je predstavitev. Vsa podjetja, oznake, cene in osebe so izmišljeni, vsi rezultati pa izhajajo iz simuliranega trga.',
+  'footer.simLink': 'O simulaciji',
   'footer.all12m': 'Vsa priporočila, zadnjih 12 mesecev',
   'footer.conflicts': 'Nasprotja interesov in pravila trgovanja',
   'footer.terms': 'Pogoji',

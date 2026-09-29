@@ -230,3 +230,42 @@ test('follow-every-pick positions keep records whose exit lies after the window,
   assert.deepEqual(sets.q.map((p) => [p.i, p.open === true, p.excess === undefined]), [[1, true, true]]);
   assert.deepEqual(episodeSets(m.model, { from: 31, to: 31, exitLimit: end, topPct: 0.9, sets: { q: (q, n2) => n2 >= 3 } }).q, []);
 });
+
+test('a stock whose last trading day is the signal day is never a new pick and is never renewed', () => {
+  const m = fakeMarket({ stocks: [{ ticker: 'GONE' }, { ticker: 'STAY' }, { ticker: 'HELD' }, { ticker: 'KEEP' }] });
+  const { dates } = m.model;
+  // GONE is acquired at the close of day 5 (its last trading day) and still scores in the top slice
+  m.model.companies[0].delistDate = dates[5];
+  m.qualify(0, 5);
+  m.qualify(1, 5);
+  // HELD is bought on day 1 and delists at the close of day 21, the signal day of its day-21 slot
+  m.model.companies[2].delistDate = dates[21];
+  m.qualify(2, 0);
+  m.qualify(2, 21);
+  // KEEP is bought on day 1 and still qualifies at its slot: renewed
+  m.qualify(3, 0);
+  m.qualify(3, 21);
+  const r = run(m.model);
+  assert.ok(!r.records.some((x) => x.i === 0), 'no pick on a stock that no longer trades at the issue-day open');
+  assert.ok(r.records.some((x) => x.i === 1 && x.t === 6));
+  assert.equal(r.issues.find((x) => x.t === 6).reached, 1);
+  const held = r.records.filter((x) => x.i === 2);
+  assert.deepEqual(held.map((x) => [x.kind, x.status]), [['BUY', 'closed']]);
+  const keep = r.records.filter((x) => x.i === 3);
+  assert.deepEqual(keep.map((x) => x.kind), ['BUY', 'RENEW']);
+});
+
+test('an open pick that carries a veto that day is not counted as meeting the rule', () => {
+  const m = fakeMarket({ stocks: [{ ticker: 'OPN' }, { ticker: 'VTO' }] });
+  m.qualify(0, 0);
+  m.qualify(1, 0);
+  // both picks still qualify on day 5, while they are open; VTO also carries a veto that day
+  m.qualify(0, 5);
+  m.qualify(1, 5);
+  m.veto(1, 5, 'earnings_within_3d');
+  const r = run(m.model);
+  const day = r.issues.find((x) => x.s === 5);
+  assert.equal(day.reached, 1, 'only the open pick with no veto met the rule');
+  assert.equal(day.blocked.alreadyOpen, 1);
+  assert.equal(day.blocked.alreadyOpen, day.reached - day.buys.length - day.vetoes.capped - day.vetoes.human - (day.unissued ?? 0));
+});

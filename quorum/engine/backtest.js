@@ -206,10 +206,13 @@ export function measure(model, i, tEntry, tExit, { full = false } = {}) {
  *   records[k]: { k, kind: 'BUY'|'RENEW', i, s, t, tExit, prior, next, agreement, agreeing, combined,
  *                 crashSwitch, pct, sector, status: 'open'|'closed'|'renewed', outcome, closeT }
  *   issues[]:   { t, s, date, nScored, closest, required, reached, crashSwitch, buys, renews, closes,
- *                 vetoes: {rule, llm, human, capped}, human: [...], approver, unissued, candidates?,
+ *                 vetoes: {rule, llm, human, capped}, blocked: {alreadyOpen, cooldown, capIssue, capMonth,
+ *                 capSector, capSms}, human: [...], approver, unissued, candidates?,
  *                 llmShadow: {candidates, renewals} (before the sealed record only: what the LLM
  *                 stand-in, which is not backtested, would have blocked) }
  */
+const BLOCKED_KEY = Object.freeze({ already_open: 'alreadyOpen', cooldown: 'cooldown', capped_issue: 'capIssue', capped_month: 'capMonth', capped_sector: 'capSector' });
+
 export function runQuorum(model, o) {
   const rule = { ...DEFAULT_RULE, ...(o.rule || {}) };
   const { N, T, dates } = model;
@@ -242,6 +245,9 @@ export function runQuorum(model, o) {
   const llmWouldBlock = (s, i) => s < llmFrom && (rawVetoBits(model, s, i) & VETO_BIT_LLM) !== 0;
 
   const stockAt = (s, i) => ({ id: i, ticker: tickerOf[i], sector: sectorOf[i], pct: pctOf(model, s, i), vetoes: vetoKeysOf(vetoBits(model, s, i)) });
+  // a stock whose last trading day was the signal day (a completed acquisition or a delisting after its
+  // close, public before the next issue) cannot be bought at the issue day's open: never a new pick
+  const lastTradingDay = model.companies.map((c) => (c.delistDate ? lastOnOrBefore(model, c.delistDate) : Infinity));
 
   const closeRecord = (rec, t, status) => {
     rec.status = status;
@@ -258,7 +264,12 @@ export function runQuorum(model, o) {
       monthCount = 0;
       sentThisMonth = 0;
     }
-    const issue = { t, s, date, crashSwitch: cs, buys: [], renews: [], closes: [], vetoes: { rule: 0, llm: 0, human: 0, capped: 0 }, human: [], approver: null, unissued: 0, llmShadow: { candidates: 0, renewals: 0 } };
+    const issue = {
+      t, s, date, crashSwitch: cs, buys: [], renews: [], closes: [], vetoes: { rule: 0, llm: 0, human: 0, capped: 0 },
+      // stocks that met the rule but were not issued, by reason (vetoes.capped = every field but alreadyOpen)
+      blocked: { alreadyOpen: 0, cooldown: 0, capIssue: 0, capMonth: 0, capSector: 0, capSms: 0 },
+      human: [], approver: null, unissued: 0, llmShadow: { candidates: 0, renewals: 0 },
+    };
 
     // 1. the day-21 slot: RENEW or CLOSE every record whose window ends at today's open
     const due = open.filter((k) => records[k].tExit === t).sort((a, b) => a - b);
@@ -266,7 +277,7 @@ export function runQuorum(model, o) {
       const rec = records[k];
       open.splice(open.indexOf(k), 1);
       const st = stockAt(s, rec.i);
-      if (isScored(model, s, rec.i) && meetsRule(st, { rule, crashSwitch: cs })) {
+      if (isScored(model, s, rec.i) && lastTradingDay[rec.i] > s && meetsRule(st, { rule, crashSwitch: cs })) {
         closeRecord(rec, t, 'renewed');
         const a = agreement(st.pct, { topPct: top, suspended: cs ? ['A'] : [], families: rule.families });
         const nk = records.length;
@@ -301,7 +312,7 @@ export function runQuorum(model, o) {
       if (!(a === a || b === b || c === c || d === d)) continue;
       nScored++;
       const n = (a >= top) + (b >= top) + (c >= top) + (d >= top);
-      if (n >= 2) stocks.push(stockAt(s, i));
+      if (n >= 2 && lastTradingDay[i] > s) stocks.push(stockAt(s, i));
     }
     // closes older than the cooldown can no longer block anything; pruning keeps the core rule's
     // trading-day count short
@@ -324,10 +335,15 @@ export function runQuorum(model, o) {
         if (a.count > closest) closest = a.count;
       }
     }
+    // An open pick that carries a veto today did not meet the rule with no veto: it is neither in
+    // `reached` nor in `blocked.alreadyOpen` (ARCHITECTURE.md §3), so `closest` and `reached` agree.
+    const openVetoed = (c) => c.status === 'already_open' && c.vetoes.length > 0;
     for (const c of res.candidates) {
       if (c.status === 'vetoed_rule') issue.vetoes.rule++;
       else if (c.status === 'vetoed_llm') issue.vetoes.llm++;
       else if (c.status.startsWith('capped') || c.status === 'cooldown') issue.vetoes.capped++;
+      const bk = BLOCKED_KEY[c.status];
+      if (bk && !openVetoed(c)) issue.blocked[bk]++;
       if (c.status !== 'vetoed_rule' && c.status !== 'already_open' && llmWouldBlock(s, c.id)) issue.llmShadow.candidates++;
     }
 
@@ -346,6 +362,7 @@ export function runQuorum(model, o) {
           used += 1 + exitsThisMonth;
         } else {
           issue.vetoes.capped++;
+          issue.blocked.capSms++;
           issue.smsBudgetCapped = (issue.smsBudgetCapped ?? 0) + 1;
           statusOf.set(b.id, 'capped_sms');
         }
@@ -390,7 +407,7 @@ export function runQuorum(model, o) {
     issue.nScored = nScored;
     issue.closest = closest;
     issue.required = res.required;
-    issue.reached = res.candidates.filter((c) => !c.status.startsWith('vetoed')).length;
+    issue.reached = res.candidates.filter((c) => !c.status.startsWith('vetoed') && !openVetoed(c)).length;
     if (o.keepCandidates) issue.candidates = res.candidates.map((c) => ({ i: c.id, ticker: c.ticker, agreement: c.agreement, agreeing: c.agreeing, combined: c.combined, status: statusOf.get(c.id) ?? c.status, vetoes: c.vetoes }));
     issues.push(issue);
   }

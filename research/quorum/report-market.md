@@ -139,7 +139,7 @@ Scope: pricing, delivery channel, how often picks arrive, what "AI" means in pra
 
 ## 3. Independent evidence on whether "AI picks" work
 - **NBER working paper w35153** (Carlin, Israelsen, Wazzan):
-  - Tracked daily picks in real time from Aug 2025 for about 8 months, from GPT-5/5.2, Claude Sonnet 4.5, Gemini 2.5 Flash and Grok 4.1.
+  - Tracked daily picks in real time from Aug 2025 for about 8 months, from four commercial chatbots (OpenAI, Anthropic, Google and xAI models).
   - Found no statistically significant abnormal returns.
   - The LLM portfolios were undiversified and tilted toward momentum, large caps and growth, and were driven by how much media attention a company gets ([NBER](https://www.nber.org/papers/w35153), [scienceofmoney](https://www.scienceofmoney.org/when-chatbots-play-stock-picker-what-ai-actually-recommends-for-your-portfolio-559/)).
 - **AIEQ** (an ETF run on IBM Watson since Oct 2017): lagged the S&P 500 by about 62% cumulatively by Apr 2024, with 804% turnover and a 0.75% fee ([Seeking Alpha](https://seekingalpha.com/article/4684579-aieq-time-to-give-this-ai-powered-etf-the-old-yeller-treatment), [pluang](https://pluang.com/en/news-feed/etf-aieq-strategi-ai-yang-tidak-meyakinkan-masih-tertinggal-dari-pasar)).

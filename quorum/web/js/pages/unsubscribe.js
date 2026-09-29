@@ -4,19 +4,18 @@
 // subscription is unchanged".
 //
 // Demo: nothing changes and no text is sent; the stop is kept in this tab's memory so #app and #account
-// agree with it. Live: POST /u/<token> (JSON), the same code path as the server's own page.
+// agree with it. Live: POST /u/<token> (JSON), the same code path as the server's own page. The server
+// answers an unknown token exactly like a known one (it never says whether a link exists), so the page
+// has no "not recognised" state: an error is shown under the button, which stays there to tap again.
 //
 // SL: first draft, needs native review.
-import { h, announce, focusEl, copyText } from '../dom.js';
+import { h, announce, focusEl } from '../dom.js';
 import { href } from '../router.js';
 import { renderSms, LINK_DOMAIN } from '../core/sms-templates.js';
 import { api, errorText } from './_api.js';
 import { previewPick, previewFromHero, buySms, quietHoursAt } from './_join.js';
 import { formatInZone, LJUBLJANA } from '../core/calendar.js';
 import { demo, modeNote, phoneThread } from './_member.js';
-import { CONTACT } from '../ui.js';
-
-const SUPPORT = CONTACT.support;
 
 export async function render(ctx) {
   const { L, locale, fmt } = ctx;
@@ -97,23 +96,10 @@ export async function render(ctx) {
     } catch (e) {
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
-      if (e.status === 404) return notRecognised();
       err.hidden = false;
       err.textContent = errorText(e, locale);
     }
   });
-
-  function notRecognised() {
-    h1.textContent = L('Link not recognised.', 'Povezava ni prepoznana.');
-    lede.textContent = L('This stop link is not valid. If you still get texts from Quorum, write to us and we stop them by hand.', 'Ta povezava za odjavo ni veljavna. Če še vedno prejemate SMS-e Quoruma, nam pišite in jih ustavimo ročno.');
-    const copy = h('button', { type: 'button', class: 'btn btn--ghost' }, L('Copy the address', 'Kopiraj naslov'));
-    const status = h('span', { class: 'small muted', role: 'status' });
-    copy.addEventListener('click', async () => {
-      status.textContent = (await copyText(SUPPORT)) ? L('Copied.', 'Kopirano.') : L('Select the address to copy it.', 'Izberite naslov, da ga kopirate.');
-    });
-    action.replaceChildren(h('p', { class: 'us-support' }, h('span', { class: 'mono us-mail' }, SUPPORT), copy, status));
-    focusEl(h1);
-  }
 
   const caption = h(
     'figcaption',

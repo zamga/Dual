@@ -36,6 +36,16 @@ export const FEATURES = [
   { key: 'turnover', family: null, label: { en: 'Share turnover (21 days)', sl: 'Obrat delnic (21 dni)' }, rawUnit: 'ratio' },
   { key: 'dtc', family: null, label: { en: 'Days to cover (short interest)', sl: 'Dnevi za pokritje (kratke pozicije)' }, rawUnit: 'days' },
   { key: 'days_to_earn', family: null, label: { en: 'Trading days to next earnings', sl: 'Dnevi trgovanja do naslednjih rezultatov' }, rawUnit: 'days' },
+  // Opportunistic Form-4 purchases (routine buyers filtered out) known at t: trades up to t - 2, since a
+  // Form 4 is due two business days after the trade.
+  { key: 'insider_buys', family: null, label: { en: 'Opportunistic insider buyers in the last three months (SEC filings)', sl: 'Oportunistični kupci med notranjimi osebami v zadnjih treh mesecih (prijave SEC)' }, rawUnit: 'count' },
+  // The filing-text embedding (brief §3.3, the LLM's third job): four components of the latest 10-K or
+  // 10-Q text embedding, point in time (released on the SEC filing date, as first filed), missing after
+  // 130 trading days.
+  { key: 'emb_1', family: null, label: { en: 'Filing text: change in management-discussion tone (embedding)', sl: 'Besedilo poročila: sprememba tona razprave poslovodstva (vektorska predstavitev)' }, rawUnit: 'score' },
+  { key: 'emb_2', family: null, label: { en: 'Filing text: change in risk-factor language (embedding)', sl: 'Besedilo poročila: sprememba jezika dejavnikov tveganja (vektorska predstavitev)' }, rawUnit: 'score' },
+  { key: 'emb_3', family: null, label: { en: 'Filing text: change in forward-looking statements (embedding)', sl: 'Besedilo poročila: sprememba izjav o prihodnosti (vektorska predstavitev)' }, rawUnit: 'score' },
+  { key: 'emb_4', family: null, label: { en: 'Filing text: change in length and boilerplate (embedding)', sl: 'Besedilo poročila: sprememba dolžine in obrazcev (vektorska predstavitev)' }, rawUnit: 'score' },
   // The LLM veto stand-in's own classification. Computed for display, never a D input: the brief
   // (§3.3) backtests LLM components only after the training cutoff, and a D that learns the veto's
   // labels would dodge every flagged stock itself, leaving the 48-hour veto nothing to block.
@@ -43,9 +53,31 @@ export const FEATURES = [
 ];
 export const FEATURE_KEYS = FEATURES.map((f) => f.key);
 export const FEATURE_INDEX = Object.fromEntries(FEATURE_KEYS.map((k, j) => [k, j]));
-/** Features the ML ranker may use: every stored feature except the LLM stand-in's outputs. */
-export const D_INPUT_KEYS = FEATURES.filter((f) => !f.llmStandIn).map((f) => f.key);
+export const EMBEDDING_KEYS = Object.freeze(['emb_1', 'emb_2', 'emb_3', 'emb_4']);
 
+// Family D is independent by construction (brief §1 and §3.2: four independent families). Its inputs
+// exclude every raw input of A-C and every close proxy of them: price momentum at horizons above one
+// month, residual momentum, the earnings surprise, EPS and gross-profit changes, profitability and
+// valuation ratios, and anything built from them. D learns from its own information set instead.
+/** Close proxies of each family's inputs (never D inputs), with the reason. */
+export const FAMILY_PROXIES = Object.freeze({
+  A: Object.freeze({ mom_12_1: 'price momentum, 12 months ex the last', mom_6_1: 'price momentum, 6 months ex the last' }),
+  B: Object.freeze({ eps_chg: 'year-on-year EPS change', days_to_earn: 'earnings-calendar timing (the surprise drift runs from each report)' }),
+  C: Object.freeze({ leverage: 'balance-sheet ratio tied to quality', size: 'market cap, the denominator of the valuation ratios' }),
+});
+/**
+ * D's own information set (candidates; engine/families/ml.js screens them once more on the research
+ * window): one-month reversal, volatility, idiosyncratic volatility, beta and the largest daily return,
+ * liquidity and turnover, days to cover, opportunistic insider buying, the age of the latest filing
+ * and the four filing-text embedding components.
+ */
+export const D_OWN_KEYS = Object.freeze(['rev_1m', 'vol_60', 'ivol', 'beta', 'max_ret', 'adv', 'turnover', 'dtc', 'insider_buys', 'days_since_filing', ...EMBEDDING_KEYS]);
+/** Features the ML ranker may use (its own information set; never the LLM stand-in's news flag). */
+export const D_INPUT_KEYS = D_OWN_KEYS.filter((k) => !FEATURES.find((f) => f.key === k)?.llmStandIn);
+
+const EMB_FIELDS = ['emb1', 'emb2', 'emb3', 'emb4'];
+const INSIDER_WINDOW = 63;
+const FORM4_LAG = 2;
 const W_LONG = 252;
 const W_SHORT = 60;
 const W_MON = 21;
@@ -124,6 +156,33 @@ function latestFiling(fil, i, t) {
   return ans;
 }
 
+const INSIDER_CACHE = new WeakMap();
+
+/** Sorted trade days of each company's opportunistic insider purchases. */
+function insiderDays(m) {
+  let byCo = INSIDER_CACHE.get(m);
+  if (byCo) return byCo;
+  const lists = Array.from({ length: m.N }, () => []);
+  const ins = m.insider;
+  if (ins) for (let k = 0; k < ins.t.length; k++) if (ins.opportunistic[k]) lists[ins.company[k]].push(ins.t[k]);
+  byCo = lists.map((l) => Int32Array.from(l).sort());
+  INSIDER_CACHE.set(m, byCo);
+  return byCo;
+}
+
+/**
+ * Opportunistic insider buyers of company i known at the close of t: purchases dated in
+ * (t - 2 - 63, t - 2] (a Form 4 is filed within two business days of the trade).
+ */
+export function insiderBuysAt(m, i, t) {
+  const days = insiderDays(m)[i];
+  const hi = t - FORM4_LAG;
+  const lo = hi - INSIDER_WINDOW;
+  let n = 0;
+  for (let k = 0; k < days.length && days[k] <= hi; k++) if (days[k] > lo) n++;
+  return n;
+}
+
 /** Sim index of the next scheduled earnings date strictly after t (may be >= S), or -1. */
 export function nextScheduledEarnings(fil, i, t) {
   const sc = fil.schedule;
@@ -158,6 +217,7 @@ function fundamentalFeatures(fil, i, t, mc, price, out) {
   out[J.bm_adj] = NaN;
   out[J.leverage] = NaN;
   out[J.days_since_filing] = NaN;
+  for (let k = 0; k < EMB_FIELDS.length; k++) out[J[EMBEDDING_KEYS[k]]] = NaN;
   if (f < 0) return;
   const age = t - fil.filingIdx[f];
   out[J.days_since_filing] = Math.min(age, 130);
@@ -165,7 +225,10 @@ function fundamentalFeatures(fil, i, t, mc, price, out) {
   const first = fil.start[i];
   out[J.leverage] = fil.debt[f] / fil.assets[f];
   out[J.bm_adj] = (fil.bookEquity[f] + fil.intangibles[f]) / mc;
-  if (age <= 130) out[J.sue] = fil.sue[f];
+  if (age <= 130) {
+    out[J.sue] = fil.sue[f];
+    for (let k = 0; k < EMB_FIELDS.length; k++) out[J[EMBEDDING_KEYS[k]]] = fil[EMB_FIELDS[k]][f];
+  }
   // valuation and profitability use the latest quarter annualised (FCF: last two quarters), so the
   // ratios are current rather than a trailing-twelve-month average that lags the price
   out[J.gpa] = (4 * fil.grossProfit[f]) / fil.assets[f];
@@ -221,6 +284,7 @@ export function rawFeaturesAt(m, t, i) {
   const nxt = nextFilingAfter(m.filings, i, t);
   out[J.days_to_earn] = nxt > t ? Math.min(90, nxt - t) : NaN;
   out[J.news_neg] = negNewsWithin(m, i, t, 5) ? 1 : 0;
+  out[J.insider_buys] = insiderBuysAt(m, i, t);
   fundamentalFeatures(m.filings, i, t, mc, px, out);
   return out;
 }
@@ -472,6 +536,7 @@ export function computeFeatures(m, { modelFrom = m.s0, storeFrom = W_LONG, train
       const nxt = nextFilingAfter(fil, i, t);
       one[J.days_to_earn] = nxt > t ? Math.min(90, nxt - t) : NaN;
       one[J.news_neg] = t - lastNeg[i] < 5 ? 1 : 0;
+      one[J.insider_buys] = insiderBuysAt(m, i, t);
       fundamentalFeatures(fil, i, t, mc, px, one);
       for (let j = 0; j < F; j++) raw[j * N + e] = one[j];
     }

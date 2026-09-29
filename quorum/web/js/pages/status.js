@@ -11,6 +11,7 @@ import { hashChip, timestamp } from '../ui.js';
 import { api, errorText } from './_api.js';
 import { demoStatus, liveStatus, channelState, timetable, total, CHANNELS } from './_status.js';
 import { launchInfo } from './_join.js';
+import { launchCopy } from '../launch.js';
 import { modeNote } from './_member.js';
 import { formatInZone, LJUBLJANA, issueSlot, nextIssueSlot } from '../core/calendar.js';
 import { createClock, remaining } from '../clock.js';
@@ -31,12 +32,12 @@ export async function render(ctx) {
   let liveErr = null;
   if (live) {
     try {
-      st = liveStatus(await api('/api/status', { signal: ctx.signal }), { prelaunch: !launch.ready });
+      st = liveStatus(await api('/api/status', { signal: ctx.signal }), { prelaunch: launch.prelaunch });
     } catch (e) {
       liveErr = e;
-      st = demoStatus({ issues, ledger, now, prelaunch: !launch.ready });
+      st = demoStatus({ issues, ledger, now, prelaunch: launch.prelaunch });
     }
-  } else st = demoStatus({ issues, ledger, now, prelaunch: !launch.ready });
+  } else st = demoStatus({ issues, ledger, now, prelaunch: launch.prelaunch });
 
   const issue = st.issue;
   const row = issue ? issues.find((r) => r.date === issue.date) : null;
@@ -119,10 +120,8 @@ export async function render(ctx) {
     web: issue ? L(`${fmt.int(issue.nScored ?? 0)} scored · closest ${issue.closest ?? 0}/4 · ${items ? itemWords.join(', ') : 'no quorum'}`, `${fmt.int(issue.nScored ?? 0)} ocenjenih · največ ${issue.closest ?? 0}/4 · ${items ? itemWords.join(', ') : 'brez kvoruma'}`) : '–',
     sms: paused
       ? L('Paused by the 30007 guard; queued texts wait, pick texts expire at the US open.', 'Ustavljeno zaradi varovala 30007; SMS-i čakajo, SMS z izbiro poteče ob odprtju ZDA.')
-      : st.prelaunch && launch.research
-        ? L('Not launching: the engine is back in research. Sender QUORUM, SI AT DE HR IT.', 'Brez zagona: pogon je spet v raziskavah. Pošiljatelj QUORUM, SI AT DE HR IT.')
-        : st.prelaunch
-        ? L('Paid SMS opens at launch. Sender QUORUM, SI AT DE HR IT.', 'Plačljivi SMS se odpre ob zagonu. Pošiljatelj QUORUM, SI AT DE HR IT.')
+      : st.prelaunch
+        ? launchCopy(launch, locale).statusSms
         : L('Sender QUORUM, 08:00–21:00 recipient time.', 'Pošiljatelj QUORUM, 08:00–21:00 po času prejemnika.'),
     push: L('Every issue item, alongside texts.', 'Vsaka postavka izdaje, ob SMS.'),
     email: L('Every issue item; the Ledger email on Sundays at 18:00.', 'Vsaka postavka izdaje; e-pošta Ledger ob nedeljah ob 18:00.'),
@@ -191,7 +190,7 @@ export async function render(ctx) {
     publish: [L('Issue published on the web', 'Izdaja objavljena na spletu'), issueEntry ? h('span', {}, `#${issueEntry.body?.issueNo ?? issue?.issueNo} `, hashChip(issueEntry.hash, { t: ctx.t })) : null],
     fanout: [L('Fan-out ends: SMS paced, push and email in parallel', 'Konec razpošiljanja: SMS v ritmu, potisna obvestila in e-pošta vzporedno'), st.prelaunch && !sent ? L('0 messages: no subscribers', '0 sporočil: ni naročnikov') : st.fanout?.seconds != null ? L(`${fmt.int(st.fanout.seconds)} s`, `${fmt.int(st.fanout.seconds)} s`) : null],
     entry: [L('US open: entry prices recorded', 'Odprtje ZDA: vstopne cene zapisane'), pickNos.length ? L(`${pickNos.map((x) => `#${x}`).join(', ')} entered · ${openPicks} open`, `${pickNos.map((x) => `#${x}`).join(', ')} vstop · ${openPicks} odprtih`) : L(`${openPicks} open picks marked`, `${openPicks} odprtih izbir ovrednotenih`)],
-    anchor: [L('Merkle root anchored (23:59 UTC)', 'Merklov koren zasidran (23:59 UTC)'), dayAnchor ? h('span', {}, hashChip(dayAnchor.merkleRoot, { t: ctx.t }), ` ${L(`${dayAnchor.rowCount ?? dayAnchor.rows} rows`, `${dayAnchor.rowCount ?? dayAnchor.rows} vrstic`)}`) : null],
+    anchor: [L('Merkle root anchored (23:59 UTC)', 'Merklov koren zasidran (23:59 UTC)'), dayAnchor ? h('span', {}, hashChip(dayAnchor.merkleRoot, { t: ctx.t }), ` ${((n) => L(`${n} ${n === 1 ? 'row' : 'rows'}`, `${n} ${n % 100 === 1 ? 'vrstica' : n % 100 === 2 ? 'vrstici' : n % 100 === 3 || n % 100 === 4 ? 'vrstice' : 'vrstic'}`))(dayAnchor.rowCount ?? dayAnchor.rows)}`) : null],
   };
   const stateWord = { done: L('done', 'opravljeno'), next: L('next', 'naslednje'), later: L('later', 'pozneje') };
   const tt = h(

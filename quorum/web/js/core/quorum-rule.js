@@ -1,4 +1,5 @@
-// The conviction gate (brief §2.3): at least 3 of 4 model families in their top decile,
+// The conviction gate (brief §2.3): at least 3 of 4 model families in their top slice (percentile at or
+// above rule.topPct, calibrated per methodology version and published as meta.rule.topPct),
 // no veto, then the caps. Pure and deterministic, so the engine, the server and the tests
 // all run exactly the same rule.
 import { countTradingDays, monthKey } from './calendar.js';

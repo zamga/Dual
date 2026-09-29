@@ -92,6 +92,8 @@ export const SPECS = {
     persons: [{ id: 'string', name: 'string', title: en_sl, role: 'string', fictional: true }],
     universe: { scoredToday: 'int', eligibleRule: { minPrice: 'number', minMcap: 'number', minAdv: 'number' } },
     counts: { issues: 'int', quorumDays: 'int', picks: 'int', renews: 'int', closed: 'int', open: 'int' },
+    rule: { topPct: 'frac', minAgree: 'int' },
+    notes: { simulation: en_sl },
   },
   summary: {
     simulated: true, liveSince: 'date', label: en_sl, nPicks: 'int', nRenews: 'int', nRecords: 'int', nClosed: 'int', hitRate: 'frac', hitCI: { $tuple: ['frac', 'frac'] },
@@ -103,6 +105,7 @@ export const SPECS = {
   issues: [{
     date: 'date', issueNo: 'int', publishAt: 'instant', tz: { $in: ['CEST', 'CET'] }, nScored: 'int', closest: 'int', quorum: 'boolean',
     buys: ['no4'], renews: ['no4'], closes: ['no4'], vetoes: vetoCounts, seq: 'int', hash: 'hex64',
+    reached: 'int', blocked: { alreadyOpen: 'int', cooldown: 'int', capIssue: 'int', capMonth: 'int', capSector: 'int', capSms: 'int' },
   }],
   ledger: {
     simulated: true, genesis: 'hex64',
@@ -134,7 +137,10 @@ export const SPECS = {
     simulated: true, periods: { sealed: { from: 'date', to: 'date' }, holdout: { from: 'date', to: 'date' } },
     families: [{ id: { $in: ['A', 'B', 'C', 'D'] }, sealed: famStats, holdout: famStats }],
     agreement: [{ k: { $in: ['4/4', '3/4', '2/4 shadow'] }, sealed: agreeStats, holdout: agreeStats }],
-    correlations: { order: ['string'], matrix: [[nul('number')]] },
+    correlations: {
+      order: ['string'], matrix: [[nul('number')]],
+      validation: { period: { from: 'date', to: 'date' }, order: ['string'], matrix: [[nul('number')]], maxD: 'number', limit: 'number' },
+    },
     icMonthly: [{ $tuple: [/^\d{4}-\d{2}$/, { A: nul('number'), B: nul('number'), C: nul('number'), D: nul('number') }] }],
   },
   deciles: { simulated: true, sealed: decileSet, holdout: decileSet },

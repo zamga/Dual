@@ -46,6 +46,12 @@ function familiesMeta(model) {
   });
 }
 
+/** Plain-language disclosure of what the simulation is and of the 29 Sep 2026 revision (meta.notes.simulation). */
+export const SIMULATION_NOTE = Object.freeze({
+  en: 'The market, its companies and every parameter behind them are simulated and chosen by us. On 29 Sep 2026 we revised the simulated world and family D, after an earlier run showed D overlapping families A and C where the design requires four independent families. A simulation shows how Quorum works, not that it has an edge: only a live sealed record can show that.',
+  sl: 'Trg, njegova podjetja in vsi parametri v ozadju so simulirani in smo jih izbrali mi. 29. 9. 2026 smo simulirani svet in družino D popravili, potem ko je prejšnji zagon pokazal, da se D prekriva z družinama A in C, zasnova pa zahteva štiri neodvisne družine. Simulacija pokaže, kako Quorum deluje, ne pa, da ima prednost pred trgom: to lahko pokaže samo živ zapečaten zapis.',
+});
+
 export function buildMeta(model, rec, validation) {
   const T = model.T;
   const picks = rec.picks;
@@ -81,6 +87,7 @@ export function buildMeta(model, rec, validation) {
       costs: { above10B: 0.001, from2to10B: 0.0025 },
     },
     notes: {
+      simulation: SIMULATION_NOTE,
       llmVeto: 'stand-in',
       counting: 'picks = BUY records, renews = RENEW records; closed = records whose 21-day window has ended (closed or renewed); open = records still inside their window',
       prices: 'Simulated prices, adjusted for simulated 2-for-1 share splits dated before the sealed record; returns are unaffected',
@@ -248,6 +255,7 @@ export function buildIssues(rec) {
     seq: x.seq,
     hash: x.hash,
     reached: x.reached,
+    blocked: x.blocked,
     crashSwitch: x.crashSwitch,
     approver: x.approver,
     humanVetoes: x.humanVetoes,
@@ -306,6 +314,36 @@ function agreementBlock(st) {
   return { n: st.n, hit: r4(st.hit), hitCI: ci4(st.hitCI), medianExcess: r6(st.medianExcess), meanExcess: r6(st.meanExcess) };
 }
 
+/**
+ * The family correlations on validation data (the research window, where the independence rule is
+ * applied): month-end scores, D from its walk-forward models (each scores only dates after its training
+ * cutoff); maxD is D's highest correlation with A, B or C. `independenceCheck` is the rule's own test
+ * (seed-averaged out-of-fold CV predictions of the chosen configuration), `proxyScreen` the screen of
+ * D's inputs.
+ */
+export function validationCorrelations(model) {
+  const d = model.diagnostics?.correlationsByPeriod?.research;
+  if (!d) return null;
+  const order = d.order;
+  const matrix = d.matrix.map((row) => row.map((x) => r3(x)));
+  const dI = order.indexOf('D');
+  const maxD = Math.max(...order.map((f, k) => (k === dI ? -Infinity : matrix[dI][k])));
+  const log = model.trainingLog ?? [];
+  const checks = log.filter((x) => x.step === 'independence-check');
+  const last = checks[checks.length - 1];
+  const screen = log.find((x) => x.step === 'proxy-screen');
+  return {
+    period: { from: model.periods.research[0], to: model.periods.research[1] },
+    basis: 'mean monthly cross-sectional Spearman of month-end scores on the research window; D from its walk-forward models, each scoring only dates after its training cutoff',
+    order,
+    matrix,
+    maxD: r3(maxD),
+    limit: 0.5,
+    independenceCheck: last ? { corr: last.corr, limit: last.limit, outcome: last.outcome, rounds: checks.length, basis: 'seed-averaged out-of-fold CV predictions of the chosen configuration against the A-C percentiles' } : null,
+    proxyScreen: screen ? { limit: screen.limit, screened: screen.screened, inputs: model.dModel?.features ?? [] } : null,
+  };
+}
+
 export function buildScoreboardAndDeciles(model, rec, validation) {
   const rule = validation.rule;
   const sealedSets = periodSetStats(model, rule, 'sealed');
@@ -331,7 +369,7 @@ export function buildScoreboardAndDeciles(model, rec, validation) {
     },
     families: FAMS.map((f) => ({ id: f, sealed: familyBlock(sealedSets[f], sealedUni.ic, f), holdout: familyBlock(holdout.sets[f], holdout.universe.ic, f) })),
     agreement: ['4/4', '3/4', '2/4 shadow'].map((k) => ({ k, sealed: agreementBlock(sealedAgree[k]), holdout: agreementBlock(holdout.byAgreement[k]) })),
-    correlations: { order, matrix, period: 'sealed', basis: 'mean monthly cross-sectional Spearman' },
+    correlations: { order, matrix, period: 'sealed', basis: 'mean monthly cross-sectional Spearman', validation: validationCorrelations(model) },
     icMonthly: sealedUni.ic.map((r) => [r.month, Object.fromEntries(FAMS.map((f) => [f, r4(r[f])]))]),
   };
   const dec = (u) => Object.fromEntries(['combined', ...FAMS].map((k) => [k, u.deciles[k].map((d) => ({ d: d.d, excess: r6(d.excess), ci: ci6(d.ci) }))]));

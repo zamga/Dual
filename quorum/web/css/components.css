@@ -937,12 +937,12 @@
 
 .btn:hover {
   text-decoration: none;
-  background: transparent;
+  background: var(--bg); /* inverts to the ground: a rule passes behind a button, never through it */
   color: var(--fg);
 }
 
 .btn--ghost {
-  background: transparent;
+  background: var(--bg);
   color: var(--fg);
   border-color: var(--rule);
 }
@@ -1378,6 +1378,7 @@
   border-radius: 38px;
   padding: 10px;
   background: var(--chamber);
+  --bg: var(--chamber);
 }
 
 .phone__screen {
@@ -1389,6 +1390,7 @@
   overflow: hidden;
   display: grid;
   grid-template-rows: auto auto 1fr;
+  --bg: var(--paper);
   --fg-2: var(--slate);
 }
 
@@ -1460,6 +1462,40 @@
 }
 
 /* ---- callouts ------------------------------------------------------------------------------------ */
+/* The launch note (ui.js launchNote): the state label over one computed sentence, wherever a paid tier is
+   offered. A hairline above it, like the member pages' launch line (.m-launch). */
+.launch-note {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--fg);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.launch-note__k {
+  color: var(--fg);
+}
+
+.launch-note__t a {
+  color: var(--fg);
+}
+
+/* The simulation note (ui.js simulationNote): meta.notes.simulation near the top of #methodology and
+   #backtest, the target of the footer's demo line. A label on rule 1 and one quiet paragraph. */
+.sim-note {
+  row-gap: var(--s-3);
+  padding-bottom: var(--s-7);
+}
+
+.sim-note__t {
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--fg-2);
+  max-width: 68ch;
+}
+
 .draft-banner {
   display: flex;
   gap: 12px;
@@ -1489,6 +1525,7 @@
   gap: 2px;
   position: sticky;
   top: calc(var(--header-h) + 24px);
+  background-color: var(--bg); /* one block of text: the rules pass behind the whole list (DESIGN.md §4) */
 }
 
 .toc a {

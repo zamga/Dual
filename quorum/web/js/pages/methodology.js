@@ -2,9 +2,9 @@
 // look-ahead controls, measurement and the retirement rule. SL: first draft, needs native review.
 import { h } from '../dom.js';
 import { href } from '../router.js';
-import { launchInfo } from '../launch.js';
+import { launchInfo, launchCopy } from '../launch.js';
 import { masthead, contentSections, toc, page, table } from './_content.js';
-import { familyName } from '../ui.js';
+import { familyName, simulationNote } from '../ui.js';
 
 const LLM_ID = 'Claude (Anthropic)';
 
@@ -193,7 +193,7 @@ export async function render(ctx) {
     toc(ctx, sections, C.toc),
   );
 
-  const node = page(masthead({ kicker: C.kicker, title: C.h1, lede: C.lede, meta: metaBlock }), ...contentSections(sections));
+  const node = page(masthead({ kicker: C.kicker, title: C.h1, lede: C.lede, meta: metaBlock }), simulationNote(meta, ctx.locale), ...contentSections(sections));
   return { title: C.title, node };
 }
 
@@ -213,14 +213,18 @@ function gateVerdict(ctx, bt) {
   const join = (ids, and) => (ids.length < 2 ? ids.join('') : `${ids.slice(0, -1).join(', ')} ${and} ${ids.at(-1)}`);
   const amend = bt.launch?.amendment;
   const info = launchInfo(bt);
-  if (!failed.length) return h('p', { class: 'small' }, L('All five passed.', 'Vseh pet je izpolnjenih.'));
+  // the launch state in one sentence, computed for pre-launch, back-in-research and ready (web/js/launch.js)
+  const state = info.known ? launchCopy(info, ctx.locale).methodology : '';
+  const link = h('a', { href: href('backtest', null, 'launch') }, L('The launch test →', 'Preizkus za zagon →'));
+  if (!failed.length) return h('p', { class: 'small met-verdict' }, L('All five passed. ', 'Vseh pet je izpolnjenih. '), state, link);
   return h(
     'p',
     { class: 'small met-verdict' },
     L(
-      `${failed.length === 1 ? 'Gate' : 'Gates'} ${join(failed, 'and')} failed. ${info.research ? 'Under the brief the engine returns to research and SMS alerts do not launch. ' : ''}${amend ? `Gate (d) was amended after the holdout was opened (${amend.id}); both results are published. ` : ''}`,
-      `${failed.length === 1 ? 'Pogoj' : 'Pogoji'} ${join(failed, 'in')} ${failed.length === 1 ? 'ni izpolnjen' : 'niso izpolnjeni'}. ${info.research ? 'Po izhodiščih se pogon vrne v raziskave in obvestila SMS se ne zaženejo. ' : ''}${amend ? `Pogoj (d) je bil spremenjen, potem ko je bilo preizkusno obdobje odprto (${amend.id}); objavljena sta oba rezultata. ` : ''}`,
+      `${failed.length === 1 ? 'Gate' : 'Gates'} ${join(failed, 'and')} failed. ${amend ? `Gate (d) was amended after the holdout was opened (${amend.id}); both results are published. ` : ''}`,
+      `${failed.length === 1 ? 'Pogoj' : 'Pogoji'} ${join(failed, 'in')} ${failed.length === 1 ? 'ni izpolnjen' : 'niso izpolnjeni'}. ${amend ? `Pogoj (d) je bil spremenjen, potem ko je bilo preizkusno obdobje odprto (${amend.id}); objavljena sta oba rezultata. ` : ''}`,
     ),
-    h('a', { href: href('backtest', null, 'launch') }, L('The launch test →', 'Preizkus za zagon →')),
+    state,
+    link,
   );
 }

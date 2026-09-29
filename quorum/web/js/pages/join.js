@@ -6,8 +6,10 @@
 // Demo (the published Artifact): nothing is sent, nothing is stored, no real number is collected. The
 // flow lives in this module's memory (it survives a language or view-as switch, not a reload), and the
 // number field is a preview that says so. Live (<meta name="quorum-mode" content="live">): real /api
-// calls, resumed from GET /api/me after the sign-in link. Pre-launch (backtest.json launch.status):
-// paid SMS opens at launch, so checkout is a preview in both modes and nothing is charged.
+// calls, resumed from GET /api/me after the sign-in link. Launch (web/js/launch.js): whatever
+// backtest.json launch.status says ("pre-launch", or "ready" when the engine launch gate passes), paid SMS
+// also needs the brief's legal, data-licence and SMS-carrier gates, so checkout stays a clearly labelled
+// preview in both modes, nothing is charged, and no page says a text was sent.
 //
 // SL: first draft, needs native review (and legal review for every consent and refusal text).
 import { h, announce, focusEl, setNumber, store, prefersReducedMotion } from '../dom.js';
@@ -39,6 +41,7 @@ import {
   quietHoursAt,
 } from './_join.js';
 import { demo, modeNote, launchBox, field, phoneThread, consentBox } from './_member.js';
+import { launchCopy } from '../launch.js';
 import { maskPhone } from '../core/consent-texts.js';
 import { formatInZone, LJUBLJANA } from '../core/calendar.js';
 
@@ -90,8 +93,9 @@ export async function render(ctx) {
   const { L, locale, fmt } = ctx;
   const [hero, backtest] = await Promise.all([ctx.data('hero').catch(() => null), ctx.data('backtest').catch(() => null)]);
   const launch = launchInfo(backtest);
+  const LC = launchCopy(launch, locale);
   const live = ctx.mode === 'live';
-  const previewOnly = !live || !launch.ready; // checkout charges nothing unless live and launched
+  const previewOnly = !live || !launch.launched; // checkout charges nothing unless live and launched (never in this build)
   const pick = previewFromHero(hero) ?? previewPick(await ctx.data('picks').catch(() => null));
   if (!flow.smsLocale) flow.smsLocale = locale;
 
@@ -563,9 +567,7 @@ export async function render(ctx) {
       bar.setAttribute('title', m.label);
       cap.replaceChildren(
         pick
-          ? launch.ready
-            ? L(`The exact text pick #${pick.no} went out as on ${fmt.date(pick.issueDate)}, rendered here with your own stop link (qrm.si/u/${flow.token}). Every pick text has this shape.`, `Natančno besedilo, s katerim je izbira #${pick.no} izšla ${fmt.date(pick.issueDate)}, tu z vašo povezavo za odjavo (qrm.si/u/${flow.token}). Vsak SMS z izbiro ima to obliko.`)
-            : L(`The exact text of pick #${pick.no} as written for ${fmt.date(pick.issueDate)} (before launch nothing is sent), rendered here with your own stop link (qrm.si/u/${flow.token}). Every pick text has this shape.`, `Natančno besedilo izbire #${pick.no}, kot je pripravljeno za ${fmt.date(pick.issueDate)} (pred zagonom se nič ne pošlje), tu z vašo povezavo za odjavo (qrm.si/u/${flow.token}). Vsak SMS z izbiro ima to obliko.`)
+          ? L(`The exact text of pick #${pick.no} as written for ${fmt.date(pick.issueDate)} (before launch nothing is sent), rendered here with your own stop link (qrm.si/u/${flow.token}). Every pick text has this shape.`, `Natančno besedilo izbire #${pick.no}, kot je pripravljeno za ${fmt.date(pick.issueDate)} (pred zagonom se nič ne pošlje), tu z vašo povezavo za odjavo (qrm.si/u/${flow.token}). Vsak SMS z izbiro ima to obliko.`)
           : L('The confirmation text, rendered with your own stop link.', 'Potrditveni SMS z vašo povezavo za odjavo.'),
       );
     };
@@ -808,7 +810,7 @@ export async function render(ctx) {
       h(
         'div',
         { class: 'c-body' },
-        previewOnly ? h('p', { class: 'jn-demo-flag label' }, !live ? L('Demo · a preview of the payment page', 'Demo · predogled plačilne strani') : L('Pre-launch · a preview, nothing is charged', 'Pred zagonom · predogled, nič se ne zaračuna')) : null,
+        previewOnly ? h('p', { class: 'jn-demo-flag label' }, LC.checkoutFlag(!live)) : null,
         h(
           'div',
           { class: 'jn-sheet paper' },
@@ -960,11 +962,7 @@ export async function render(ctx) {
           'p',
           { class: 'lede' },
           previewOnly
-            ? launch.ready
-              ? L('Nothing was charged and nothing was sent: this was the demo.', 'Nič ni bilo zaračunano in nič poslano: to je bil demo.')
-              : launch.research
-                ? L('Nothing was charged. The engine is back in research, so paid SMS has no launch date; the sealed record keeps running with no subscribers, in public.', 'Nič ni bilo zaračunano. Pogon je spet v raziskavah, zato plačljivi SMS nima datuma zagona; zapečateni zapis teče naprej brez naročnikov, javno.')
-                : L('Nothing was charged. Paid SMS opens at launch; until then the sealed record runs with no subscribers, in public.', 'Nič ni bilo zaračunano. Plačljivi SMS se odpre ob zagonu; do takrat zapečateni zapis teče brez naročnikov, javno.')
+            ? LC.joinDone(!live)
             : L('Your first text arrives with the next BUY, RENEW or CLOSE. On many days there is none.', 'Prvi SMS prispe z naslednjim NAKUPOM, PODALJŠANJEM ali ZAPRTJEM. Veliko dni ga ni.'),
         ),
         sms

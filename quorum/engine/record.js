@@ -28,7 +28,8 @@ import { runQuorum, periodRange, firstOnOrAfter, FAMS, round, floorPct, HORIZON 
 import { writeThesis } from './thesis.js';
 
 export const MODEL_VERSION = 'ensemble 1.0.0';
-export const SMS_TOKEN = '7Kq2xZ';
+// the demo stop-link token; real tokens are 8 base62 characters
+export const SMS_TOKEN = '7Kq2xZ4m';
 
 // Fictional people (the site says so; names are invented for the simulation).
 export const PERSONS = Object.freeze([
@@ -563,6 +564,7 @@ export async function buildRecord(model, rule, { seed = model.seed ?? 20260928, 
       renews: issueBody.renews,
       closes: issueBody.closes,
       vetoes: { ...iss.vetoes },
+      blocked: { ...iss.blocked },
       seq: issueEntry.seq,
       hash: issueEntry.hash,
       reached: iss.reached,

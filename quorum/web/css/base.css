@@ -391,14 +391,40 @@ a:hover {
   max-width: 68ch;
 }
 
-/* Phones: body text spans r1→r4, so rules 2 and 3 would run through every line. The colonnade is
-   interrupted behind text instead: the text box (inside the inset, so rules 1 and 4 stay) is opaque,
-   and the rules resume in the gaps between paragraphs. */
-@media (max-width: 639.98px) {
-  #view :is(.prose > p, .prose > ul, .prose > ol, .prose > dl, p.lede, p.prose, .masthead__lede, dl:not(.stats) dd) {
-    background: var(--bg);
-    background-clip: content-box;
+/* Running text is never struck by a rule (DESIGN.md §4). The colonnade passes BEHIND every block of
+   text, like columns behind a lintel: ledes, paragraphs, list items, notes, captions, labels, definition
+   terms and values, sub-heads and summaries stand on an opaque ground of their surface (--bg), clipped to
+   the content box so the inset stays clear and a rule beside the text (rule 1 or 4) stays visible. A
+   group of text (.prose, a text-only .c-body column) is one ground, gaps included, so no stub of a rule
+   shows between its paragraphs; the rules resume in the open space between blocks. Headlines (.display,
+   and the content sections' h2, set like one) are architecture, not running text: the rules may pass
+   behind their glyphs. A row laid out on the page grid (a .grid list item) is not one block: its
+   columns sit on the rules, and the text inside it is grounded piece by piece. Zero specificity: a component that paints its
+   own ground (a button, a badge, the SMS bubble) keeps it; a container that paints another colour than
+   --bg must redefine --bg (tests/e2e/checks.js groundMismatch). Charts and the hero keep their own
+   rules (§8, §11). */
+:where(#view)
+  :where(p, li, dt, dd, figcaption, blockquote, summary, caption, address, legend, h2, h3, h4, h5, h6, time, .label, .small, .muted, .mono, .num, .ts, .toc a, .arrow-link, .prose, div.c-body:not(:has(.display, svg, canvas))):where(:not(.display, .grid, .content-sec > h2, .lv *, svg *, .sms *, .btn:not(.btn--ghost) *, .badge-quorum *)) {
+  background-color: var(--bg);
+  background-clip: content-box;
+}
+
+/* A one-line kicker, label heading or section index is as wide as its words, so its ground does not cut
+   the rules across the page where there is no text. */
+:where(#view) :where(.sec-head, .masthead, .grid) > .label {
+  justify-self: start;
+}
+
+@media (max-width: 1023.98px) {
+  :where(#view) .grid > .sec-index {
+    justify-self: start;
   }
+}
+
+/* Controls and tags in the view stand on the same ground: an idle segmented control, a ghost button,
+   a tag. (Filled buttons are opaque already; on hover they invert to the ground, never to glass.) */
+:where(#view) :is(.seg, .tag, .btn--ghost) {
+  background-color: var(--bg);
 }
 
 .prose > * + * {

@@ -26,7 +26,10 @@ function perturbAfter(m, t0, seed = 99) {
     sectorIndex: { open: m.sectorIndex.open.slice(), close: m.sectorIndex.close.slice() },
     filings: { ...m.filings },
     news: { ...m.news, headline: m.news.headline.slice() },
+    // Form-4 purchases: a trade is public two trading days after it, so trades after t0 - 2 are scrambled
+    insider: { ...m.insider, company: m.insider.company.slice() },
   };
+  for (let k = 0; k < m.insider.t.length; k++) if (m.insider.t[k] > t0 - 2) c.insider.company[k] = Math.floor(rng() * m.N);
   const N = m.N;
   for (let k = (t0 + 1) * N; k < m.S * N; k++) {
     const f = 0.5 + rng();
@@ -93,7 +96,7 @@ test('fundamentals are invisible before their filing date', () => {
   const at2 = rawFeaturesAt(changed, tf, i);
   assert.deepEqual(before2, before, 'features the day before the filing ignore it');
   assert.notDeepEqual(at2, at, 'features on the filing date use it');
-  for (const k of ['sue', 'gpa', 'ebit_ev']) assert.notEqual(at2[FEATURE_INDEX[k]], at[FEATURE_INDEX[k]]);
+  for (const k of ['sue', 'gpa', 'ebit_ev', 'emb_1', 'emb_2', 'emb_3', 'emb_4']) assert.notEqual(at2[FEATURE_INDEX[k]], at[FEATURE_INDEX[k]]);
 });
 
 test('the streaming pass matches a direct point-in-time computation', () => {
@@ -108,20 +111,23 @@ test('the streaming pass matches a direct point-in-time computation', () => {
     // compare the stored rank bytes by recomputing the cross-sectional rank of the direct values
     const a = fsBase.rowStart[d];
     const b = fsBase.rowStart[d + 1];
-    for (const key of ['resid_mom_vs', 'ivol', 'sue', 'ebit_ev', 'dtc', 'turnover']) {
+    for (const key of ['resid_mom_vs', 'ivol', 'sue', 'ebit_ev', 'dtc', 'turnover', 'insider_buys', 'emb_1', 'emb_2']) {
       const j = J[key];
       const own = raw[j];
       if (!(own === own)) continue;
       let below = 0;
+      let equal = 0;
       let valid = 0;
       for (let rr = a; rr < b; rr++) {
         const v = rawFeaturesAt(base, t, fsBase.stock[rr])[j];
         if (v === v) {
           valid++;
           if (v < own - 1e-9) below++;
+          else if (v <= own + 1e-9) equal++;
         }
       }
-      const expect = Math.round(((below + 0.5) / valid) * 255);
+      // average ranks for ties (the insider count is mostly zero)
+      const expect = Math.round(((below + equal / 2) / valid) * 255);
       assert.ok(Math.abs(fsBase.q[r * fsBase.F + j] - expect) <= 2, `${key} ${fsBase.q[r * fsBase.F + j]} vs ${expect}`);
       checked++;
     }

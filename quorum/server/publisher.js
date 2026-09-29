@@ -943,6 +943,7 @@ export function createPublisher(ctx, { explainer = null, anchorer = null, notifi
   // importLedger(entries): append an existing, verified chain (e.g. the engine's sealed record in
   // web/data/ledger.json) so today's entries continue it.
   async function importLedger(entries) {
+    if (!entries.length) return { imported: 0, head: lastEntry()?.hash ?? null }; // nothing sealed before the genesis day
     const v = await verifyChain(entries);
     if (!v.ok) throw new PipelineError('bad_chain', `Ledger import refused: ${v.reason} at seq ${v.firstBad}`);
     const last = lastEntry();

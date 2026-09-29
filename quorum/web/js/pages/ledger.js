@@ -1,7 +1,7 @@
 // #ledger: the public proof. Headline statistics in the brief's fixed order (§2.8) with the track-record
 // label, the full record table (sortable, filterable; sealed rows for Free viewers), the Ledger Chain on
-// Chamber with in-browser verification and a tamper demo, "Copy CSV" with a raw view, the per-model
-// scoreboard (sealed and holdout), the decile staircase with the monthly IC, the Silence Calendar and
+// Chamber with in-browser verification and a tamper demo, two labelled copies ("Copy the hash chain (CSV)"
+// with a raw view, "Copy the picks table (CSV)"), the per-model scoreboard (sealed and holdout), the decile staircase with the monthly IC, the Silence Calendar and
 // the MAR lists. Nothing here animates a number.
 //
 // SL: first draft, needs native review.
@@ -72,11 +72,22 @@ export async function render(ctx) {
 }
 
 // ---- 01 headline statistics (fixed order, never animated, never the largest element) ---------------------
+// Whole calendar months from one ISO date to another (2025-10-01 -> 2026-09-28 is 11).
+function monthsBetween(from, to) {
+  if (!from || !to) return 0;
+  const [y0, m0, d0] = from.split('-').map(Number);
+  const [y1, m1, d1] = to.split('-').map(Number);
+  return (y1 - y0) * 12 + (m1 - m0) - (d1 < d0 ? 1 : 0);
+}
+
 function statsSection(ctx, summary, meta) {
   const { L, fmt, locale } = ctx;
   const eq = summary.equity ?? [];
   const note = summary.alertGapNote?.[locale] ?? summary.alertGapNote?.en ?? null;
-  const cum = summary.cumulative;
+  // The sentence reads the same last point as the chart's end labels (summary.cumulative is rounded to 4
+  // decimals, so 0.183474 -> 0.1835 would print +18.4% beside a chart ending at +18.3%).
+  const cum = eq.length ? { follow: eq.at(-1)[1] - 1, bench: eq.at(-1)[2] - 1 } : summary.cumulative;
+  const young = !eq.length || monthsBetween(summary.liveSince, eq.at(-1)[0]) < 12;
   const rc = recordCounts(summary, meta?.counts);
   const chart = eq.length
     ? lineChart({
@@ -111,8 +122,8 @@ function statsSection(ctx, summary, meta) {
           'p',
           { class: 'c-meta rec-note' },
           L(
-            `Cumulative since ${fmt.date(summary.liveSince)}, ${fmt.int(rc.records)} recommendations${Number.isFinite(rc.picks) ? ` (${fmt.int(rc.picks)} new picks, ${fmt.int(rc.renews)} renewals)` : ''}: follow every pick ${fmt.pct(cum.follow, { sign: true })}, benchmark ${fmt.pct(cum.bench, { sign: true })}. Not annualised: the record is under twelve months old.`,
-            `Skupaj od ${fmt.date(summary.liveSince)}, ${fmt.int(rc.records)} priporočil${Number.isFinite(rc.picks) ? ` (${fmt.int(rc.picks)} novih izbir, ${fmt.int(rc.renews)} podaljšanj)` : ''}: vse izbire ${fmt.pct(cum.follow, { sign: true })}, merilo ${fmt.pct(cum.bench, { sign: true })}. Brez anualizacije: zapis je mlajši od dvanajstih mesecev.`,
+            `Cumulative since ${fmt.date(summary.liveSince)}, ${fmt.int(rc.records)} recommendations${Number.isFinite(rc.picks) ? ` (${fmt.int(rc.picks)} new picks, ${fmt.int(rc.renews)} renewals)` : ''}: follow every pick ${fmt.pct(cum.follow, { sign: true })}, benchmark ${fmt.pct(cum.bench, { sign: true })}. ${young ? 'Not annualised: the record is under twelve months old.' : 'Not annualised.'}`,
+            `Skupaj od ${fmt.date(summary.liveSince)}, ${fmt.int(rc.records)} priporočil${Number.isFinite(rc.picks) ? ` (${fmt.int(rc.picks)} novih izbir, ${fmt.int(rc.renews)} podaljšanj)` : ''}: vse izbire ${fmt.pct(cum.follow, { sign: true })}, merilo ${fmt.pct(cum.bench, { sign: true })}. ${young ? 'Brez anualizacije: zapis je mlajši od dvanajstih mesecev.' : 'Brez anualizacije.'}`,
           ),
         )
       : null,
@@ -273,18 +284,19 @@ function recordSection(ctx, picks, ledger, meta) {
   );
   draw();
 
-  // Copy CSV (the viewer blocks downloads) and the raw text
+  // Two copies, labelled apart (the viewer blocks downloads): the hash chain as CSV (every ledger record
+  // with its hashes, to verify offline) and the picks table as CSV (one row per pick, as this viewer sees it)
   const csv = ledgerCsv(ledger.entries);
   const copyStatus = h('span', { class: 'small muted lg-csv__status', role: 'status' });
-  const raw = h('textarea', { class: 'lg-raw mono', readonly: true, rows: '12', spellcheck: 'false', 'aria-label': L('The ledger as CSV', 'Knjiga v obliki CSV'), wrap: 'off' });
+  const raw = h('textarea', { class: 'lg-raw mono', readonly: true, rows: '12', spellcheck: 'false', 'aria-label': L('The hash chain as CSV', 'Veriga zgoščenih vrednosti v obliki CSV'), wrap: 'off' });
   raw.value = csv;
-  const copyBtn = h('button', { type: 'button', class: 'btn' }, L('Copy CSV', 'Kopiraj CSV'));
+  const copyBtn = h('button', { type: 'button', class: 'btn' }, L('Copy the hash chain (CSV)', 'Kopiraj verigo zgoščenih vrednosti (CSV)'));
   copyBtn.addEventListener('click', async () => {
     const ok = await copyText(csv);
     const lines = csv.trim().split('\n').length - 1;
     copyStatus.textContent = ok
-      ? L(`Copied: ${fmt.int(lines)} records, ${fmt.int(csv.length)} characters.`, `Kopirano: ${fmt.int(lines)} zapisov, ${fmt.int(csv.length)} znakov.`)
-      : L('Copy was blocked here. Open the raw CSV below and select it.', 'Kopiranje je tu onemogočeno. Odprite surovi CSV spodaj in ga izberite.');
+      ? L(`Hash chain copied: ${fmt.int(lines)} records, ${fmt.int(csv.length)} characters.`, `Veriga kopirana: ${fmt.int(lines)} zapisov, ${fmt.int(csv.length)} znakov.`)
+      : L('Copy was blocked here. Open the hash chain CSV below and select it.', 'Kopiranje je tu onemogočeno. Odprite CSV verige spodaj in ga izberite.');
     if (!ok) {
       details.open = true;
       raw.focus();
@@ -295,20 +307,20 @@ function recordSection(ctx, picks, ledger, meta) {
   const details = h(
     'details',
     { class: 'lg-rawbox' },
-    h('summary', {}, L(`View the raw CSV (${fmt.int(ledger.entries.length)} records)`, `Pokaži surovi CSV (${fmt.int(ledger.entries.length)} zapisov)`)),
+    h('summary', {}, L(`View the hash chain CSV (${fmt.int(ledger.entries.length)} records)`, `Pokaži CSV verige zgoščenih vrednosti (${fmt.int(ledger.entries.length)} zapisov)`)),
     h('p', { class: 'small muted' }, L('One row per ledger record: seq, type, issue date, time, previous hash, hash, and the body as canonical JSON. Hash a row’s fields yourself to check it.', 'Ena vrstica na zapis: zaporedna številka, vrsta, datum izdaje, čas, prejšnja zgoščena vrednost, zgoščena vrednost in vsebina kot kanonični JSON. Polja vrstice lahko zgostite sami.')),
     raw,
   );
   const live = ctx.mode === 'live' ? h('a', { class: 'arrow-link', href: '/api/ledger.csv' }, L('ledger.csv from the server', 'ledger.csv s strežnika')) : null;
   // The picks themselves as CSV, as this viewer sees them (open tickers for Signal and Research only)
   const picksCsv = recordsCsv(rows);
-  const picksBtn = h('button', { type: 'button', class: 'btn btn--ghost' }, L('Copy the picks as CSV', 'Kopiraj izbire kot CSV'));
+  const picksBtn = h('button', { type: 'button', class: 'btn btn--ghost' }, L('Copy the picks table (CSV)', 'Kopiraj tabelo izbir (CSV)'));
   picksBtn.addEventListener('click', async () => {
     const ok = await copyText(picksCsv);
     const n = rows.length;
     const sealedN = rows.filter((r) => r.sealed).length;
     copyStatus.textContent = ok
-      ? L(`Copied: ${fmt.int(n)} picks${sealedN ? `, ${fmt.int(sealedN)} of them sealed` : ''}.`, `Kopirano: ${fmt.int(n)} izbir${sealedN ? `, od tega ${fmt.int(sealedN)} zapečatenih` : ''}.`)
+      ? L(`Picks table copied: ${fmt.int(n)} rows${sealedN ? `, ${fmt.int(sealedN)} of them sealed` : ''}.`, `Tabela izbir kopirana: ${fmt.int(n)} vrstic${sealedN ? `, od tega ${fmt.int(sealedN)} zapečatenih` : ''}.`)
       : L('Copy was blocked here. Select the table instead.', 'Kopiranje je tu onemogočeno. Namesto tega izberite tabelo.');
     announce(copyStatus.textContent);
   });
@@ -325,7 +337,15 @@ function recordSection(ctx, picks, ledger, meta) {
         `Vsak NAKUP in PODALJŠANJE, merjeno od odprtja ameriškega trga na dan izdaje do odprtja 21 trgovalnih dni pozneje, po stroških. Odprte izbire so vrednotene ob zadnjem zaprtju (svetlejše).${ctx.tier === 'free' ? (ctx.mode === 'live' ? ' Odprte izbire ostanejo zapečatene do zaprtja.' : ' Gledate kot Brezplačno: odprte izbire ostanejo zapečatene do zaprtja.') : ''}`,
       ),
     ),
-    h('div', { class: 'c-meta lg-csv' }, h('p', { class: 'label' }, L('Take it with you', 'Vzemite s seboj')), h('p', { class: 'lg-csv__row' }, copyBtn, picksBtn, live), copyStatus),
+    h(
+      'div',
+      { class: 'c-meta lg-csv' },
+      h('p', { class: 'label' }, L('Take it with you', 'Vzemite s seboj')),
+      h('div', { class: 'lg-csv__item' }, copyBtn, h('p', { class: 'small muted' }, L('Every ledger record with its previous hash and hash, to check the chain offline.', 'Vsak zapis knjige s prejšnjo in lastno zgoščeno vrednostjo, za preverjanje verige brez povezave.'))),
+      h('div', { class: 'lg-csv__item' }, picksBtn, h('p', { class: 'small muted' }, L('One row per pick (BUY or RENEW), as the table shows it to you.', 'Ena vrstica na izbiro (NAKUP ali PODALJŠANJE), kot vam jo kaže tabela.'))),
+      live,
+      copyStatus,
+    ),
     controls,
     h('div', { class: 'c-wide lg-count-row' }, count),
     table,

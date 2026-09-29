@@ -9,8 +9,19 @@
 //           mean-reverts at speed kappa(t), negative 2017-2020) + post-earnings drift after each
 //           filing (60 trading days, weaker for large caps) + negative drift for the top
 //           short-interest and top idio-vol names + ~10-day negative drift after negative news
-//           + small positive drift after opportunistic insider cluster buys.
+//           + small positive drift after opportunistic insider cluster buys
+//           + disclosure drift after each filing (see below).
 //   jumps = earnings-day gaps at the open after each filing, news gaps, M&A premium gaps.
+//
+// Disclosure (the filing text). At each filing a latent change in what the text says (the MD&A's
+// tone, the risk-factor language, forward-looking statements) is drawn: disc ~ N(0, 1) per filing, on
+// its own random stream, independent of every other latent (drift, quality, mispricing, surprises,
+// short interest). From the day after the SEC filing date it pays a drift of discTotal per sd,
+// spread over the following months with half-life discHalfLife (trading days), larger for
+// low-attention names: x (1 + discAttention) below the median share turnover, x (1 - discAttention)
+// above it. The latent is observable ONLY through the filing-text embedding (four components, a noisy
+// projection with loadings discLoadings, released on the filing date with the rest of the filing).
+// Families A-C never read the embedding; family D does (engine/features.js D_OWN_KEYS).
 //
 // Market caps. Prices are total-return prices, so a company's price compounds everything it ever
 // earned. Market cap = price x share count, and the share count carries the capital a company pays
@@ -51,6 +62,13 @@ export const SIM_DEFAULTS = Object.freeze({
 });
 
 // Hidden-process parameters (calibrated; see engine/tools/model-report.js).
+// Revision of 29 Sep 2026 (the disclosure latent, assetLag, family D's own information set): the world
+// was calibrated on the RESEARCH window only (never the holdout or the sealed record) against fixed
+// design targets set in advance: every family pair's mean monthly rank correlation at most about 0.25;
+// mean monthly rank IC of A, B and C about 0.02-0.04 each and of D about 0.04-0.06; a 3-of-4 top-decile
+// hit rate of 54-59%. Three runs: the disclosure parameters below at their first setting with
+// assetLag 0.5 (A-B correlation 0.31, above target), assetLag 0.2 (A-B 0.19), then the full model
+// (research IC A 0.028, B 0.028, C 0.032, D 0.051; pair correlations -0.06..0.19; hit rate 58.0%).
 export const HIDDEN = Object.freeze({
   sigmaMu: 0.066, // cross-sectional sd of the latent drift (per year)
   muHalfLife: 1.5, // years
@@ -74,6 +92,17 @@ export const HIDDEN = Object.freeze({
   newsDrift: 0.012, // total over 10 days per unit severity
   negNewsRate: 0.7, // negative headlines per stock-year at theta <= 0
   insiderDrift: 0.02, // total over 63 days
+  // Disclosure (filing text), see the header. Total drift per sd of the latent over its life.
+  discTotal: 0.024,
+  discHalfLife: 63, // trading days
+  discAttention: 0.5, // x 1.5 below the median share turnover, x 0.5 above it
+  // loadings of the four embedding components on the latent (each component has unit variance; the
+  // rest is noise that carries no return information)
+  discLoadings: Object.freeze([0.7, -0.5, 0.3, 0]),
+  // Assets adjust to the revenue-implied level with this lag weight each quarter (0 = no lag): the
+  // lag makes gross profitability rise with recent growth, so its year-on-year change echoes the
+  // past year's price path.
+  assetLag: 0.2,
   // Net payout (dividends plus net buybacks, minus issuance) per year. Prices are total-return
   // prices, so capital paid out never shows in them: it shrinks the share count (and the
   // fundamentals' dollar scale) instead. Payout rises with size relative to the market median,
@@ -88,6 +117,8 @@ export const HIDDEN = Object.freeze({
 });
 
 const TD = 252;
+/** Number of filing-text embedding components (engine/features.js emb_1..emb_4). */
+export const EMB_DIM = 4;
 
 function idxOnOrAfter(dates, date) {
   let lo = 0;
@@ -490,6 +521,11 @@ function buildFilingSchedule(dates, c, o) {
     margin: new Float64Array(F),
     priceAtFiling: new Float64Array(F),
     filed: new Uint8Array(F),
+    // disclosure latent of each filing (hidden), its attention multiplier, and the four embedding
+    // components released with the filing (observable)
+    disc: new Float64Array(F),
+    discMult: new Float64Array(F),
+    emb: new Float64Array(F * EMB_DIM),
   };
 }
 
@@ -510,6 +546,21 @@ function buildShortSchedule(dates) {
 }
 
 // ---- the daily simulation ------------------------------------------------------------------------
+
+/**
+ * Hidden truth, for diagnostics and tests only: the disclosure drift company i is expected to earn over
+ * sim days (t, t + h] from the filings published on or before t (m.disclosure, aligned with m.filings).
+ */
+export function disclosureDrift(m, i, t, h = 21) {
+  const fil = m.filings;
+  const D = m.disclosure;
+  if (!D) return 0;
+  const rho = Math.exp(-Math.LN2 / D.halfLife);
+  const tail = 1 - rho ** h;
+  let s = 0;
+  for (let f = fil.start[i]; f < fil.end[i] && fil.filingIdx[f] <= t; f++) s += D.total * D.delta[f] * D.mult[f] * rho ** (t - fil.filingIdx[f]) * tail;
+  return s;
+}
 
 export function simulateMarket(options = {}) {
   const o = { ...SIM_DEFAULTS, ...options, params: { ...(options.params || {}) } };
@@ -605,6 +656,15 @@ export function simulateMarket(options = {}) {
   let ivolP90 = 0.4;
   let ivolMed = 0.25;
 
+  // disclosure drift per day, decaying geometrically (see the header); the latent and the embedding
+  // noise come from their own stream, so they shift no draw of the daily and event streams
+  const discRate = new Float64Array(N);
+  const discRho = Math.exp(-Math.LN2 / H.discHalfLife);
+  const loadings = H.discLoadings;
+  let rngD = makeRng(o.seed, 'disclosure');
+  const tauSorted = Float64Array.from(hc.tau).sort();
+  const tauMedian = tauSorted[tauSorted.length >> 1];
+
   const sqOn = Math.sqrt(0.35);
   const sqId = Math.sqrt(0.65);
   const cM = Math.sqrt(H.mispriceShare);
@@ -615,6 +675,7 @@ export function simulateMarket(options = {}) {
     if (t === scenarioIdx) {
       rng = makeRng(o.seed, 'daily', 'scenario', o.scenario);
       rngE = makeRng(o.seed, 'events', 'scenario', o.scenario);
+      rngD = makeRng(o.seed, 'disclosure', 'scenario', o.scenario);
     }
     const year = Number(dates[t].slice(0, 4));
     const maMult = MA_YEAR_MULT[year] ?? 1;
@@ -719,6 +780,7 @@ export function simulateMarket(options = {}) {
         if (t <= peadEnd[i]) aDay += peadRate[i];
         if (t <= newsEnd[i]) aDay += newsRate[i];
         if (t <= insEnd[i]) aDay += insRate[i];
+        aDay += discRate[i];
         const dM = (-kap * (M[i] + H.mQuality * hc.q[i])) / TD;
         const dR = -kR * Rv[i];
         if (diag && t % 21 === 0) {
@@ -744,6 +806,7 @@ export function simulateMarket(options = {}) {
         X[i] += (1 - cM - cR) * eps + aDay + jump;
       }
       jumpNext[i] = 0;
+      discRate[i] *= discRho;
       let o_ = lastClose[i] * Math.exp(rOn);
       let cl = o_ * Math.exp(rId);
       if (t === 0) {
@@ -805,6 +868,16 @@ export function simulateMarket(options = {}) {
         fl.shares[ff] = shares[i];
         fl.priceAtFiling[ff] = cl;
         fl.filed[ff] = 1;
+        // disclosure: the text's latent change, its drift from tomorrow on, and the embedding
+        const dz = rngD.n();
+        const mult = hc.tau[i] < tauMedian ? 1 + H.discAttention : 1 - H.discAttention;
+        fl.disc[ff] = dz;
+        fl.discMult[ff] = mult;
+        for (let k2 = 0; k2 < EMB_DIM; k2++) {
+          const l = loadings[k2] ?? 0;
+          fl.emb[ff * EMB_DIM + k2] = l * dz + Math.sqrt(1 - l * l) * rngD.n();
+        }
+        if (!pending[i]) discRate[i] += H.discTotal * dz * mult * (1 - discRho);
         if (!pending[i]) {
           jumpNext[i] = scale * (H.earnJump * u + 0.025 * rngE.n());
           const sf = clip(1.5 * (mc / 5e9) ** -0.25, 0.3, 2);
@@ -929,7 +1002,7 @@ export function simulateMarket(options = {}) {
     for (let i = 0; i < N; i++) if (alive[i] || hc.delistIdx[i] === t) dtcPub[base + i] = lastPub[i];
   }
 
-  const filings = buildFundamentals({ fl, c, dates, S, N, mk, sec });
+  const filings = buildFundamentals({ fl, c, dates, S, N, mk, sec, H });
 
   return {
     kind: 'quorum-sim-market',
@@ -955,6 +1028,9 @@ export function simulateMarket(options = {}) {
     sectorIndex: { open: sec.open, close: sec.close },
     eurusd,
     filings,
+    // hidden truth (diagnostics and tests only; no feature reads it): the disclosure latent of each
+    // published filing (aligned with `filings`), its attention multiplier and the drift parameters
+    disclosure: { delta: filings.hidden.disc, mult: filings.hidden.discMult, total: H.discTotal, halfLife: H.discHalfLife },
     news: {
       company: Int32Array.from(news.company),
       t: Int32Array.from(news.t),

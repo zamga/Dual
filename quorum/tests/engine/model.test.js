@@ -1,6 +1,8 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildModel } from '../../engine/model.js';
+import { FAMILY_INPUTS, FAMILY_PROXIES, D_OWN_KEYS, EMBEDDING_KEYS } from '../../engine/features.js';
+import { PROXY_LIMIT } from '../../engine/families/ml.js';
 
 let model;
 before(async () => {
@@ -101,6 +103,47 @@ test('D never learns from the LLM veto stand-in: its news flag is not a D input'
   // stand-in's labels would dodge every flagged stock and leave the 48-hour veto nothing to block
   assert.ok(!model.dModel.features.includes('news_neg'));
   for (const e of model.trainingLog.filter((x) => Array.isArray(x.features))) assert.ok(!e.features.includes('news_neg'), e.step);
+});
+
+test("D is independent by construction: its inputs are its own information set, none of A-C's inputs or their proxies", () => {
+  const feats = model.dModel.features;
+  const banned = new Set([...Object.values(FAMILY_INPUTS).flat(), ...Object.values(FAMILY_PROXIES).flatMap((x) => Object.keys(x)), 'news_neg']);
+  assert.ok(feats.length >= 8, feats.join(','));
+  for (const k of feats) {
+    assert.ok(D_OWN_KEYS.includes(k), `${k} is not in D's own information set`);
+    assert.ok(!banned.has(k), `${k} is an input or a proxy of A-C`);
+  }
+  // named for the record: price momentum above one month, residual momentum, the surprise, EPS and
+  // gross-profit changes, profitability and valuation ratios
+  for (const k of ['mom_12_1', 'mom_6_1', 'resid_mom', 'resid_mom_vs', 'sue', 'gp_chg', 'eps_chg', 'gpa', 'ebit_ev', 'fcf_yield', 'bm_adj', 'size', 'leverage']) assert.ok(!feats.includes(k), k);
+  for (const k of EMBEDDING_KEYS) assert.ok(feats.includes(k), `${k}: the filing-text embedding is D's own information`);
+  // the own set and the hand-built families' inputs are disjoint
+  for (const f of ['A', 'B', 'C']) for (const k of FAMILY_INPUTS[f]) assert.ok(!D_OWN_KEYS.includes(k), k);
+  // the proxy screen ran on the research window and every input passed it
+  const screen = model.trainingLog.find((x) => x.step === 'proxy-screen');
+  assert.ok(screen, 'proxy screen logged');
+  assert.equal(screen.limit, PROXY_LIMIT);
+  for (const k of feats) {
+    const row = screen.features.find((x) => x.key === k);
+    assert.ok(row && row.pass, k);
+    for (const f of ['A', 'B', 'C']) assert.ok(Math.abs(row.corr[f]) < PROXY_LIMIT, `${k} vs ${f}: ${row.corr[f]}`);
+  }
+  for (const x of screen.features.filter((r) => !r.pass)) assert.ok(!feats.includes(x.key), x.key);
+  // one input list for every walk-forward model
+  for (const e of model.trainingLog.filter((x) => x.step === 'walk-forward')) assert.deepEqual(e.features, feats);
+  const fin = model.trainingLog.find((x) => x.step === 'final');
+  assert.deepEqual(fin.excludedFamilies, ['A', 'B', 'C']);
+  // on validation D's scores are nearly uncorrelated with A-C's
+  const M = model.diagnostics.correlationsByPeriod.research.matrix;
+  for (let k = 0; k < 3; k++) assert.ok(Math.abs(M[3][k]) < 0.25, `D vs ${'ABC'[k]}: ${M[3][k]}`);
+});
+
+test('the disclosure latent is invisible to A-C and visible to D (research window)', () => {
+  const c = model.diagnostics.disclosureCheck;
+  assert.ok(c.months > 12);
+  for (const f of ['A', 'B', 'C']) assert.ok(Math.abs(c.corr[f]) < 0.15, `${f} ${c.corr[f]}`);
+  assert.ok(c.corr.D > 0.2, `D ${c.corr.D}`);
+  assert.ok(c.oracleIC > 0, 'the disclosure drift pays');
 });
 
 test('veto flags, drivers and insider data for a scored name', () => {

@@ -8,12 +8,12 @@
 // SL: first draft, needs native review.
 import { h } from '../dom.js';
 import { href } from '../router.js';
-import { sectionHead, signed } from '../ui.js';
+import { sectionHead, signed, simulationNote } from '../ui.js';
 import { masthead, toc } from './_content.js';
 import { ruleLabels } from '../rule.js';
 import { lineChart, hatchLayer } from '../charts/equity.js';
 import { variantHistogram } from '../charts/variants.js';
-import { launchInfo } from '../launch.js';
+import { launchInfo, launchCopy } from '../launch.js';
 
 // A month as the site writes it on every time axis (MM.YY, like dates 28.09.26): '2025-10' -> '10.25'.
 const monthOf = (m) => (m ? `${m.slice(5, 7)}.${m.slice(2, 4)}` : '');
@@ -58,6 +58,7 @@ export async function render(ctx) {
     flag,
     head,
     bannerEl,
+    simulationNote(meta, locale),
     h(
       'div',
       { class: 'bt-body' },
@@ -158,8 +159,24 @@ function equitySection(ctx, bt, R) {
         `Mesečno, po stroških, proti merilu, senčnemu nizu 2/4 in lastnim ${R.top} vsake družine. Črtkana črta označuje začetek preizkusnega obdobja: odprto je bilo enkrat, po zamrznitvi modela ${ctx.fmt.date(bt.holdout?.to ?? '2025-09-30')}.`,
       ),
     ),
-    h('div', { class: 'c-meta bt-aside' }, statsTable),
+    h('div', { class: 'c-meta bt-aside' }, statsTable, hitWarning(ctx, sh)),
     chart,
+  );
+}
+
+// The brief treats a hit rate above 60% as a sign of look-ahead leakage until proven otherwise.
+// A holdout at or near that line gets said out loud, next to the number.
+function hitWarning(ctx, sh) {
+  const { L, fmt } = ctx;
+  if (!(Number.isFinite(sh.hitRate) && sh.hitRate >= 0.595)) return null;
+  const hit = fmt.pct(sh.hitRate);
+  return h(
+    'p',
+    { class: 'rec-note bt-hitnote' },
+    L(
+      `The holdout hit rate of ${hit} sits at the 60% line our protocol treats as a warning sign of look-ahead leakage when it is sustained in live results. The look-ahead tests pass (fundamentals only after their filing date, short interest only after publication, news only after release); the sealed forward record is the check that counts.`,
+      `Delež uspešnih v preizkusnem obdobju, ${hit}, je na meji 60 %, ki jo naš protokol obravnava kot opozorilo na uhajanje prihodnjih podatkov, če se ohrani v živih rezultatih. Preizkusi prihodnjih podatkov so uspešni (temeljni podatki šele po datumu objave poročila, kratka prodaja šele po objavi, novice šele po izidu); šteje zapečateni zapis naprej.`,
+    ),
   );
 }
 
@@ -223,7 +240,7 @@ function gatesSection(ctx, bt, R) {
     h(
       'p',
       { class: 'lede c-body' },
-      L(`All five must pass, net of costs, before SMS alerts launch. ${failEn}${amendEn}`, `Vseh pet mora biti izpolnjenih, po stroških, preden se zaženejo obvestila SMS. ${failSl}${amendSl}`),
+      L(`All five must pass, net of costs, for the engine launch gate; launch also needs the brief’s legal, data and SMS approvals. ${failEn}${amendEn}`, `Vseh pet mora biti izpolnjenih, po stroških, za pogoj pogona za zagon; zagon potrebuje še pravne, podatkovne in SMS odobritve iz izhodišč. ${failSl}${amendSl}`),
     ),
     h(
       'ol',
@@ -253,11 +270,12 @@ function launchSection(ctx, bt) {
     return h(
       'section',
       { class: 'section grid rec-sec bt-sec', id: 'launch', 'aria-labelledby': 'bt-l-h' },
-      ...sectionHead({ index: '04', kicker: L('Launch gate E', 'Pogoj za zagon E'), title: L('Launch test not published yet.', 'Preizkus za zagon še ni objavljen.'), id: 'bt-l-h', size: 'd3' }),
+      ...sectionHead({ index: '04', kicker: L('Engine launch gate', 'Pogoj pogona za zagon'), title: L('Launch test not published yet.', 'Preizkus za zagon še ni objavljen.'), id: 'bt-l-h', size: 'd3' }),
       h('p', { class: 'lede c-body' }, L('The launch assessment is not in this export. SMS alerts stay off until every gate passes.', 'Ocena za zagon ni v tem izvozu. Obvestila SMS ostanejo izklopljena, dokler niso izpolnjeni vsi pogoji.')),
     );
   }
   const info = launchInfo(bt);
+  const LC = launchCopy(info, locale);
   const p = ln.pooled ?? {};
   const d1 = ln.d1 ?? null;
   const d2 = ln.d2 ?? null;
@@ -302,11 +320,7 @@ function launchSection(ctx, bt) {
       : null,
   ].filter(Boolean);
 
-  const title = info.ready
-    ? L('Ready: every gate has passed.', 'Pripravljeno: vsi pogoji so izpolnjeni.')
-    : info.research
-      ? L('Back to research. SMS alerts do not launch.', 'Nazaj v raziskave. Obvestila SMS se ne zaženejo.')
-      : L('Pre-launch. SMS alerts stay off.', 'Pred zagonom. Obvestila SMS ostajajo izklopljena.');
+  const title = LC.title;
 
   // (d1) and (d2): the two halves of the amended gate, side by side
   const hist = d2?.history ?? [];
@@ -385,16 +399,22 @@ function launchSection(ctx, bt) {
 
   return h(
     'section',
-    { class: ['section grid rec-sec bt-sec bt-launch', info.research && 'is-research'], id: 'launch', 'aria-labelledby': 'bt-l-h' },
+    { class: ['section grid rec-sec bt-sec bt-launch', info.research && 'is-research', info.ready && 'is-ready'], id: 'launch', 'aria-labelledby': 'bt-l-h' },
     ...sectionHead({
       index: '04',
-      kicker: L(`Launch gate E · as of ${fmt.date(ln.asOf)}`, `Pogoj za zagon E · na dan ${fmt.date(ln.asOf)}`),
+      kicker: L(`${LC.kicker} · as of ${fmt.date(ln.asOf)}`, `${LC.kicker} · na dan ${fmt.date(ln.asOf)}`),
       title,
       id: 'bt-l-h',
       size: 'd3',
     }),
-    h('p', { class: 'lede c-body' }, ln.remaining?.[locale] ?? ln.remaining?.en ?? info.text[locale] ?? ''),
-    h('dl', { class: 'c-meta dl boxed bt-launch__gates', 'aria-label': L('The gates that decide launch', 'Pogoji, ki odločajo o zagonu') }, rows),
+    // the lede, then what the engine gate does not cover (the brief's other launch gates, §8), in every state
+    h(
+      'div',
+      { class: 'c-body bt-launch__text' },
+      h('p', { class: 'lede' }, ln.remaining?.[locale] ?? ln.remaining?.en ?? info.text[locale] ?? ''),
+      h('p', { class: 'rec-note bt-launch__others' }, LC.others),
+    ),
+    h('dl', { class: 'c-meta dl boxed bt-launch__gates', 'aria-label': L('The gates that decide the engine launch gate', 'Pogoji, ki odločajo o pogoju pogona za zagon') }, rows),
     ln.amendment
       ? h(
           'div',
@@ -426,6 +446,11 @@ function overfitSection(ctx, bt) {
   const raw = d.raw ?? {};
   const k12 = Math.sqrt(12);
   const dR = d.dsrResearch ?? bt.launch?.d1?.dsrResearch;
+  // how the four deflated figures sit against 0.95, computed (never a fixed sentence: the export may change)
+  const dsrs = [bt.dsr, raw.dsr, dR, raw.dsrResearch].filter(Number.isFinite);
+  const nAbove = dsrs.filter((v) => v >= 0.95).length;
+  const belowEn = !dsrs.length ? '' : nAbove === 0 ? 'All of them are below 0.95.' : nAbove === dsrs.length ? 'All of them reach 0.95.' : `${nAbove} of the ${dsrs.length} reach 0.95.`;
+  const belowSl = !dsrs.length ? '' : nAbove === 0 ? 'Vse so pod 0,95.' : nAbove === dsrs.length ? 'Vse dosežejo 0,95.' : `${nAbove} od ${dsrs.length} doseže 0,95.`;
   const markers = [
     Number.isFinite(d.expectedMaxSharpeMonthly) ? { value: d.expectedMaxSharpeMonthly * k12, label: L(`Best of ${d.nTrials ?? '?'} clusters by luck`, `Najboljša od ${d.nTrials ?? '?'} skupin po naključju`), cls: 'is-luck' } : null,
     Number.isFinite(raw.expectedMaxSharpeMonthly) ? { value: raw.expectedMaxSharpeMonthly * k12, label: L(`Best of ${fmt.int(raw.nTrials ?? bt.variantsTried)} variants by luck`, `Najboljša od ${fmt.int(raw.nTrials ?? bt.variantsTried)} različic po naključju`), cls: 'is-luckraw' } : null,
@@ -452,8 +477,8 @@ function overfitSection(ctx, bt) {
         {},
         h('strong', {}, L('Deflated Sharpe ratio (DSR). ', 'Deflacionirano Sharpovo razmerje (DSR). ')),
         L(
-          `The probability that the real edge is above zero after allowing for the best-of-many luck, for short samples and for fat tails. We require at least 0.95. Gate (d) as first written applied it to the holdout: ${fmt.num(bt.dsr, 3)} when similar variants are grouped into ${d.nTrials ?? '?'} independent clusters, ${fmt.num(raw.dsr, 3)} if all ${fmt.int(raw.nTrials ?? bt.variantsTried)} count separately. ${Number.isFinite(dR) ? `Amendment A-1 moved the test to the research window, where the variants were tried (gate d1): ${fmt.num(dR, 3)} with the clusters, ${fmt.num(raw.dsrResearch, 3)} counting every variant. All of them are below 0.95.` : ''}`,
-          `Verjetnost, da je resnična prednost nad nič, ko upoštevamo srečo najboljšega izmed mnogih, kratke vzorce in debele repe. Zahtevamo vsaj 0,95. Pogoj (d) v prvotnem besedilu jo je uporabil na preizkusnem obdobju: ${fmt.num(bt.dsr, 3)}, ko podobne različice združimo v ${d.nTrials ?? '?'} neodvisnih skupin, ${fmt.num(raw.dsr, 3)}, če vseh ${fmt.int(raw.nTrials ?? bt.variantsTried)} štejemo posebej. ${Number.isFinite(dR) ? `Dopolnilo A-1 je preizkus prestavilo v raziskovalno obdobje, kjer so bile različice preizkušene (pogoj d1): ${fmt.num(dR, 3)} s skupinami, ${fmt.num(raw.dsrResearch, 3)}, če štejemo vsako različico. Vse so pod 0,95.` : ''}`,
+          `The probability that the real edge is above zero after allowing for the best-of-many luck, for short samples and for fat tails. We require at least 0.95. Gate (d) as first written applied it to the holdout: ${fmt.num(bt.dsr, 3)} when similar variants are grouped into ${d.nTrials ?? '?'} independent clusters, ${fmt.num(raw.dsr, 3)} if all ${fmt.int(raw.nTrials ?? bt.variantsTried)} count separately. ${Number.isFinite(dR) ? `Amendment A-1 moved the test to the research window, where the variants were tried (gate d1): ${fmt.num(dR, 3)} with the clusters, ${fmt.num(raw.dsrResearch, 3)} counting every variant. ${belowEn}` : ''}`,
+          `Verjetnost, da je resnična prednost nad nič, ko upoštevamo srečo najboljšega izmed mnogih, kratke vzorce in debele repe. Zahtevamo vsaj 0,95. Pogoj (d) v prvotnem besedilu jo je uporabil na preizkusnem obdobju: ${fmt.num(bt.dsr, 3)}, ko podobne različice združimo v ${d.nTrials ?? '?'} neodvisnih skupin, ${fmt.num(raw.dsr, 3)}, če vseh ${fmt.int(raw.nTrials ?? bt.variantsTried)} štejemo posebej. ${Number.isFinite(dR) ? `Dopolnilo A-1 je preizkus prestavilo v raziskovalno obdobje, kjer so bile različice preizkušene (pogoj d1): ${fmt.num(dR, 3)} s skupinami, ${fmt.num(raw.dsrResearch, 3)}, če štejemo vsako različico. ${belowSl}` : ''}`,
         ),
       ),
       h(

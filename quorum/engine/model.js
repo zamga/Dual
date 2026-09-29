@@ -42,7 +42,7 @@
 //   internals: { market (the full simulation incl. warm-up: filings, news, deals, short interest),
 //                store (rank-feature store), simOffset } -- diagnostics and display only; never
 //                feed hidden fields into picks.
-import { simulateMarket, SIM_DEFAULTS, HIDDEN } from './sim/market.js';
+import { simulateMarket, disclosureDrift, SIM_DEFAULTS, HIDDEN } from './sim/market.js';
 import { SECTORS_SL } from './sim/regimes.js';
 import { standInIsNegative } from './sim/headlines.js';
 import { computeFeatures, FEATURES, FEATURE_INDEX, FAMILY_INPUTS, rawFeaturesAt, qToRank, nextScheduledEarnings } from './features.js';
@@ -58,11 +58,19 @@ export const FAMILY_META = Object.freeze({
   A: { name: { en: 'Trend', sl: 'Trend' }, def: { en: 'Residual 12-1 momentum, volatility-scaled', sl: 'Rezidualni momentum 12-1, prilagojen volatilnosti' } },
   B: { name: { en: 'Fundamental momentum', sl: 'Fundamentalni momentum' }, def: { en: 'Earnings surprise by filing date and the year-on-year change in gross profitability', sl: 'Presenečenje pri dobičku po datumu poročila in medletna sprememba bruto donosnosti' } },
   C: { name: { en: 'Quality/value', sl: 'Kakovost/vrednost' }, def: { en: 'Gross profits to assets, EV/EBIT, free-cash-flow yield, intangibles-adjusted book-to-market', sl: 'Bruto dobiček na sredstva, EV/EBIT, donos prostega denarnega toka, knjigovodska/tržna vrednost s prilagoditvijo za neopredmetena sredstva' } },
-  D: { name: { en: 'ML ranker', sl: 'Rangirnik ML' }, def: { en: 'Gradient-boosted trees on 24 rank-transformed features, sector-relative 21-day target, averaged over seeds', sl: 'Gradientno ojačana drevesa na 24 rangiranih značilkah, cilj: 21-dnevni donos glede na sektor, povprečje več semen' } },
+  D: {
+    name: { en: 'ML ranker', sl: 'Rangirnik ML' },
+    def: {
+      en: 'Gradient-boosted trees on 14 rank-transformed features of its own (filing-text embeddings, one-month reversal, volatility, turnover, short interest, insider buying; none of the other families\' inputs), sector-relative 21-day target, averaged over seeds',
+      sl: 'Gradientno ojačana drevesa na 14 rangiranih lastnih značilkah (vektorske predstavitve besedil poročil, enomesečni obrat, volatilnost, obrat delnic, kratke pozicije, nakupi notranjih oseb; brez vhodov drugih družin), cilj: 21-dnevni donos glede na sektor, povprečje več semen',
+    },
+  },
 });
 
 export const SMALL_UNIVERSE = Object.freeze({
-  sim: { simStart: '2011-01-03', modelStart: '2014-01-02', end: '2019-12-31', nInitial: 150, ipoScale: 0.1, scenarioFrom: null },
+  // 400 initial names: with four independent families a 3-of-4 agreement is rare, and a smaller test
+  // universe leaves too few records to exercise the record and the export
+  sim: { simStart: '2011-01-03', modelStart: '2014-01-02', end: '2019-12-31', nInitial: 400, ipoScale: 0.25, scenarioFrom: null },
   ml: { researchEnd: '2017-09-29', freeze: '2018-09-28', cvConfigs: 2, cvFolds: 4, cvEvery: 10, checkpoints: [20, 40], seeds: [11, 23], workers: 2 },
 });
 
@@ -418,6 +426,12 @@ export function computeDiagnostics(model) {
   // monthly IC (month-end scores vs 21-day forward open-to-open return) and family correlations
   const icMonthly = [];
   const corrAcc = {};
+  const corrByPeriod = Object.fromEntries(Object.keys(periods).map((p) => [p, {}]));
+  // hidden truth: rank correlation of each family's score with the disclosure drift still to come
+  // (research window), which only the filing-text embedding can see
+  const mkt = model.internals?.market;
+  const off = model.internals?.simOffset ?? 0;
+  const disc = { A: [], B: [], C: [], D: [], oracleIC: [] };
   for (let t = 0; t + 22 < T; t++) {
     if (dates[t].slice(0, 7) === dates[t + 1].slice(0, 7)) continue;
     const fwd = new Float64Array(N).fill(NaN);
@@ -425,11 +439,20 @@ export function computeDiagnostics(model) {
     const row = { month: dates[t].slice(0, 7) };
     for (const f of fams) row[f] = round(spearman(pct[f].subarray(t * N, (t + 1) * N), fwd, N), 4);
     icMonthly.push(row);
+    const inP = Object.keys(periods).filter((p) => inPeriod(dates[t], periods[p]));
     for (let a = 0; a < 4; a++)
       for (let b = a + 1; b < 4; b++) {
         const k = fams[a] + fams[b];
-        (corrAcc[k] ||= []).push(spearman(pct[fams[a]].subarray(t * N, (t + 1) * N), pct[fams[b]].subarray(t * N, (t + 1) * N), N));
+        const c = spearman(pct[fams[a]].subarray(t * N, (t + 1) * N), pct[fams[b]].subarray(t * N, (t + 1) * N), N);
+        (corrAcc[k] ||= []).push(c);
+        for (const p of inP) (corrByPeriod[p][k] ||= []).push(c);
       }
+    if (mkt?.disclosure && inPeriod(dates[t], periods.research) && t + 22 <= lastIdx(dates, P.research[1])) {
+      const x = new Float64Array(N).fill(NaN);
+      for (let i = 0; i < N; i++) if (eligible[t * N + i]) x[i] = disclosureDrift(mkt, i, t + off, 21);
+      for (const f of fams) disc[f].push(spearman(pct[f].subarray(t * N, (t + 1) * N), x, N));
+      disc.oracleIC.push(spearman(x, fwd, N));
+    }
   }
   const icByPeriod = {};
   for (const [name, range] of Object.entries(periods)) {
@@ -437,13 +460,17 @@ export function computeDiagnostics(model) {
     icByPeriod[name] = { months: rows.length };
     for (const f of fams) icByPeriod[name][f] = round(mean(rows.map((r) => r[f])), 4);
   }
-  const corr = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
-  for (let a = 0; a < 4; a++)
-    for (let b = a + 1; b < 4; b++) {
-      const v = round(mean(corrAcc[fams[a] + fams[b]]), 3);
-      corr[a][b] = v;
-      corr[b][a] = v;
-    }
+  const matrixOf = (acc) => {
+    const M = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+    for (let a = 0; a < 4; a++)
+      for (let b = a + 1; b < 4; b++) {
+        const v = round(mean(acc[fams[a] + fams[b]] ?? []), 3);
+        M[a][b] = v;
+        M[b][a] = v;
+      }
+    return M;
+  };
+  const corr = matrixOf(corrAcc);
   // hit rate of stocks with >= 3 of 4 families in the top decile, vs the benchmark, net of costs
   const hit = {};
   for (const [name, range] of Object.entries(periods)) {
@@ -527,6 +554,14 @@ export function computeDiagnostics(model) {
     icByPeriod,
     icMonthly,
     correlations: { order: fams, matrix: corr },
+    correlationsByPeriod: Object.fromEntries(Object.keys(periods).map((p) => [p, { order: fams, matrix: matrixOf(corrByPeriod[p]) }])),
+    disclosureCheck: {
+      period: 'research',
+      months: disc.oracleIC.length,
+      basis: 'mean monthly cross-sectional Spearman of each family score with the hidden disclosure drift of the next 21 trading days; oracleIC: that drift against the realised 21-day return',
+      corr: Object.fromEntries(fams.map((f) => [f, round(mean(disc[f]), 4)])),
+      oracleIC: round(mean(disc.oracleIC), 4),
+    },
     hit3of4: hit,
     crashPeriods: model.crashPeriods,
   };
@@ -534,4 +569,10 @@ export function computeDiagnostics(model) {
 
 function round(x, d = 4) {
   return x === x && x !== null && Number.isFinite(x) ? Math.round(x * 10 ** d) / 10 ** d : null;
+}
+
+function lastIdx(dates, date) {
+  let k = dates.length - 1;
+  while (k > 0 && dates[k] > date) k--;
+  return k;
 }

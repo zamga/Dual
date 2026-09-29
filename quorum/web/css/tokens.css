@@ -1,6 +1,176 @@
 /* Quorum design tokens. Colonnade (docs/BRIEF.md §5). The palette is exact; do not add colours.
    Semantic tokens (--bg, --fg, --rule, --quorum …) switch per surface: Karst (default), Paper, Chamber. */
 
+/* ---- metric-matched fallback faces --------------------------------------------------------------
+   If Google Fonts does not load (offline, blocked, slow), the layout must hold: the fallback faces below
+   map Arial-metric (Arial, Liberation Sans, Arimo, Helvetica), Times-metric and Courier-metric system fonts
+   onto the web fonts' widths and vertical metrics, so lines break in the same places and the hero headline
+   does not clip. Archivo has a width axis the fallbacks lack, so it gets one face per stretch band (the
+   element's font-stretch picks it) and per weight band. Numbers measured against the web fonts (DESIGN.md
+   §3): size-adjust = web width / fallback width over sample copy; ascent/descent = the web font's hhea
+   metrics (Archivo 0.878/0.210, Newsreader 0.735/0.265, Martian Mono 1.0/0.2) divided by size-adjust. */
+@font-face {
+  font-family: 'Archivo Fallback'; /* the hero, 62%, regular */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Arimo-Regular'), local('Helvetica');
+  font-style: normal;
+  font-weight: 100 549;
+  font-stretch: 50% 63%;
+  size-adjust: 67.30%;
+  ascent-override: 130.46%;
+  descent-override: 31.20%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* the hero, 62%, bold */
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
+  font-style: normal;
+  font-weight: 550 900;
+  font-stretch: 50% 63%;
+  size-adjust: 65.50%;
+  ascent-override: 134.05%;
+  descent-override: 32.06%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* headlines, 64%, regular */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Arimo-Regular'), local('Helvetica');
+  font-style: normal;
+  font-weight: 100 549;
+  font-stretch: 63.01% 72%;
+  size-adjust: 68.50%;
+  ascent-override: 128.18%;
+  descent-override: 30.66%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* headlines, 64%, bold */
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
+  font-style: normal;
+  font-weight: 550 900;
+  font-stretch: 63.01% 72%;
+  size-adjust: 66.60%;
+  ascent-override: 131.83%;
+  descent-override: 31.53%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* sub-heads, 78–81%, regular */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Arimo-Regular'), local('Helvetica');
+  font-style: normal;
+  font-weight: 100 549;
+  font-stretch: 72.01% 90%;
+  size-adjust: 80%;
+  ascent-override: 109.75%;
+  descent-override: 26.25%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* sub-heads, 78–81%, bold */
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
+  font-style: normal;
+  font-weight: 550 900;
+  font-stretch: 72.01% 90%;
+  size-adjust: 77.60%;
+  ascent-override: 113.14%;
+  descent-override: 27.06%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* text and UI, 100%, regular */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Arimo-Regular'), local('Helvetica');
+  font-style: normal;
+  font-weight: 100 549;
+  font-stretch: 90.01% 125%;
+  size-adjust: 98%;
+  ascent-override: 89.59%;
+  descent-override: 21.43%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback'; /* text and UI, 100%, bold */
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
+  font-style: normal;
+  font-weight: 550 900;
+  font-stretch: 90.01% 125%;
+  size-adjust: 94%;
+  ascent-override: 93.40%;
+  descent-override: 22.34%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Newsreader Fallback'; /* normal regular */
+  src: local('Times New Roman'), local('TimesNewRomanPSMT'), local('Liberation Serif'), local('LiberationSerif'), local('Tinos'), local('Tinos-Regular'), local('Times');
+  font-style: normal;
+  font-weight: 200 549;
+  size-adjust: 101.80%;
+  ascent-override: 72.20%;
+  descent-override: 26.03%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Newsreader Fallback'; /* italic regular */
+  src: local('Times New Roman Italic'), local('TimesNewRomanPS-ItalicMT'), local('Liberation Serif Italic'), local('LiberationSerif-Italic'), local('Tinos Italic'), local('Tinos-Italic'), local('Times Italic');
+  font-style: italic;
+  font-weight: 200 549;
+  size-adjust: 93.20%;
+  ascent-override: 78.86%;
+  descent-override: 28.43%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Newsreader Fallback'; /* normal bold */
+  src: local('Times New Roman Bold'), local('TimesNewRomanPS-BoldMT'), local('Liberation Serif Bold'), local('LiberationSerif-Bold'), local('Tinos Bold'), local('Tinos-Bold'), local('Times Bold');
+  font-style: normal;
+  font-weight: 550 800;
+  size-adjust: 99.80%;
+  ascent-override: 73.65%;
+  descent-override: 26.55%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Newsreader Fallback'; /* italic bold */
+  src: local('Times New Roman Bold Italic'), local('TimesNewRomanPS-BoldItalicMT'), local('Liberation Serif Bold Italic'), local('LiberationSerif-BoldItalic'), local('Tinos Bold Italic'), local('Tinos-BoldItalic'), local('Times Bold Italic');
+  font-style: italic;
+  font-weight: 550 800;
+  size-adjust: 100%;
+  ascent-override: 73.50%;
+  descent-override: 26.50%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Martian Mono Fallback'; /* regular */
+  src: local('Courier New'), local('CourierNewPSMT'), local('Liberation Mono'), local('LiberationMono'), local('Cousine'), local('Cousine-Regular');
+  font-style: normal;
+  font-weight: 100 549;
+  size-adjust: 108.32%;
+  ascent-override: 92.32%;
+  descent-override: 18.46%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Martian Mono Fallback'; /* bold */
+  src: local('Courier New Bold'), local('CourierNewPS-BoldMT'), local('Liberation Mono Bold'), local('LiberationMono-Bold'), local('Cousine Bold'), local('Cousine-Bold');
+  font-style: normal;
+  font-weight: 550 800;
+  size-adjust: 108.32%;
+  ascent-override: 92.32%;
+  descent-override: 18.46%;
+  line-gap-override: 0%;
+}
+
 :root {
   /* ---- palette (brief §5, exact) ------------------------------------------------------------ */
   --karst: #e3e6e4;
@@ -39,9 +209,9 @@
   --select-fg: var(--karst);
 
   /* ---- type ---------------------------------------------------------------------------------- */
-  --font-sans: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
-  --font-serif: 'Newsreader', ui-serif, Georgia, 'Times New Roman', serif;
-  --font-mono: 'Martian Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-sans: 'Archivo', 'Archivo Fallback', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-serif: 'Newsreader', 'Newsreader Fallback', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-mono: 'Martian Mono', 'Martian Mono Fallback', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   --wdth-display: 64%; /* headlines: tall, like columns (62–70) */
   --wdth-display-tight: 62%;

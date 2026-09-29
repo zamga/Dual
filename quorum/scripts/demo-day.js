@@ -5,9 +5,10 @@
 // daily Merkle anchor. Console SMS, push and email transports and an in-memory Stripe emulator:
 // nothing leaves this machine.
 //
-// The day is a replay of one issue of the engine's sealed record (default 2025-11-04, issue #25:
-// two BUY candidates and two exits). The ledger before that day is imported from
-// web/data/ledger.json, so the day's entries continue the real chain, and the exits reveal picks
+// The day is a replay of one issue of the engine's sealed record (by default the first day with two
+// BUY candidates and an exit, else two BUY candidates and a RENEW or an exit, so one BUY can be vetoed
+// and each SMS subscriber still gets two texts). The ledger before that day is imported from
+// web/data/ledger.json, so the day's entries continue the real chain, and any exits reveal picks
 // whose commits were sealed 21 trading days earlier. Everything is simulated: fictional companies,
 // fictional people (fictional: true).
 //
@@ -45,12 +46,13 @@ const meta = load('meta');
 const issues = load('issues');
 const picks = load('picks');
 const ledger = load('ledger');
-// Default: 2025-11-04 (two BUY candidates and two exits); if a later engine export changed that
-// day, the first day with two new picks and an exit, else the first day with a new pick.
-const suits = (x) => x && x.buys.length >= 2 && x.closes.length >= 1;
+// Default: the first day with two new picks and an exit; else two new picks and a RENEW (one pick is
+// vetoed and every SMS subscriber still gets two texts); else a new pick and an exit; else a new pick.
+const suits = (x) => x.buys.length >= 2 && x.closes.length >= 1;
+const almost = (x) => x.buys.length >= 2 && x.closes.length + (x.renews?.length ?? 0) >= 1;
 const issue = DATE_ARG
   ? issues.find((x) => x.date === DATE_ARG)
-  : [issues.find((x) => x.date === '2025-11-04')].find(suits) ?? issues.find(suits) ?? issues.find((x) => x.buys.length >= 1);
+  : issues.find(suits) ?? issues.find(almost) ?? issues.find((x) => x.buys.length >= 1 && x.closes.length >= 1) ?? issues.find((x) => x.buys.length >= 1);
 if (!issue) throw new Error(`demo-day: ${DATE_ARG} is not an issue of the sealed record`);
 const DATE = issue.date;
 // Fictional headlines for the 48-hour news scan (the engine's news stand-in has no text of its own).
@@ -63,7 +65,9 @@ for (const no of issue.buys) {
   ];
 }
 const input = adaptEngineDay({ issue, picks, persons: meta.persons, news, modelVersion: meta.modelVersion, topPct: meta.rule?.topPct ?? 0.95 });
-const toVeto = input.candidates.filter((c) => c.status === 'candidate' && c.kind === 'BUY').at(-1) ?? null;
+// The approver removes the last BUY candidate, but never the only one (the day must still issue a pick).
+const buyCandidates = input.candidates.filter((c) => c.status === 'candidate' && c.kind === 'BUY');
+const toVeto = buyCandidates.length >= 2 ? buyCandidates.at(-1) : null;
 
 // ---------------------------------------------------------------- fake Claude client
 // Returns the engine's template thesis; the first draft for the first candidate quotes a number that
@@ -254,7 +258,7 @@ function describe(slotName, detail) {
   if (slotName === 'review') return `signed off by ${j.approver ?? 'nobody'}; unissued (no approver) ${j.noApprover}; removed with the news unread ${j.newsUnreviewed ?? 0}; removed for lack of a thesis ${j.noThesis}`;
   if (slotName === 'seal') return j.sealed.map((x) => `${x.kind} #${x.no} seq ${x.seq} commit ${x.commit.slice(0, 12)}… produced ${x.producedAt}`).join('; ') || 'nothing to seal';
   if (slotName === 'publish') return `ISSUE #${j.issueNo}: ${j.items} items; SMS ${JSON.stringify(j.delivery?.sms ?? {})}`;
-  if (slotName === 'marks') return `${j.entries} entry price(s); ${j.closes.map((c) => `CLOSE #${c.no} ${c.written ? `written (excess ${(c.excess * 100).toFixed(2)}%)` : c.reason}`).join('; ')}`;
+  if (slotName === 'marks') return [`${j.entries} entry price(s)`, ...j.closes.map((c) => `CLOSE #${c.no} ${c.written ? `written (excess ${(c.excess * 100).toFixed(2)}%)` : c.reason}`)].join('; ');
   return '';
 }
 

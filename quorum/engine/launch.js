@@ -179,8 +179,8 @@ function remainingText({ status, failedHoldout, d1, d2, lastMonth }) {
   const monthsSlLoc = (n) => `${n} ${n % 100 === 1 ? 'mesecu' : 'mesecih'}`;
   if (status === 'ready') {
     return {
-      en: `Nothing on the engine side: gates (a), (b), (c) and (e) passed on the holdout, (d1) passes on the research window (deflated Sharpe probability ${num(d1.dsrResearch, 2, 'en')}, PBO ${num(d1.pbo, 2, 'en')}) and (d2) passes on the pooled record (probabilistic Sharpe ${num(d2.psr, 3, 'en')} over ${monthsEn(d2.months)}), so SMS alerts can launch once the legal, research-tier and data gates are met.`,
-      sl: `S strani pogona nič: pogoji (a), (b), (c) in (e) so bili izpolnjeni v preizkusnem obdobju, (d1) je izpolnjen v raziskovalnem obdobju (verjetnost deflacioniranega Sharpovega razmerja ${num(d1.dsrResearch, 2, 'sl')}, PBO ${num(d1.pbo, 2, 'sl')}) in (d2) na združenem zapisu (verjetnostni Sharpe ${num(d2.psr, 3, 'sl')} v ${monthsSlLoc(d2.months)}), zato se obvestila SMS lahko zaženejo, ko bodo izpolnjeni še pravni, raziskovalni in podatkovni pogoji.`,
+      en: `Nothing on the engine side: gates (a), (b), (c) and (e) passed on the holdout, (d1) passes on the research window (deflated Sharpe probability ${num(d1.dsrResearch, 3, 'en')}, PBO ${num(d1.pbo, 3, 'en')}) and (d2) passes on the pooled record (probabilistic Sharpe ${num(d2.psr, 3, 'en')} over ${monthsEn(d2.months)}), so SMS alerts can launch once the legal, research-tier and data gates are met.`,
+      sl: `S strani pogona nič: pogoji (a), (b), (c) in (e) so bili izpolnjeni v preizkusnem obdobju, (d1) je izpolnjen v raziskovalnem obdobju (verjetnost deflacioniranega Sharpovega razmerja ${num(d1.dsrResearch, 3, 'sl')}, PBO ${num(d1.pbo, 3, 'sl')}) in (d2) na združenem zapisu (verjetnostni Sharpe ${num(d2.psr, 3, 'sl')} v ${monthsSlLoc(d2.months)}), zato se obvestila SMS lahko zaženejo, ko bodo izpolnjeni še pravni, raziskovalni in podatkovni pogoji.`,
     };
   }
   // failures that no number of further months can change: holdout gates, and d1 on the research window

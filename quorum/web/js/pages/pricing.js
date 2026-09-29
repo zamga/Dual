@@ -1,9 +1,10 @@
-// #pricing (brief §6): three tiers on three rules, honest expectations, the policies, availability.
+// #pricing (brief §6): three tiers on three rules, honest expectations, the policies, availability, and the
+// launch note (ui.js launchNote): before launch no paid tier is on sale, whatever the engine gate says.
 // SL: first draft, needs native review.
 import { h, setNumber } from '../dom.js';
 import { href } from '../router.js';
 import { masthead, contentSections, page } from './_content.js';
-import { trackRecordLabel } from '../ui.js';
+import { trackRecordLabel, launchNote } from '../ui.js';
 
 const COPY = {
   en: {
@@ -137,7 +138,7 @@ const COPY = {
 export async function render(ctx) {
   const C = COPY[ctx.locale] ?? COPY.en;
   const { fmt } = ctx;
-  const summary = await ctx.data('summary').catch(() => null);
+  const [summary, launch] = await Promise.all([ctx.data('summary').catch(() => null), ctx.launch()]);
   let interval = 'm';
   const amountEls = [];
   const perEls = [];
@@ -187,7 +188,7 @@ export async function render(ctx) {
   const recordLabel = summary ? h('p', { class: 'small muted pricing-track' }, trackRecordLabel(ctx.locale)) : null;
 
   const node = page(
-    masthead({ kicker: C.kicker, title: C.h1, lede: C.lede, meta: toggle }),
+    masthead({ kicker: C.kicker, title: C.h1, lede: C.lede, meta: h('div', { class: 'pricing-meta' }, toggle, launchNote(launch, ctx.locale)) }),
     h('section', { class: 'grid pricing-tiers', 'aria-label': C.title }, ...tiers),
     h(
       'section',

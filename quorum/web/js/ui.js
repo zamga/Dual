@@ -4,6 +4,7 @@ import { h, copyText, announce } from './dom.js';
 import { href } from './router.js';
 import { t as tGlobal, formatters, pickL } from './i18n.js';
 import { formatInZone, LJUBLJANA } from './core/calendar.js';
+import { launchCopy } from './launch.js';
 
 let uid = 0;
 export const nextId = (p = 'q') => `${p}-${++uid}`;
@@ -108,6 +109,41 @@ export function sectionHead({ index, kicker, title, lede, level = 2, size = 'd2'
     ),
     lede ? h('p', { class: 'lede c-body' }, lede) : null,
   ];
+}
+
+// ---- the launch note: one line wherever a paid tier is offered (#pricing, the home teaser) -------------
+// The state label, the computed sentence for it (web/js/launch.js launchCopy: pre-launch, back in research,
+// or the engine gate passed with launch still waiting on the brief's other gates) and the launch test.
+export function launchNote(info, locale) {
+  const c = launchCopy(info, locale);
+  return h(
+    'p',
+    { class: ['launch-note', `is-${c.state}`] },
+    h('span', { class: 'label launch-note__k' }, c.label),
+    h('span', { class: 'launch-note__t' }, c.pricing, ' ', h('a', { class: 'nowrap', href: href('backtest', null, 'launch') }, c.testLink)),
+  );
+}
+
+// ---- the simulation note: meta.notes.simulation {en, sl}, what the simulated market is -----------------
+// Shown near the top of #methodology and #backtest (id "simulation", the target of the footer's demo line).
+// Returns null when the export carries no note.
+export function simulationText(meta, locale) {
+  const n = meta?.notes?.simulation;
+  if (!n) return null;
+  if (typeof n === 'string') return n.trim() || null;
+  const s = n[locale === 'sl' ? 'sl' : 'en'] ?? n.en;
+  return typeof s === 'string' && s.trim() ? s.trim() : null;
+}
+
+export function simulationNote(meta, locale) {
+  const text = simulationText(meta, locale);
+  if (!text) return null;
+  return h(
+    'section',
+    { class: 'grid sim-note', id: 'simulation', 'aria-labelledby': 'sim-note-h' },
+    h('h2', { class: 'label c-head sim-note__k', id: 'sim-note-h' }, locale === 'sl' ? 'Simulirani trg' : 'The simulated market'),
+    h('p', { class: 'c-body sim-note__t' }, text),
+  );
 }
 
 // ---- headline statistics in the brief's fixed order (§2.8) --------------------------------------

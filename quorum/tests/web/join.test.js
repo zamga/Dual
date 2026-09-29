@@ -116,7 +116,9 @@ test('launch line: read from backtest.json launch under A-1, never from the pool
   if (bt.launch) {
     assert.equal(info.known, true);
     assert.equal(info.ready, bt.launch.status === 'ready');
-    assert.equal(info.prelaunch, !info.ready);
+    // "ready" is the engine launch gate; launch also needs the brief's other gates, so there are no subscribers
+    assert.equal(info.prelaunch, true);
+    assert.equal(info.launched, false);
     // the applied gates: (a), (b), (c), (e) on the holdout plus (d1) and (d2); gate (d) as first written is not one
     assert.ok(!info.holdout.some((g) => g.id === 'd'));
     if (bt.launch.d1) assert.equal(info.gateD1.dsr, bt.launch.d1.dsrResearch);
@@ -140,8 +142,9 @@ test('launch line: read from backtest.json launch under A-1, never from the pool
   const ready = launchInfo({ launch: { status: 'ready', holdoutGates: gates([]), d1: { dsrResearch: 0.97, pass: true }, d2: { psr: 0.99, threshold: 0.95, pass: true }, pooled: { dsr: 0.5, pass: false, gate: false } } });
   assert.equal(ready.ready, true);
   assert.equal(ready.research, false);
-  assert.match(ready.text.en, /has passed/);
-  assert.match(ready.lead.en, /open/);
+  assert.match(ready.text.en, /^Engine launch gate: passes/);
+  assert.match(ready.lead.en, /still waits/);
+  assert.equal(ready.prelaunch, true);
   // (b) and (d1) failed: back to research, whatever d2 or the pooled figures say
   const back = launchInfo({ launch: { status: 'pre-launch', holdoutGates: gates(['b', 'd']), d1: { dsrResearch: 0.53, dsrThreshold: 0.95, pass: false }, d2: { psr: 0.999, threshold: 0.95, pass: true }, pooled: { dsr: 0.94, dsrThreshold: 0.95, pass: false, gate: false, passAt: '2027-03' } } });
   assert.equal(back.research, true);
@@ -183,8 +186,10 @@ test('the preview from hero.json is the same text as the published one, without 
   const hero = data('hero');
   const p = previewFromHero(hero);
   assert.ok(p, 'a BUY or RENEW hero is previewed without picks.json');
-  assert.equal(buySms(p, 'en', '7Kq2xZ').text, hero.sms);
-  if (hero.smsSl) assert.equal(buySms(p, 'sl', '7Kq2xZ').text, hero.smsSl);
+  // the published text carries the export's demo stop token; render the preview with the same one
+  const token = String(hero.sms).match(/\/u\/([A-Za-z0-9]+)\s*$/)?.[1] ?? '7Kq2xZ';
+  assert.equal(buySms(p, 'en', token).text, hero.sms);
+  if (hero.smsSl) assert.equal(buySms(p, 'sl', token).text, hero.smsSl);
   if (p.kind === 'BUY') {
     const same = previewPick(data('picks'));
     assert.equal(p.no, same.no);

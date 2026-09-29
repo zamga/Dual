@@ -1,17 +1,20 @@
 #!/usr/bin/env node
-// Playwright end-to-end check of web/ (ARCHITECTURE.md §6): every route at phone, tablet and desktop
-// sizes; fails on console errors, horizontal overflow, axe-like basics and text contrast. Also checks
+// Playwright end-to-end check of web/ (ARCHITECTURE.md §6): every route at the five design sizes (DESIGN.md
+// §14); fails on console errors, horizontal overflow, axe-like basics, text contrast, a rule through a
+// number or through running text, a text ground that does not match its surface, and copy contracts.
+// The launch states: key pages again with backtest.json patched to "ready" and to back-in-research, and
+// meta.notes.simulation present (web/js/launch.js; nothing may say a text was sent). Also checks
 // the keyboard path, the hero's engines (?gl=webgl|canvas|0) and the reduced-motion path, the flat-token
 // router (legacy links normalise), and the record pages' behaviour: in-browser verification, the tamper
 // demo, reveal verification, sorting, and the sealed view for Free viewers.
-// Usage: node scripts/e2e.js [--base http://127.0.0.1:8841/] [--sizes 390x844,834x1194,1440x900] [--quick]
+// Usage: node scripts/e2e.js [--base http://127.0.0.1:8841/] [--sizes 390x844,834x1194,1440x900,1920x1080,360x780] [--quick]
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { startServer } from '../tests/e2e/server.js';
 import { sampleRoutes, sampleData } from '../tests/e2e/routes.js';
-import { overflow, basics, contrast, ruleStrike, copyChecks } from '../tests/e2e/checks.js';
+import { overflow, basics, contrast, ruleStrike, proseStrike, groundMismatch, copyChecks } from '../tests/e2e/checks.js';
 import { liveChecks } from '../tests/e2e/live.js';
 
 const require = createRequire(import.meta.url);
@@ -31,7 +34,7 @@ const args = Object.fromEntries(
   process.argv.slice(2).reduce((acc, a, i, all) => (a.startsWith('--') ? [...acc, [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? true : all[i + 1]]] : acc), []),
 );
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)), 'web');
-const SIZES = String(args.sizes ?? '390x844,834x1194,1440x900').split(',').map((s) => s.split('x').map(Number));
+const SIZES = String(args.sizes ?? '390x844,834x1194,1440x900,1920x1080,360x780').split(',').map((s) => s.split('x').map(Number));
 const LAUNCH = ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader'];
 if (process.env.E2E_SPKI) LAUNCH.push(`--ignore-certificate-errors-spki-list=${process.env.E2E_SPKI}`);
 
@@ -40,8 +43,7 @@ const t0 = performance.now();
 const server = args.base ? null : await startServer(ROOT);
 const BASE = String(args.base ?? server.url);
 const routes = await sampleRoutes(resolve(ROOT, 'data'));
-// Before launch no page may say a text was sent (tests/e2e/checks.js copyChecks).
-const launchReady = await readFile(resolve(ROOT, 'data', 'backtest.json'), 'utf8').then((s) => JSON.parse(s).launch?.status === 'ready').catch(() => false);
+// No page may say a text was sent, in any launch state: there are no subscribers (tests/e2e/checks.js copyChecks).
 const failures = [];
 const fail = (where, list) => list.forEach((m) => failures.push(`${where}: ${m}`));
 
@@ -73,9 +75,81 @@ for (const [w, h] of SIZES) {
     fail(where, await page.evaluate(basics));
     fail(where, await page.evaluate(contrast));
     fail(where, await page.evaluate(ruleStrike));
-    fail(where, await page.evaluate(copyChecks, launchReady));
+    fail(where, await page.evaluate(proseStrike));
+    fail(where, await page.evaluate(groundMismatch));
+    fail(where, await page.evaluate(copyChecks));
   }
   await context.close();
+}
+
+// Launch states (web/js/launch.js): the pages that read the launch block, with backtest.json patched to each
+// state and meta.notes.simulation present. "ready" must name the engine launch gate and the brief's other
+// gates, keep the checkout a labelled preview, and never say a text was sent; the simulation note sits near
+// the top of #methodology and #backtest and the footer's demo line links to it.
+{
+  const bt = JSON.parse(await readFile(resolve(ROOT, 'data', 'backtest.json'), 'utf8'));
+  const meta = JSON.parse(await readFile(resolve(ROOT, 'data', 'meta.json'), 'utf8'));
+  const simMeta = { ...meta, notes: { ...(meta.notes ?? {}), simulation: meta.notes?.simulation ?? { en: 'Test note: every company, price and result here comes from a simulated market.', sl: 'Testna opomba: vsa podjetja, cene in rezultati izhajajo iz simuliranega trga.' } } };
+  const pass = (g) => ({ ...g, pass: true });
+  const l = bt.launch ?? {};
+  const ready = {
+    ...bt,
+    gates: (bt.gates ?? []).map((g) => (g.id === 'd' ? g : pass(g))),
+    launch: {
+      ...l,
+      status: 'ready',
+      holdoutGates: (l.holdoutGates ?? []).map((g) => (g.id === 'd' ? g : pass(g))),
+      d1: { ...(l.d1 ?? {}), dsrResearch: Math.max(0.96, l.d1?.dsrResearch ?? 0), pass: true },
+      d2: { ...(l.d2 ?? {}), psr: Math.max(0.96, l.d2?.psr ?? 0), pass: true },
+      remaining: { en: 'Nothing on the engine side: SMS alerts can launch once the legal, research-tier and data gates are met.', sl: 'S strani pogona nič: obvestila SMS se lahko zaženejo, ko bodo izpolnjeni še pravni, raziskovalni in podatkovni pogoji.' },
+    },
+  };
+  const research = { ...bt, launch: { ...l, status: 'pre-launch', holdoutGates: (l.holdoutGates ?? [{ id: 'b', pass: false }]).map((g) => (g.id === 'b' ? { ...g, pass: false } : g)), remaining: undefined } };
+  const want = {
+    ready: { '#backtest': /Engine launch gate[\s\S]*engine gate passes[\s\S]*legal/i, '#pricing': /engine gate passed[\s\S]*legal review, data licences/i, '#join': /engine launch gate passes/i, '#app': /engine gate passed/i, '#status': /engine gate has passed/i, '#methodology': /engine launch gate passes/i, '#': /engine launch gate has passed/i },
+    research: { '#backtest': /Back to research/, '#pricing': /back in research/, '#join': /back in research/, '#status': /back in research/ },
+  };
+  for (const [state, data] of [['ready', ready], ['research', research]]) {
+    for (const [w, hgt] of [[1440, 900], [390, 844]]) {
+      const context = await browser.newContext({ viewport: { width: w, height: hgt } });
+      await context.route(/\/data\/backtest\.json$/, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) }));
+      await context.route(/\/data\/meta\.json$/, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(simMeta) }));
+      const page = await context.newPage();
+      const errs = [];
+      page.on('pageerror', (e) => errs.push(e.message));
+      await page.goto(`${BASE}#`, { waitUntil: 'networkidle' });
+      for (const r of ['#', '#backtest', '#methodology', '#pricing', '#join', '#app', '#status']) {
+        await page.evaluate((hash) => (location.hash = hash), r);
+        await page.waitForFunction(() => document.querySelector('#view h1') && !document.documentElement.dataset.busy, null, { timeout: 10000 }).catch(() => {});
+        await page.waitForTimeout(args.quick ? 350 : 600);
+        const where = `launch ${state} ${r} @${w}`;
+        fail(where, await page.evaluate(copyChecks));
+        fail(where, await page.evaluate(overflow));
+        fail(where, await page.evaluate(proseStrike));
+        const text = await page.evaluate(() => document.querySelector('#view').innerText);
+        if (want[state][r] && !want[state][r].test(text)) failures.push(`${where}: the ${state} copy is missing (${want[state][r]})`);
+        if (/Paid SMS is open|Launched\b|Zagnano\b/.test(text)) failures.push(`${where}: says SMS has launched`);
+        const foot = await page.evaluate(() => document.querySelector('.footer-demo a')?.getAttribute('href'));
+        if (foot !== '#methodology~simulation') failures.push(`${where}: the footer demo line does not link to the simulation note (${foot})`);
+        if (['#methodology', '#backtest'].includes(r)) {
+          const top = await page.evaluate(() => {
+            const n = document.querySelector('#simulation');
+            const s = document.querySelectorAll('#view section');
+            return n ? [...s].indexOf(n) : -1;
+          });
+          if (top < 0 || top > 1) failures.push(`${where}: the simulation note is not near the top (section index ${top})`);
+        }
+      }
+      if (state === 'ready') {
+        await page.evaluate(() => (location.hash = '#join'));
+        await page.waitForFunction(() => document.querySelector('#view h1') && !document.documentElement.dataset.busy, null, { timeout: 10000 }).catch(() => {});
+        const box = await page.evaluate(() => document.querySelector('.m-launch')?.innerText ?? '');
+        if (!/engine gate passed/i.test(box) || !/legal review/i.test(box)) failures.push(`launch ready #join @${w}: the launch line reads "${box.slice(0, 120)}"`);
+      }
+      fail(`launch ${state} @${w}`, errs);
+      await context.close();
+    }
+  }
 }
 
 // Keyboard: skip link first, then the header, with a visible focus ring on every stop.

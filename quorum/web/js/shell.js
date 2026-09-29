@@ -6,6 +6,7 @@ import { t, tp, pickL, formatters } from './i18n.js';
 import { pillState, msToNextMinute, clockMode } from './clock.js';
 import { formatInZone, LJUBLJANA } from './core/calendar.js';
 import { href, routeOfHref } from './router.js';
+import { simulationText } from './ui.js';
 
 const GROUPS = [
   { id: 'how', q: 'nav.q.how', links: [[href('how-it-works'), 'nav.howItWorks'], [href('methodology'), 'nav.methodology']] },
@@ -284,7 +285,8 @@ export function createShell(app) {
         'div',
         { class: 'footer-meta' },
         h('p', { class: 'label' }, meta ? t('footer.data', { date: fmt.date(meta.asOf), model: meta.modelVersion, version: lastM?.version ?? '1.0' }) : ''),
-        h('p', { class: 'small muted' }, t('footer.demo')),
+        // the demo line; when the export explains its simulated market (meta.notes.simulation), a short link to it
+        h('p', { class: 'small muted footer-demo' }, t('footer.demo'), simulationText(meta, app.locale) ? [' ', h('a', { href: href('methodology', null, 'simulation') }, t('footer.simLink'))] : null),
       ),
       h(
         'div',
