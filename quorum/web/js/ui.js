@@ -81,8 +81,9 @@ function tzAbbrev(offset) {
 }
 
 // ---- signed values: Gain/Loss only with a sign and an arrow -------------------------------------
-export function signed(x, { fmt = formatters(), digits = 1, suffix } = {}) {
-  const s = fmt.signed(x, { digits });
+export function signed(x, { fmt = formatters(), digits, suffix } = {}) {
+  // digits unset: one decimal, or two when the value would print as a bare 0.0% (i18n.js signed)
+  const s = fmt.signed(x, digits == null ? {} : { digits });
   return h(
     'span',
     { class: ['signed', s.cls] },
@@ -257,4 +258,15 @@ export function contactHtml(addr, locale = 'en') {
     ? ''
     : ` <span class="label contact__note">${locale === 'sl' ? 'demo · naslov ni aktiven' : 'demo · placeholder, not monitored'}</span>`;
   return `<span class="contact"><span class="mono contact__addr">${addr}</span> <button type="button" class="contact__copy" data-copy="${addr}" aria-label="${aria}">${label}</button>${note}</span>`;
+}
+
+// The colonnade's two labels, one renderer for every stage that draws the stone (the Assembly, the pick
+// page's colonnade): the pick hangs under the lintel's end in Lift ("SHGP · 3/4"), a column that did not
+// vote is labelled beside its grain ("C · 69 · NO VOTE", a .label). Positioning belongs to each stage.
+export function colPickLabel(ticker, agreement, cls) {
+  return h('p', { class: ['col-quorum', cls], 'aria-hidden': 'true' }, h('b', {}, ticker), ` · ${agreement}/4`);
+}
+export function colNoVoteLabel(family, pct, locale, cls, tag = 'p') {
+  const v = Number.isFinite(pct) ? String(Math.floor(pct)) : '–';
+  return h(tag, { class: ['label col-novote', cls], 'aria-hidden': 'true' }, `${family} · ${v} · ${locale === 'sl' ? 'brez glasu' : 'no vote'}`);
 }

@@ -11,7 +11,7 @@ import { h, svg, prefersReducedMotion } from '../dom.js';
 import { formatInZone, LJUBLJANA, fmtDDMMYY } from '../core/calendar.js';
 import { analyze } from '../core/gsm7.js';
 import { ruleLabels } from '../rule.js';
-import { phone as phoneEl, familyName } from '../ui.js';
+import { phone as phoneEl, familyName, colPickLabel, colNoVoteLabel } from '../ui.js';
 import { FAMS, thresholdOf, parseHero, subsample, excessPath, buildMotes, sceneAt, computeLayout, cameraAt, viewProj, project, lintelExtent, SETTLED, lerp, seg, clamp01, E } from './level-data.js';
 import { createGLEngine } from './gl.js';
 import { svgFrame, createCanvasEngine } from './flat.js';
@@ -19,6 +19,7 @@ import { svgFrame, createCanvasEngine } from './flat.js';
 const COPY = {
   en: {
     issue: (x) => `Replay · issue #${x.issueNo} · ${x.date} · our latest closed pick · ${x.nScored} scored`,
+    issueShort: (x) => `Replay · #${x.issueNo} · ${x.date} · ${x.nScored} scored`,
     headline: ['No quorum,', 'no text.'],
     lede: (x) =>
       `Every US trading day four independent model families rank about ${x.n} stocks. A pick exists only when three of them put the same stock ${x.R.inTop}, no veto fires and the caps allow it. Only a pick, a renewal or an exit makes a text.`,
@@ -30,7 +31,7 @@ const COPY = {
       `Ranks below the ${x.R.pctile} fall to the floor. ${x.metW} reached the ${x.R.top} on ${x.minW} columns; ${x.q === 1 ? 'one became a new pick' : `${x.qW} became new picks`}${x.met > x.q ? `, the ${x.met - x.q === 1 ? 'other was' : 'others were'} vetoed, capped or already open` : ''}.`,
     quorumH: (x) => `One stock. ${x.agreement === 4 ? 'Four' : 'Three'} columns.`,
     quorum: (x) => `Issue #${x.issueNo}, ${x.date}. ${x.ticker} (fictional) stood on ${x.agreement === 4 ? 'all four columns' : `three of four columns: ${x.agreeList}`}${x.kind === 'RENEW' ? `, renewed from #${x.priorNo}` : ''}.`,
-    noVote: (v) => `${v} · no vote`,
+    textH: (x) => ['Sealed 13:45.', x.pre ? 'Published 14:00.' : 'Sent 14:00.'],
     text: (x) => `Sealed at 13:45, published at 14:00:00 ${x.tz} with this text${x.pre ? ' (before launch no text is sent)' : ''}. Entry at the US open, ${x.minutes} minutes later.`,
     seg: (a) => `${a.units}/${a.perSegment} ${a.encoding} · ${a.segments} ${a.segments === 1 ? 'segment' : 'segments'}`,
     steps: ['The universe', 'The vote', 'Silence', 'The quorum', 'The text', 'The result'],
@@ -64,6 +65,7 @@ const COPY = {
   },
   sl: {
     issue: (x) => `Ponovitev · izdaja #${x.issueNo} · ${x.date} · naša zadnja zaprta izbira · ${x.nScored} ocenjenih`,
+    issueShort: (x) => `Ponovitev · #${x.issueNo} · ${x.date} · ${x.nScored} ocenjenih`,
     headline: ['Brez kvoruma', 'ni SMS.'],
     lede: (x) =>
       `Vsak dan trgovanja v ZDA štiri neodvisne družine modelov rangirajo približno ${x.n} delnic. Izbira nastane samo, ko tri isto delnico uvrstijo ${x.R.inTop}, noben veto se ne sproži in omejitve to dopuščajo. SMS sproži samo izbira, podaljšanje ali izstop.`,
@@ -75,7 +77,7 @@ const COPY = {
       `Rangi pod pragom (${x.R.pctile}) padejo na tla. ${x.R.topCap} na vsaj ${x.minAgree} stebrih je doseglo ${x.met} delnic; ${x.q} ${x.q === 1 ? 'je postala nova izbira' : 'so postale nove izbire'}${x.met > x.q ? ', ostale so bile vetirane, omejene ali že odprte' : ''}.`,
     quorumH: (x) => `Ena delnica. ${x.agreement === 4 ? 'Štirje' : 'Trije'} stebri.`,
     quorum: (x) => `Izdaja #${x.issueNo}, ${x.date}. ${x.ticker} (izmišljeno) je stala na ${x.agreement === 4 ? 'vseh štirih stebrih' : `treh od štirih stebrov: ${x.agreeList}`}${x.kind === 'RENEW' ? `, podaljšano iz #${x.priorNo}` : ''}.`,
-    noVote: (v) => `${v} · brez glasu`,
+    textH: (x) => ['Zapečateno 13:45.', x.pre ? 'Objavljeno 14:00.' : 'Poslano 14:00.'],
     text: (x) => `Zapečateno ob 13:45, objavljeno ob 14:00:00 ${x.tz} s tem SMS${x.pre ? ' (pred zagonom se SMS ne pošilja)' : ''}. Vstop ob odprtju ameriškega trga, ${x.minutes} minut pozneje.`,
     seg: (a) => `${a.units}/${a.perSegment} ${a.encoding} · ${a.segments} ${a.segments === 1 ? 'segment' : 'segmenti'}`,
     steps: ['Univerzum', 'Glasovanje', 'Tišina', 'Kvorum', 'SMS', 'Izid'],
@@ -268,7 +270,7 @@ export function createAssembly(ctx, hero, opts = {}) {
 
   // ---- DOM ------------------------------------------------------------------------------------------
   const stage = h('div', { class: 'asm__stage', 'aria-hidden': 'true' });
-  const issueLine = h('p', { class: 'asm__issue label' }, C.issue(X));
+  const issueLine = h('p', { class: 'asm__issue label' }, h('span', { class: 'asm__issue-l' }, C.issue(X)), h('span', { class: 'asm__issue-s' }, C.issueShort(X)));
 
   const headline = h('h1', { class: 'asm__h', id: 'asm-h' }, ...lines(C.headline).flatMap((l, i) => (i ? [' ', l] : [l])));
   const beats = [
@@ -276,7 +278,7 @@ export function createAssembly(ctx, hero, opts = {}) {
     h('div', { class: 'asm__beat asm__beat--1', 'aria-hidden': 'true' }, h('p', { class: 'asm__d2' }, ...lines(C.vote)), h('p', { class: 'asm__sub' }, C.voteSub(X))),
     h('div', { class: 'asm__beat asm__beat--2', 'aria-hidden': 'true' }, h('p', { class: 'asm__wide' }, ...lines([C.silence(X)])), h('p', { class: 'asm__voice' }, ...lines([C.voice])), h('p', { class: 'asm__sub' }, C.silenceSub(X))),
     h('div', { class: 'asm__beat asm__beat--3', 'aria-hidden': 'true' }, h('p', { class: 'asm__wide' }, ...lines([C.quorumH(X)])), h('p', { class: 'asm__sub asm__sub--q' }, C.quorum(X))),
-    h('div', { class: 'asm__beat asm__beat--4', 'aria-hidden': 'true' }, h('p', { class: 'asm__sub asm__sub--t' }, C.text(X))),
+    h('div', { class: 'asm__beat asm__beat--4', 'aria-hidden': 'true' }, h('p', { class: 'asm__d2' }, ...lines(C.textH(X))), h('p', { class: 'asm__sub asm__sub--t' }, C.text(X))),
   ];
   beats.forEach((b, i) => (b.dataset.beat = String(i)));
 
@@ -284,8 +286,8 @@ export function createAssembly(ctx, hero, opts = {}) {
   const famLabels = FAMS.map((f, k) => h('li', { class: ['asm__fam', ag[k] ? 'is-agree' : 'is-miss'] }, h('b', {}, f), h('span', {}, familyName(f, meta, locale))));
   const fams = h('ol', { class: 'asm__fams', 'aria-hidden': 'true' }, famLabels);
   const slabLabel = h('p', { class: 'asm__slablabel label', 'aria-hidden': 'true' }, R.band);
-  const pickLabel = h('p', { class: 'asm__quorum-label', 'aria-hidden': 'true' }, h('b', {}, hero.pick.ticker), ` · ${agreeing.size}/4`);
-  const noVote = missK.map((k) => h('p', { class: 'asm__novote label', 'aria-hidden': 'true' }, C.noVote(pickRow[k] < 0 ? '–' : String(Math.floor(pickRow[k] / 10)))));
+  const pickLabel = colPickLabel(hero.pick.ticker, agreeing.size, 'asm__quorum-label');
+  const noVote = missK.map((k) => colNoVoteLabel(FAMS[k], pickRow[k] < 0 ? NaN : pickRow[k] / 10, locale, 'asm__novote'));
 
   // the phone (DOM only) and the SMS baseline the lintel hands over
   const phoneNode = phoneEl({ text: smsText, at: hero.smsAt, locale });
@@ -378,6 +380,7 @@ export function createAssembly(ctx, hero, opts = {}) {
   const flags = { bubble: false, note: false, result: false };
   const cleanups = [];
   let bubbleAnim = null;
+  let labelH = { pick: 18, pickW: 90, novote: 14, novoteW: 120 };
   let noteAnim = null;
 
   function measure() {
@@ -385,7 +388,13 @@ export function createAssembly(ctx, hero, opts = {}) {
     const H = view.clientHeight;
     if (!W || !H) return;
     const ri = [...document.querySelectorAll('.rules > i')].map((i) => i.getBoundingClientRect().left + 0.5);
-    const rules = ri.length === 4 && ri[3] > ri[0] ? ri : [0.125, 0.375, 0.625, 0.875].map((f) => f * W);
+    let rules = ri.length === 4 && ri[3] > ri[0] ? ri : [0.125, 0.375, 0.625, 0.875].map((f) => f * W);
+    // phones: the page gutter is 16 px, so columns on rules 1 and 4 would lose half their grains to the
+    // screen's edge. A and D step in to the gutter + 12 px; B and C stay on rules 2 and 3 (a column 4 px off
+    // a rule reads as a mistake, 12 px in from the gutter as a margin).
+    if (W < 640) rules = [rules[0] + 12, rules[1], rules[2], rules[3] - 12];
+    // the text beat's words stand under the phone on tablets and phones
+    section.style.setProperty('--b4h', `${Math.ceil(beats[4].offsetHeight)}px`);
     const chrome = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chrome-h')) || 100;
     const wide = W >= 1024;
     const top = chrome + Math.max(36, H * (wide ? 0.09 : 0.06));
@@ -395,6 +404,7 @@ export function createAssembly(ctx, hero, opts = {}) {
     const vr = view.getBoundingClientRect();
     const topIn = (el) => (el && el.getClientRects().length ? el.getBoundingClientRect().top - vr.top : H);
     const labelRoom = wide ? 52 : 34;
+    labelH = { pick: pickLabel.offsetHeight || 18, pickW: pickLabel.offsetWidth || 90, novote: noVote[0]?.offsetHeight || 14, novoteW: noVote[0]?.offsetWidth || 120 };
     const clear = opts.clearOf?.() ?? null;
     const floor = Math.min(
       H * (wide ? 0.7 : W >= 640 ? 0.62 : 0.56),
@@ -556,7 +566,15 @@ export function createAssembly(ctx, hero, opts = {}) {
       const k = missK[i];
       const v = pickRow[k];
       const at = F.P(L.colX[k], L.y0 + Math.max(0, v / 1000) * L.yH);
-      put(el, 'transform', tr(at[0], at[1]));
+      // phones: the label stands left of its column (bay 1 has no room to the left of A), so it stays on
+      // screen; if it would still share x with the pick's label, it drops 12 px under that one
+      const left = L.W < 640 && k > 0;
+      el.classList.toggle('is-left', left);
+      const x0 = left ? at[0] - 12 - labelH.novoteW : at[0] + 12;
+      const px1 = F.d[0] - 22;
+      const clash = L.W < 640 && x0 < px1 && Math.max(x0 + labelH.novoteW, at[0] + 6) > px1 - labelH.pickW;
+      const y = clash ? Math.max(at[1], F.d[1] + 14 + labelH.pick + 12 + labelH.novote / 2) : at[1];
+      put(el, 'transform', tr(at[0], y));
       put(el, 'opacity', String(S.brighten >= 1 && S.hand <= 0 ? 1 : 0));
     });
     // the phone rises behind a mask, fully opaque; the baseline takes over from the canvas beam

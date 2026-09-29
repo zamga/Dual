@@ -1,49 +1,12 @@
-/* v2 page compositions (DESIGN-V2 §5); the class contract is docs/DESIGN.md §10. */
 
-/* ---- on the bays: four children, one per bay (bay 4 = r4 → edge) ------------------------------- */
-.on-bays {
-  grid-column: full-start / full-end;
-  display: grid;
-  grid-template-columns: subgrid;
-  row-gap: var(--s-6);
-  padding: 0 !important;
-}
 
-.on-bays > * {
-  padding-inline: var(--inset);
-  min-width: 0;
-}
-
-.on-bays > :nth-child(4n + 1) {
-  grid-column: r1 / r2;
-}
-.on-bays > :nth-child(4n + 2) {
-  grid-column: r2 / r3;
-}
-.on-bays > :nth-child(4n + 3) {
-  grid-column: r3 / r4;
-}
-.on-bays > :nth-child(4n) {
-  grid-column: r4 / full-end;
-}
-
-@media (max-width: 1023.98px) {
-  .on-bays {
-    grid-column: r1 / r4;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .on-bays > :nth-child(n) {
-    grid-column: auto;
-  }
-}
-
-/* A verdict line in the voice face, on its own across r1→r4 (the scoreboard answer, "Most days, nothing."). */
+/* A verdict line in the voice face, on its own across r1→r4 */
 .verdict {
   grid-column: r1 / full-end;
   padding-block: var(--s-6);
 }
 
-/* ---- the record wall (#ledger) ------------------------------------------------------------------- */
+/* ---- the record wall (#ledger) */
 .wall {
   padding-block: clamp(32px, 4vw, 56px) var(--s-8);
   row-gap: clamp(1.5rem, 0.5rem + 2.6vw, 3.25rem);
@@ -72,26 +35,32 @@
   min-width: 0;
 }
 
-/* desktop: the five figures in one row on r1→r4, in the brief's order; the sixth cell (the
-   mean, the alert gap, the track-record label) runs under them */
+/* desktop: five equal cells on r1→r4; no band: each figure masks the rules itself (.wall__v) */
 @media (min-width: 1024px) {
   .wall__figs {
     grid-column: r1 / r4;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    /* five stones do not fit three bays: the row is one opaque slab of the wall, so rules 2 and 3 pass
-       behind it and never strike a figure */
-    background: var(--bg);
   }
+  /* the sixth cell lies on the bays */
   .wall__aside {
     grid-column: 1 / -1;
-    grid-template-columns: 1fr 2fr 2fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: auto;
-    column-gap: calc(2 * var(--inset));
+    column-gap: 0;
     align-items: start;
+    padding-inline: 0;
     padding-bottom: var(--s-5);
   }
+  .wall__aside > * {
+    padding-inline: var(--inset);
+  }
   .wall__aside > .wall__s {
-    max-width: 52ch;
+    max-width: none;
+  }
+  /* the CI track stops 16 px short of rule 2 */
+  .wall__fig .wall__ci {
+    min-width: 0;
+    max-width: calc(66.667cqi + var(--inset) / 3 - 16px);
   }
 }
 
@@ -100,8 +69,12 @@
 }
 
 .wall__v {
-  padding-top: 0.12em;
-  font-size: min(var(--t-fig-xl), 21cqi);
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.12em 0.08em 0.04em;
+  margin-inline: -0.08em;
+  background: var(--bg);
+  font-size: min(clamp(2.5rem, 1rem + 2.6vw, 4.5rem), 26cqi);
 }
 
 .wall__more {
@@ -142,27 +115,40 @@
 }
 
 .wall__vci {
-  display: inline-grid;
-  width: fit-content;
-  row-gap: 8px;
+  display: grid;
+  row-gap: 12px;
 }
 
+/* the hit rate's 95% CI on a 0–100% track */
 .wall__ci {
   position: relative;
-  height: 9px;
-  margin-top: 2px;
+  display: block;
+  width: 100%;
+  min-width: min(160px, 100%);
+  max-width: 240px;
+  height: 26px;
   --lo: 0%;
   --hi: 100%;
   --pt: 50%;
 }
 
+.wall__citrack {
+  position: absolute;
+  top: 5px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+}
+
 .wall__ci::before {
   content: '';
   position: absolute;
-  top: 0;
+  top: 1px;
   left: var(--lo);
   right: calc(100% - var(--hi));
   height: 9px;
+  box-sizing: border-box;
   padding-block: 4px;
   border-inline: 1px solid var(--fg);
   background: var(--fg) content-box;
@@ -171,12 +157,33 @@
 .wall__ci::after {
   content: '';
   position: absolute;
-  top: 0;
+  top: -2px;
   left: var(--pt);
   width: 3px;
-  height: 9px;
+  height: 15px;
   margin-left: -1px;
   background: var(--fg);
+}
+
+.wall__cit {
+  position: absolute;
+  top: 14px;
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--fg-2);
+}
+
+.wall__cit--lo {
+  left: var(--lo);
+  translate: calc(-100% + 4px) 0;
+}
+
+.wall__cit--hi {
+  left: var(--hi);
+  translate: -4px 0;
 }
 
 @media (max-width: 1023.98px) {
@@ -185,16 +192,40 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: var(--s-6);
   }
-  .wall__fig:nth-child(n),
-  .wall__aside {
+  .wall__fig:nth-child(n) {
     grid-column: auto;
+  }
+  .wall__aside {
+    grid-column: 1 / -1;
+  }
+  .wall__fig:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+  .wall__aside > .wall__s {
+    max-width: 64ch;
   }
   .wall__v.fig-xl {
     font-size: min(clamp(1.75rem, 8.4vw, 3.5rem), 19cqi);
   }
 }
 
-/* A table laid on the rules; a pick row carries a 3 px lintel (.row-lintel, the shared transition element). */
+/* tablet: three over two, every cell with its own top rule */
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .wall__figs {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .wall__fig:nth-child(-n + 3) {
+    grid-column: span 2;
+  }
+  .wall__fig:nth-child(n + 4):nth-child(-n + 5) {
+    grid-column: span 3;
+  }
+  .wall__v.fig-xl {
+    font-size: min(clamp(2.5rem, 1rem + 2.6vw, 4.5rem), 24cqi);
+  }
+}
+
+/* A table laid on the rules */
 .row-lintel {
   display: block;
   width: 100%;
@@ -208,7 +239,7 @@
   justify-items: stretch;
 }
 
-/* ---- the stage screen: a night first screen (the pick hero) ------------------------------------ */
+/* ---- the stage screen: a night first screen (the pick hero) */
 .stage-screen {
   position: relative;
   min-height: calc(100svh - var(--chrome-h, 92px));
@@ -247,7 +278,7 @@
   }
 }
 
-/* ---- the note sheet: Paper rises over the stage on scroll (24 px top radius) -------------------- */
+/* ---- the note sheet */
 .note-sheet {
   position: relative;
   z-index: 2;
@@ -289,7 +320,7 @@
   }
 }
 
-/* ---- scaffold: everything hypothetical (#backtest) ---------------------------------------------- */
+/* ---- scaffold: everything hypothetical (#backtest) */
 .scaffold :is(path, line, polyline, rect, circle):not(.is-real),
 .is-hypo {
   stroke-dasharray: 4 3;
@@ -297,8 +328,9 @@
 
 .scaffold-banner {
   position: sticky;
-  top: calc(env(safe-area-inset-top, 0px) + var(--header-h));
+  top: calc(env(safe-area-inset-top, 0px) + var(--hdr-y, var(--header-h)));
   z-index: 5;
+  transition: top var(--d-3) var(--e-io);
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -310,17 +342,6 @@
 
 .scaffold-banner .label {
   color: var(--fg);
-}
-
-.scaffold-fig {
-  aspect-ratio: 16 / 9;
-  width: 100%;
-}
-
-@media (max-width: 639.98px) {
-  .scaffold-fig {
-    aspect-ratio: 4 / 5;
-  }
 }
 
 /* A wide table that scrolls sideways within its row, with a sticky first column. */
@@ -336,7 +357,7 @@
   background: var(--bg);
 }
 
-/* ---- pricing plinths ------------------------------------------------------------------------------ */
+/* ---- pricing plinths */
 .pl-row {
   grid-column: full-start / full-end;
   display: grid;
@@ -403,17 +424,16 @@
   padding-bottom: var(--s-2);
 }
 
-/* The base of each plinth: a 6 px block the width of its bay. */
+/* The base of each plinth */
 .pl::after {
   content: '';
   display: block;
-  height: 6px;
+  height: 1px;
   margin-inline: calc(-1 * var(--inset));
-  background: var(--line);
+  background: var(--rule);
 }
 
-/* the launch note: its own row under the plinths at a reading measure (in the 180 px outer margin it
-   wrapped to nine lines) */
+/* the launch note: its own row under the plinths, at a reading measure */
 .pl-note {
   grid-column: r1 / r3;
   grid-row: 2;
@@ -446,7 +466,7 @@
   }
 }
 
-/* ---- join: the steps as a colonnade on rule 1 ---------------------------------------------------- */
+/* ---- join: the steps as a colonnade on rule 1 */
 .jc {
   row-gap: var(--s-6);
   align-items: start;
@@ -527,7 +547,8 @@
 .jc__preview {
   grid-column: r3 / full-end;
   position: sticky;
-  top: calc(var(--header-h) + var(--s-5));
+  top: calc(var(--hdr-y, var(--header-h)) + var(--s-5));
+  transition: top var(--d-3) var(--e-io);
   display: grid;
   gap: var(--s-4);
   justify-items: start;
@@ -543,8 +564,7 @@
   font-size: var(--t-fig);
 }
 
-.jc__count mark,
-.jc__nongsm {
+.jc__count mark {
   background: var(--fg);
   color: var(--bg);
   padding-inline: 1px;
@@ -608,7 +628,7 @@
   }
 }
 
-/* ---- the day: a sticky Martian clock in the margin (home §2) -------------------------------------- */
+/* ---- the day: a sticky Martian clock in the margin (home §2) */
 .day-clock {
   position: sticky;
   top: calc(var(--header-h) + 30vh);
@@ -635,7 +655,7 @@
   }
 }
 
-/* ---- "Lower the bar" (home §1, #how-it-works; charts/lower-the-bar.js) --------------------------- */
+/* ---- "Lower the bar" (home §1, #how-it-works; charts/lower-the-bar.js) */
 .ltb {
   display: grid;
   gap: var(--s-4);
@@ -660,7 +680,7 @@
   height: 100%;
 }
 
-/* the kicker and the caption keep the inset line; the plot is flush so its columns stand on the rules */
+/* the kicker and the caption keep the inset line */
 .ltb__kicker,
 .ltb__cap {
   padding-inline: var(--inset);
@@ -678,23 +698,28 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 0;
-  height: 0;
+  top: -14px;
+  height: 28px;
   outline: none;
+}
+
+.ltb__bar:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .ltb__line {
   position: absolute;
   left: 0;
   right: 0;
-  top: 0;
+  top: 14px;
   border-top: 1px dashed var(--fg);
 }
 
 .ltb__thumb {
   position: absolute;
   left: calc(100% + var(--ltb-pad, 26px) + 10px);
-  top: 0;
+  top: 14px;
   transform: translateY(-50%);
   min-width: 44px;
   min-height: 28px;
@@ -754,7 +779,7 @@
   }
 }
 
-/* ---- research: the universe as four strips on the rules --------------------------------------------- */
+/* ---- research: the universe as four strips on the rules */
 .strips-fig {
   display: grid;
   gap: var(--s-4);

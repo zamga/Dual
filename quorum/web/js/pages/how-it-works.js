@@ -212,7 +212,6 @@ export async function render(ctx) {
       aside: dist.length
         ? table({ head: C.silence.head, rows: dist.map(([k, n]) => [h('span', { class: 'mono' }, `${k}/4`), fmt.int(n)]), numCols: [1], className: 'table--compact' })
         : null,
-      wide: ltb?.el ?? null,
     },
     { id: 'measurement', title: C.measure.title, short: C.measure.short, body: C.measure.body, aside: `<p class="small muted">${C.measure.aside}</p>` },
     {
@@ -223,8 +222,14 @@ export async function render(ctx) {
     },
   ];
 
+  // the page's object comes first: "Lower the bar" stands straight under the headline, on the rules
+  const head = masthead({ kicker: C.kicker, title: C.h1, lede: fill(C.lede), meta: toc(ctx, sections, C.toc) });
+  if (ltb) {
+    head.querySelector('h1')?.after(ltb.el);
+    head.classList.add('masthead--object');
+  }
   const node = page(
-    masthead({ kicker: C.kicker, title: C.h1, lede: fill(C.lede), meta: toc(ctx, sections, C.toc) }),
+    head,
     ...contentSections(sections),
     h('div', { class: 'grid page-next' }, h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('methodology') }, C.next, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')))),
   );

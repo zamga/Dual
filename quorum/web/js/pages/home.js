@@ -21,12 +21,12 @@ const T = {
       lede: (x) => `An issue is published at 14:00 Ljubljana time on every US trading day, pick or not. Since the sealed record began on ${x.since}: ${x.issues} issues, ${x.q} with a new pick or a renewal.`,
       more: (x) =>
         `${x.metAll ? 'On every issue at least one stock met the rule' : `On ${x.met} issues at least one stock met the rule`}; on the days without a new pick, those stocks were already open picks, capped or cooling down. ${x.pre ? x.texts : `Texts went out on ${x.texted} days; on the other ${x.silent}, nobody’s phone moved.`}`,
-      legend: (pre) => ['No new pick', 'Quorum: a pick', pre ? 'Exit, text due' : 'Exit texted'],
+      legend: (pre) => ['No new pick', 'New pick or renewal', pre ? 'Exit, text due' : 'Exit texted'],
       readout: 'Selected issue',
       how: 'Arrow keys move through the issues; Enter opens one.',
       caption: (x) => `Every issue from ${x.from} to ${x.to}. Each cell links to that day’s issue.`,
       browse: 'Browse every issue in the ledger',
-      head: (x) => `${x.issues} issues. ${x.q} quorums.`,
+      head: (x) => `${x.issues} issues. ${x.q} picks.`,
     },
     how: {
       kicker: 'How a pick happens',
@@ -108,7 +108,7 @@ const T = {
       title: 'Is agreement worth waiting for?',
       lede: 'The 2/4 shadow set is every stock exactly two families liked: published after close as the control. If quorum picks do not beat it, the gate adds nothing.',
       verdict: (x) =>
-        `${x.mixed ? 'So far the evidence is mixed' : x.fail ? 'So far it does not' : 'So far it does'}: on the holdout the gate ${x.fail ? 'failed' : 'passed'} its test (quorum ${x.hq} a pick against ${x.h2} for the 2/4 set), and in the sealed record the two are ${x.level ? 'level' : x.ahead ? 'apart, quorum ahead' : 'apart, quorum behind'} (${x.sq} against ${x.s2} beating the benchmark).`,
+        `On the holdout the gate ${x.fail ? 'failed' : 'passed'} its test (quorum ${x.hq} a pick against ${x.h2} for the 2/4 set), and in the sealed record the two are ${x.level ? 'level' : x.ahead ? 'apart, quorum ahead' : 'apart, quorum behind'} (${x.sq} against ${x.s2} beating the benchmark).`,
       answer: (x) => (x.mixed ? 'So far, mixed.' : x.fail ? 'So far, it does not.' : 'So far, it does.'),
       gateLink: 'The gate test (b)',
       axis: 'Share of picks that beat the benchmark over 21 trading days',
@@ -140,12 +140,12 @@ const T = {
       lede: (x) => `Izdaja izide ob 14:00 po ljubljanskem času vsak dan trgovanja v ZDA, z izbiro ali brez nje. Od začetka zapečatenega zapisa ${x.since}: ${x.issues} izdaj, ${x.q} z novo izbiro ali podaljšanjem.`,
       more: (x) =>
         `${x.metAll ? 'V vsaki izdaji je vsaj ena delnica izpolnila pravilo' : `V ${x.met} izdajah je vsaj ena delnica izpolnila pravilo`}; na dneve brez nove izbire so bile te delnice že odprte izbire, omejene ali v premoru. ${x.pre ? x.texts : `SMS je šel ven ${x.texted} dni; ostalih ${x.silent} se ni zganil noben telefon.`}`,
-      legend: (pre) => ['Brez nove izbire', 'Kvorum: izbira', pre ? 'Izstop, predviden SMS' : 'Poslan izstop'],
+      legend: (pre) => ['Brez nove izbire', 'Nova izbira ali podaljšanje', pre ? 'Izstop, predviden SMS' : 'Poslan izstop'],
       readout: 'Izbrana izdaja',
       how: 'S puščicami se premikate med izdajami; Enter jo odpre.',
       caption: (x) => `Vse izdaje od ${x.from} do ${x.to}. Vsaka celica vodi do izdaje tistega dne.`,
       browse: 'Vse izdaje v knjigi',
-      head: (x) => `${x.issues} izdaj. ${x.q} kvorumov.`,
+      head: (x) => `${x.issues} izdaj. ${x.q} izbir.`,
     },
     how: {
       kicker: 'Kako nastane izbira',
@@ -195,7 +195,7 @@ const T = {
       title: 'Se soglasje splača počakati?',
       lede: 'Senčni niz 2/4 so vse delnice, ki sta jih izbrali natanko dve družini: objavimo ga po zaprtju kot kontrolo. Če izbire s kvorumom ne premagajo tega niza, pravilo ne doda ničesar.',
       verdict: (x) =>
-        `${x.mixed ? 'Doslej so dokazi mešani' : x.fail ? 'Doslej ga ne' : 'Doslej ga'}: na preizkusnem obdobju pravilo preizkusa ${x.fail ? 'ni prestalo' : 'je prestalo'} (kvorum ${x.hq} na izbiro proti ${x.h2} za niz 2/4), v zapečatenem zapisu pa sta ${x.level ? 'izenačena' : x.ahead ? 'narazen, kvorum spredaj' : 'narazen, kvorum zadaj'} (${x.sq} proti ${x.s2} nad merilom).`,
+        `Na preizkusnem obdobju pravilo preizkusa ${x.fail ? 'ni prestalo' : 'je prestalo'} (kvorum ${x.hq} na izbiro proti ${x.h2} za niz 2/4), v zapečatenem zapisu pa sta ${x.level ? 'izenačena' : x.ahead ? 'narazen, kvorum spredaj' : 'narazen, kvorum zadaj'} (${x.sq} proti ${x.s2} nad merilom).`,
       answer: (x) => (x.mixed ? 'Doslej mešano.' : x.fail ? 'Doslej ne.' : 'Doslej da.'),
       gateLink: 'Preizkus pravila (b)',
       axis: 'Delež izbir, ki so v 21 trgovalnih dneh premagale merilo',
@@ -265,7 +265,7 @@ function calendarSection(ctx, C, launch, issues, ltb) {
   const caption = h('p', { class: 'figcaption c-body' });
   const legend = h(
     'ul',
-    { class: 'sc-legend' },
+    { class: 'sc-legend c-wide' },
     C.legend(launch.prelaunch).map((text, i) => h('li', {}, h('span', { class: `sc-key sc-${['n', 'q', 'x'][i]}`, 'aria-hidden': 'true' }), text)),
   );
   // §1 Silence (DESIGN-V2 §5): the headline is the record in two numbers, computed from issues.json.
@@ -278,9 +278,11 @@ function calendarSection(ctx, C, launch, issues, ltb) {
     ...sectionHead({ index: '01', kicker: `${C.kicker} · ${C.title}`, title, id: 'h-cal' }),
     lede,
     h('div', { class: 'c-meta sc-side' }, more),
+    // the key stands over the calendar, so every mark is explained on the screen that shows it
+    legend,
     figure,
     caption,
-    h('div', { class: 'c-meta sc-meta' }, legend, h('p', { class: 'label' }, C.readout), readout, h('p', { class: 'small muted' }, C.how)),
+    h('div', { class: 'c-meta sc-meta' }, h('p', { class: 'label' }, C.readout), readout, h('p', { class: 'small muted' }, C.how)),
     h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('ledger') }, C.browse, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
     ltb ? ltb.el : null,
   );

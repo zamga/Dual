@@ -1,6 +1,6 @@
 /* Quorum design tokens. v2 "Stone and Signal" (docs/DESIGN-V2.md §3, docs/DESIGN.md §2–§6). */
 
-/* ---- metric-matched fallback faces --------------------------------------------------------------- */
+/* ---- metric-matched fallback faces  */
 @font-face {
   font-family: 'Mona Sans Fallback'; /* wdth 75: display */
   src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Helvetica');
@@ -77,6 +77,16 @@
 }
 
 @font-face {
+  font-family: 'Mona Sans Fallback W'; /* display without Mona Sans (html:not(.fonts-mona)) */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Helvetica');
+  font-weight: 100 900;
+  size-adjust: 80%;
+  ascent-override: 136.3%;
+  descent-override: 40%;
+  line-gap-override: 0%;
+}
+
+@font-face {
   font-family: 'Martian Mono Fallback'; /* wdth 75 */
   src: local('Courier New'), local('CourierNewPSMT'), local('Liberation Mono'), local('LiberationMono'), local('Cousine');
   font-weight: 100 549;
@@ -117,7 +127,7 @@
 }
 
 :root {
-  /* ---- palette (DESIGN-V2 §3.2, exact) ---------------------------------------------------------- */
+  /* ---- palette (DESIGN-V2 §3.2, exact)  */
   --night: #0a0c0f; /* home, pick hero, research, menu */
   --night-2: #12151a; /* raised on night */
   --mist: #c9cfd2; /* text on night, 12.6:1 */
@@ -153,7 +163,7 @@
   --gain-dark: var(--gain-night);
   --loss-dark: var(--loss-night);
 
-  /* ---- semantic (Karst surface) ------------------------------------------------------------------ */
+  /* ---- semantic (Karst surface)  */
   --bg: var(--karst);
   --surface: var(--paper);
   --fg: var(--graphite);
@@ -170,7 +180,7 @@
   --select-fg: var(--karst);
   --grain: 0.025;
 
-  /* ---- type (DESIGN-V2 §3.1) ---------------------------------------------------------------------- */
+  /* ---- type (DESIGN-V2 §3.1)  */
   --font-sans: 'Mona Sans', 'Mona Sans Fallback', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-display: 'Mona Sans', 'Mona Sans Fallback N', 'Mona Sans Fallback ND', 'Mona Sans Fallback', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Martian Mono', 'Martian Mono Fallback', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
@@ -212,6 +222,7 @@
   --tr-d2: -0.025em;
   --track-label: 0.08em;
   --ws-condensed: 0.02em; /* word space at wdth 75 */
+  --ws-hero: -0.02em; /* --t-hero: at 13rem even .02em opens a 50 px gap */
 
   /* v1 names */
   --fs-hero: var(--t-hero);
@@ -228,7 +239,7 @@
   --fs-stat: var(--t-stat);
   --lh-serif: 1.45;
 
-  /* ---- space (4 px base) --------------------------------------------------------------------------- */
+  /* ---- space (4 px base)  */
   --s-1: 0.25rem;
   --s-2: 0.5rem;
   --s-3: 0.75rem;
@@ -241,7 +252,7 @@
   --s-10: 8rem;
   --section: clamp(5rem, 3rem + 7vw, 11rem);
 
-  /* ---- motion (DESIGN-V2 §3.5) -------------------------------------------------------------------- */
+  /* ---- motion (DESIGN-V2 §3.5)  */
   --e-out: cubic-bezier(0.16, 1, 0.3, 1); /* reveals */
   --e-io: cubic-bezier(0.7, 0, 0.2, 1); /* wipes, camera */
   --e-ui: cubic-bezier(0.2, 0, 0, 1); /* controls */
@@ -257,7 +268,7 @@
   --t-mid: var(--d-2);
   --t-slow: var(--d-3);
 
-  /* ---- grid and chrome ---------------------------------------------------------------------------- */
+  /* ---- grid and chrome  */
   --gutter: 16px;
   --inset: 12px;
   --header-h: 64px;

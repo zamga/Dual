@@ -115,6 +115,7 @@ export function lowerTheBar(hero, { meta = null, locale = 'en', fmt } = {}) {
   let W = 0;
   let H = 0;
   let PAD = 0;
+  let INSET = 0;
   let dpr = 1;
   let raf = 0;
   const cleanups = [];
@@ -143,8 +144,10 @@ export function lowerTheBar(hero, { meta = null, locale = 'en', fmt } = {}) {
     const thr = bar * 10;
     // each column is centred on its rule (r1…r4 are the plot's edges and thirds); the dots of A and D
     // spill past the plot into the canvas's side pads
-    const spread = Math.min(PAD, (W / 3) * 0.16);
-    const xs = [0, 1, 2, 3].map((k) => (k * W) / 3);
+    // on a phone the page margin is too narrow for a spill: the columns step in by INSET so no dot
+    // reaches the screen's edge (the spread then stays inside r1→r4)
+    const spread = INSET ? INSET : Math.min(PAD, (W / 3) * 0.16);
+    const xs = [0, 1, 2, 3].map((k) => INSET + (k * (W - 2 * INSET)) / 3);
     // below the bar: grey; above: lit
     for (const pass of [0, 1]) {
       g.fillStyle = pass ? fg : fg2;
@@ -205,7 +208,8 @@ export function lowerTheBar(hero, { meta = null, locale = 'en', fmt } = {}) {
     H = plot.clientHeight;
     // the side pads: as wide as a column's spill, never past the page margin (16 px on phones)
     const left = plot.getBoundingClientRect().left;
-    PAD = Math.max(4, Math.min(26, (W / 3) * 0.16, left - 3));
+    INSET = left < 30 ? Math.min(16, (W / 3) * 0.16) : 0;
+    PAD = INSET ? 0 : Math.max(4, Math.min(26, (W / 3) * 0.16, left - 3));
     canvas.style.left = `${-PAD}px`;
     plot.style.setProperty('--ltb-pad', `${PAD}px`);
     canvas.style.width = `${W + 2 * PAD}px`;

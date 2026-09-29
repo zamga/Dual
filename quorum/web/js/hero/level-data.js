@@ -112,6 +112,7 @@ export function eOutFast(t) {
 // Milestones inside the states (fractions of p). The step indicator reads the same table (PHASES below is
 // built from it), so the step never names a state the scene has not reached.
 export const AT = {
+  vote: 0.06, // the grains lift off just before the vote's headline masks in (the scene leads, never lags)
   slabIn: [0.16, 0.24],
   slabOut: [0.62, 0.68],
   dolly: [0.5, 0.57], // the camera cranes up to the rule band (x and z never change: A and D stay on rules 1 and 4)
@@ -151,7 +152,7 @@ export function sceneAt(progress, { stepped = false } = {}) {
   return {
     p,
     step,
-    vote: ph(1), // grains fly to their columns (per-mote stagger in the shader)
+    vote: seg(p, AT.vote, PHASES[1].to), // grains fly to their columns (per-mote stagger in the shader)
     fall: ph(2), // below the rule they fall into the sediment
     tilt: E.io(ph(2)), // the camera tilts down 3° (4° spread the columns off the rules at 1920)
     dolly: E.io(seg(p, ...AT.dolly)),
@@ -199,8 +200,8 @@ export function computeLayout({ W, H, rules, top, floor, thr = DEFAULT_THRESHOLD
   // the cloud: in front of the columns, across the bays, between the floor and the rule band
   const cz = 0.9;
   const k = (Z_REST - cz) / Z_REST; // world units at depth cz per world unit at z = 0
-  const cc = [(colX[0] + colX[3]) / 2, y0 + yH * 0.5, cz];
-  const cr = [(span / 2) * k * 0.72, yH * 0.2 * k, 0.55];
+  const cc = [(colX[0] + colX[3]) / 2, y0 + yH * 0.54, cz];
+  const cr = [(span / 2) * k * 0.8, yH * 0.38 * k, 0.55];
   // the quorum shot: the camera cranes (y only) so the rule band sits in the upper third. It never dollies
   // in z or pans in x: the projected columns A and D stay on rules 1 and 4 at every width (a dolly moved
   // them off the page rules and, on phones, half off-screen).

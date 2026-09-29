@@ -1,6 +1,6 @@
 /* Components. Class names are the contract documented in docs/DESIGN.md §7. */
 
-/* ---- skip link -------------------------------------------------------------------------------- */
+/* ---- skip link */
 .skip-link {
   position: fixed;
   left: var(--gutter);
@@ -22,7 +22,7 @@
   outline-offset: 2px;
 }
 
-/* ---- demo bar: one line on desktop, at most two on phones (Martian 10 px, wdth 75) ------------- */
+/* ---- demo bar: one line on desktop, at most two on phones (Martian 10 px, wdth 75) */
 .demo-bar {
   z-index: 21;
   background: var(--night-2);
@@ -190,7 +190,7 @@
   }
 }
 
-/* ---- header: 64 px; inline nav from 1280 px ---------------------------------------------------- */
+/* ---- header: 64 px; inline nav from 1280 px */
 .site-header {
   position: sticky;
   top: env(safe-area-inset-top, 0px);
@@ -422,7 +422,7 @@
   }
 }
 
-/* ---- the issue pill ---------------------------------------------------------------------------- */
+/* ---- the issue pill */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -516,7 +516,7 @@
   }
 }
 
-/* ---- menu sheet (night): opens with the sweep reversed (420 ms) -------------------------------- */
+/* ---- menu sheet (night): opens with the sweep reversed (420 ms) */
 .sheet {
   position: fixed;
   inset: 0;
@@ -524,7 +524,7 @@
   isolation: isolate;
   display: grid;
   grid-template-columns: var(--cols);
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   background: var(--night);
   color: var(--mist);
   --bg: var(--night);
@@ -544,6 +544,31 @@
   clip-path: inset(0 0 0 0);
   visibility: visible;
   transition: clip-path var(--d-3) var(--e-io), visibility 0s;
+}
+
+.sheet__demo.label {
+  grid-column: full-start / full-end;
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 6px 24px;
+  background: var(--night-2);
+  border-bottom: 1px solid var(--rule-night);
+  color: var(--mist);
+  font-size: 0.625rem;
+  font-weight: 420;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+@media (max-width: 639.98px) {
+  .sheet__demo.label {
+    padding: 5px 12px;
+    letter-spacing: -0.035em;
+    word-spacing: -0.05em;
+    line-height: 1.35;
+  }
 }
 
 .sheet__top {
@@ -690,7 +715,19 @@
   color: var(--mist);
 }
 
-@media (min-width: 1024px) {
+/* phones: the whole sheet, foot included */
+@media (max-width: 767.98px) {
+  .sheet__body {
+    padding: var(--s-5) 0 var(--s-4);
+    gap: var(--s-5);
+  }
+  .sheet__q {
+    gap: var(--s-2);
+  }
+}
+
+/* from 768 px the three questions stand in bays 1–3, one a bay */
+@media (min-width: 768px) {
   .sheet__body {
     grid-template-columns: subgrid;
     grid-column: r1 / r4;
@@ -712,6 +749,25 @@
   }
   .sheet__q:hover h2 {
     color: var(--fg);
+  }
+}
+
+/* portrait tablets */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .sheet__body {
+    align-content: center;
+    padding-block: var(--s-8);
+  }
+  .sheet__q {
+    gap: var(--s-6);
+  }
+  .sheet__q h2 {
+    font-size: clamp(3rem, 0.5rem + 7vw, 4.5rem);
+    min-height: 2.7em;
+  }
+  .sheet__q a {
+    font-size: 1.25rem;
+    min-height: 60px;
   }
 }
 
@@ -762,7 +818,7 @@
   border-color: var(--quorum);
 }
 
-/* ---- rule labels: plinth buttons (keyboard) and the plumb-line label ----------------------------- */
+/* ---- rule labels: plinth buttons (keyboard) and the plumb-line label */
 .plinths {
   position: fixed;
   left: 0;
@@ -851,7 +907,7 @@
   }
 }
 
-/* The plumb-line label: a Martian line beside the lit rule, in 120 ms, out 200 ms. */
+/* The plumb-line label */
 .rule-tip {
   position: fixed;
   z-index: 45;
@@ -880,6 +936,19 @@
   border-left-color: var(--mist);
 }
 
+/* the plumb label: pinned under the header, no ground */
+.rule-tip[data-mode='plumb'] {
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+  color: var(--graphite);
+}
+
+.rule-tip[data-mode='plumb'][data-surface='night'] {
+  background: transparent;
+  color: var(--mist);
+}
+
 .rule-tip__id,
 .rule-tip__name {
   font-family: var(--font-mono);
@@ -903,7 +972,7 @@
   opacity: 0.8;
 }
 
-/* ---- footer (night) and the footer lintel ------------------------------------------------------- */
+/* ---- footer (night) and the footer lintel */
 .site-footer {
   padding-block: var(--s-8) var(--s-6);
   row-gap: var(--s-6);
@@ -998,7 +1067,7 @@
   align-content: start;
 }
 
-/* "QUORUM" in Mona 125 / 300 across r1→r4, above a 6 px lintel: ultramarine (Lift on night) when the latest issue had a quorum, else a hairline. */
+/* "QUORUM" in Mona 125 / 300 across r1→r4, above a 6 px lintel */
 .footer-mark {
   grid-column: r1 / r4;
   display: grid;
@@ -1008,7 +1077,7 @@
 }
 
 .footer-mark .d-foot {
-  /* masks the rules like .display: a night ground clipped to the wordmark's box */
+  /* masks the rules like .display */
   background-color: var(--bg);
   padding-block: 0.12em;
   margin-block: -0.12em;
@@ -1054,8 +1123,7 @@
   color: var(--mist-2);
 }
 
-/* desktop: the long legal column runs down bay 4 beside the disclosure, so the short columns leave no
-   dead band above it */
+/* desktop: the long legal column runs down bay 4 beside the disclosure */
 @media (min-width: 1024px) {
   .footer-nav {
     grid-row: 1 / span 2;
@@ -1095,7 +1163,7 @@
   }
 }
 
-/* ---- buttons and links -------------------------------------------------------------------------- */
+/* ---- buttons and links */
 /* Hover: the fill swaps through a clip-path wipe from the left (260 ms), the arrow moves 4 px. */
 .btn {
   appearance: none;
@@ -1131,7 +1199,7 @@
 
 .btn:hover {
   color: var(--fg);
-  /* once the wipe has covered it, the button's own ground follows (so its text contrast holds at rest) */
+  /* once the wipe has covered it, the button's own ground follows */
   background-color: var(--bg);
   transition: color 0s linear 130ms, background-color 0s linear 130ms;
 }
@@ -1206,7 +1274,7 @@
   transform: scaleX(1);
 }
 
-/* ---- section heads ------------------------------------------------------------------------------ */
+/* ---- section heads */
 .section {
   padding-block: var(--section);
   row-gap: var(--s-6);
@@ -1214,10 +1282,6 @@
 
 .section + .section {
   border-top: 1px solid var(--rule);
-}
-
-.section--tight {
-  padding-block: var(--s-9);
 }
 
 .sec-index {
@@ -1264,7 +1328,7 @@
   align-self: end;
 }
 
-/* ---- hash chip ---------------------------------------------------------------------------------- */
+/* ---- hash chip */
 .hash {
   appearance: none;
   display: inline-flex;
@@ -1317,7 +1381,7 @@
   transform: translate(-50%, 0);
 }
 
-/* ---- timestamp ---------------------------------------------------------------------------------- */
+/* ---- timestamp */
 .ts {
   position: relative;
   display: inline-flex;
@@ -1386,7 +1450,7 @@
   right: 0;
 }
 
-/* ---- values -------------------------------------------------------------------------------------- */
+/* ---- values */
 .signed {
   display: inline-flex;
   align-items: baseline;
@@ -1405,7 +1469,7 @@
 
 .signed__arrow {
   font-family: var(--font-sans);
-  font-size: 0.9em;
+  font-size: 1em;
 }
 
 .badge-quorum {
@@ -1448,8 +1512,8 @@
   letter-spacing: 0.03em;
 }
 
-/* ---- headline statistics (fixed order, never animated, never the largest element) ------------- */
-/* A strip spans r1→r4 and stands on the colonnade: one stat per bay from 640 px, one per half-bay from 1280. */
+/* ---- headline statistics */
+/* A strip spans r1→r4 and stands on the colonnade */
 .stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1511,7 +1575,7 @@
   line-height: 1.4;
 }
 
-/* ---- tables ------------------------------------------------------------------------------------- */
+/* ---- tables */
 .table-wrap {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -1564,14 +1628,14 @@
   border-bottom-color: var(--fg);
 }
 
-/* Rules pass behind data. A table whose columns do not end on the rules has opaque cells (--bg), so a rule never strikes a digit. */
+/* Rules pass behind data. */
 .table:not(.table--on-rules) :is(th, td),
 .dl > div > :is(dt, dd),
 :where(#view dd) {
   background: var(--bg);
 }
 
-/* ---- figures ------------------------------------------------------------------------------------- */
+/* ---- figures */
 .figure {
   display: grid;
   gap: var(--s-4);
@@ -1589,7 +1653,7 @@
   font-weight: 500;
 }
 
-/* ---- SMS and the phone --------------------------------------------------------------------------- */
+/* ---- SMS and the phone */
 .phone {
   --phone-w: 300px;
   width: var(--phone-w);
@@ -1682,8 +1746,8 @@
   overflow-wrap: anywhere;
 }
 
-/* ---- callouts ------------------------------------------------------------------------------------ */
-/* The launch note (ui.js launchNote): the state label over one computed sentence, wherever a paid tier is offered. */
+/* ---- callouts */
+/* The launch note */
 .launch-note {
   display: grid;
   gap: 4px;
@@ -1702,7 +1766,7 @@
   color: var(--fg);
 }
 
-/* The simulation note (ui.js simulationNote): meta.notes.simulation near the top of #methodology and #backtest. */
+/* The simulation note */
 .sim-note {
   row-gap: var(--s-3);
   padding-bottom: var(--s-7);
@@ -1738,7 +1802,7 @@
   max-width: 68ch;
 }
 
-/* ---- toc (long pages) ----------------------------------------------------------------------------- */
+/* ---- toc (long pages) */
 .toc {
   display: grid;
   gap: 2px;
@@ -1769,7 +1833,7 @@
   font-size: 0.625rem;
 }
 
-/* ---- loading and error states --------------------------------------------------------------------- */
+/* ---- loading and error states */
 .state {
   padding-block: var(--s-10);
 }
@@ -1778,14 +1842,7 @@
   max-width: 14ch;
 }
 
-.loading-line {
-  height: 1px;
-  background: var(--rule);
-  position: relative;
-  overflow: hidden;
-}
-
-/* ---- details / faq -------------------------------------------------------------------------------- */
+/* ---- details / faq */
 .faq {
   border-top: 1px solid var(--fg);
 }
@@ -1833,7 +1890,7 @@
   margin-top: 0.8em;
 }
 
-/* ---- definition rows -------------------------------------------------------------------------------- */
+/* ---- definition rows */
 .dl {
   display: grid;
   border-top: 1px solid var(--rule);
@@ -1859,7 +1916,7 @@
   overflow-wrap: anywhere;
 }
 
-/* ---- contact address with a Copy button (mailto is unreliable in the Artifact viewer) ------------- */
+/* ---- contact address with a Copy button */
 .contact {
   display: inline-flex;
   flex-wrap: wrap;

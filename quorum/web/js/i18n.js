@@ -316,10 +316,14 @@ export function formatters(locale = current) {
     long: (d) => fmtLong(d, locale),
     // signed returns (sign + arrow + class) so Gain/Loss is never colour alone
     // The class follows the value as displayed: anything that rounds to 0.0% is flat (no arrow colour).
+    // A small non-zero value that rounds to 0.0% gets one more decimal (−0.04%), so a real loss or gain is
+    // never printed as a bare 0.0%; only a value that is zero to two decimals stays flat.
     signed: (x, opts = {}) => {
-      const cls = signClassAt(x, opts.digits ?? 1);
+      let digits = opts.digits ?? 1;
+      if (opts.digits == null && Number.isFinite(x) && x !== 0 && signClassAt(x, digits) === 'flat') digits += 1;
+      const cls = signClassAt(x, digits);
       const arrow = cls === 'gain' ? '↑' : cls === 'loss' ? '↓' : '→';
-      return { text: fmtPctHtml(x, { digits: 1, sign: true, ...opts, locale }), arrow, cls };
+      return { text: fmtPctHtml(x, { sign: true, ...opts, digits, locale }), arrow, cls };
     },
   };
 }

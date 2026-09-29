@@ -67,6 +67,12 @@ export async function render(ctx) {
 // order (recommendations, hit rate with its 95% CI, median excess, the worst pick, the drawdown); the mean and
 // the alert gap follow in the sixth cell, so all seven stay in order. The figures are the headline here, and
 // they arrive as a digit reveal (no intermediate values).
+// the record's label never breaks inside its first word ("Pre-launch" split at the hyphen on phones)
+function kickerWords(label) {
+  const [first, ...rest] = String(label).split(' ');
+  return [h('span', { class: 'nowrap' }, first), rest.length ? ` ${rest.join(' ')}` : ''];
+}
+
 function recordWall(ctx, summary, meta, picks, nOpen, tocNode) {
   const { L, fmt, locale } = ctx;
   const rc = recordCounts(summary, meta?.counts);
@@ -76,7 +82,13 @@ function recordWall(ctx, summary, meta, picks, nOpen, tocNode) {
     return h('span', { class: ['signed', s.cls] }, h('span', { class: 'signed__arrow', 'aria-hidden': 'true' }, s.arrow), m ? digits(m[2], { sign: m[1] }) : digits(s.text));
   };
   const pctOf = (v) => `${Math.max(0, Math.min(100, v * 100)).toFixed(1)}%`;
-  const ci = h('span', { class: 'wall__ci', 'aria-hidden': 'true' });
+  // the 95% CI on a 0–100% scale as wide as the cell; its ends are labelled (the rate is the tick)
+  const ci = h(
+    'span',
+    { class: 'wall__ci', 'aria-hidden': 'true' },
+    h('span', { class: 'wall__citrack' }),
+    summary.hitCI ? [h('span', { class: 'wall__cit wall__cit--lo' }, fmt.pct0(summary.hitCI[0])), h('span', { class: 'wall__cit wall__cit--hi' }, fmt.pct0(summary.hitCI[1]))] : null,
+  );
   if (summary.hitCI) {
     ci.style.setProperty('--lo', pctOf(summary.hitCI[0]));
     ci.style.setProperty('--hi', pctOf(summary.hitCI[1]));
@@ -84,7 +96,7 @@ function recordWall(ctx, summary, meta, picks, nOpen, tocNode) {
   ci.style.setProperty('--pt', pctOf(summary.hitRate));
   const worst = summary.worstPick;
   const split = Number.isFinite(rc.picks) ? L(`${fmt.int(rc.picks)} new picks, ${fmt.int(rc.renews)} renewals · `, `${fmt.int(rc.picks)} novih izbir, ${fmt.int(rc.renews)} podaljšanj · `) : '';
-  // the CI bar sits under its figure, as wide as the figure (0–100% of the number's width)
+  // the CI bar sits under its figure, as wide as the cell (0–100%)
   const fig = (k, v, s, extra) =>
     h(
       'div',
@@ -97,7 +109,7 @@ function recordWall(ctx, summary, meta, picks, nOpen, tocNode) {
   return h(
     'header',
     { class: 'wall grid' },
-    h('p', { class: 'label c-wide' }, L('Did it work? · the sealed record', 'Je delovalo? · zapečaten zapis'), ' · ', summary.label?.[locale] ?? summary.label?.en ?? ''),
+    h('p', { class: 'label c-wide' }, L('Did it work?', 'Je delovalo?'), ' · ', ...kickerWords(summary.label?.[locale] ?? summary.label?.en ?? '')),
     h('h1', { class: 'display d1 wall__title', id: 'page-h' }, L('The ledger.', 'Knjiga.')),
     h(
       'p',
@@ -118,7 +130,8 @@ function recordWall(ctx, summary, meta, picks, nOpen, tocNode) {
         worst ? sgn(worst.excess) : '–',
         worst ? h('span', {}, `#${worst.no} · `, h('a', { href: href('pick', worst.no) }, worst.ticker), L(' · shown always', ' · vedno prikazana')) : '',
       ),
-      fig(L('Max drawdown', 'Največji padec'), digits(fmt.pct(summary.maxDrawdown).replace(/^[-−]/, ''), { sign: '−' }), L('follow every pick, paper portfolio, net', 'vse izbire, papirni portfelj, neto')),
+      // a drawdown is a loss: it carries the arrow and the loss colour like the worst pick (never a bare minus)
+      fig(L('Max drawdown', 'Največji padec'), sgn(-Math.abs(summary.maxDrawdown)), L('follow every pick, paper portfolio, net; peak to trough', 'vse izbire, papirni portfelj, neto; od vrha do dna')),
       h(
         'div',
         { class: 'wall__aside' },

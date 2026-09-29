@@ -5,9 +5,9 @@
 // full MAR disclosure block at the bottom. Free viewers of an open pick see the sealed record only.
 //
 // SL: first draft, needs native review (and counsel review for the disclosure text).
-import { h, announce } from '../dom.js';
+import { h, svg, announce } from '../dom.js';
 import { href } from '../router.js';
-import { hashChip, timestamp, signed, quorumBadge, sectionHead, familyName } from '../ui.js';
+import { hashChip, timestamp, signed, quorumBadge, sectionHead, familyName, colPickLabel, colNoVoteLabel } from '../ui.js';
 import { ruleLabels } from '../rule.js';
 import { indexPicks, isSealedFor, chainOf, resultOf, isRevealed, venueL } from './_records.js';
 import { colonnadeChart, sensitivityModel } from '../charts/colonnade.js';
@@ -47,7 +47,14 @@ function person(meta, id) {
 export async function render(ctx) {
   const { L, fmt, locale } = ctx;
   const no = ctx.params.no;
-  const [picks, meta, ledger, launch, hero] = await Promise.all([ctx.data('picks'), ctx.data('meta').catch(() => null), ctx.data('ledger').catch(() => null), ctx.launch(), ctx.data('hero').catch(() => null)]);
+  const [picks, meta, ledger, launch, hero, issues] = await Promise.all([
+    ctx.data('picks'),
+    ctx.data('meta').catch(() => null),
+    ctx.data('ledger').catch(() => null),
+    ctx.launch(),
+    ctx.data('hero').catch(() => null),
+    ctx.data('issues').catch(() => null),
+  ]);
   const pre = launch.prelaunch;
   const byNo = indexPicks(picks);
   const pick = byNo.get(no);
@@ -82,7 +89,7 @@ export async function render(ctx) {
   const head = h(
     'header',
     { class: ['grid stage-screen night ruled pk-stage', asm && 'has-scene'] },
-    asm ? h('div', { class: 'pk-scene flush' }, asm.node) : stageColumns(pick, { meta, R, locale }),
+    asm ? h('div', { class: 'pk-scene flush' }, asm.node) : stageColumns(pick, { meta, R, locale, issue: (issues?.issues ?? issues ?? []).find?.((x) => x.date === pick.issueDate) }),
     kicker,
     h('h1', { class: 'display d-hero stage-screen__title display--open pk-h1' }, h('span', { class: 'pk-h1__t' }, pick.ticker), h('span', { class: 'visually-hidden' }, `, ${pick.name}`)),
     h(
@@ -512,30 +519,61 @@ export async function render(ctx) {
   };
 }
 
-// The plain stage for a pick the hero data does not hold: the four family percentiles as columns on the
-// rules (0–100 over the stage's upper band), the rule threshold as a faint band, and the lintel of quorum
-// light across the columns that agreed. Decoration only: the numbers are in the note's colonnade (01).
-function stageColumns(pick, { meta, R, locale }) {
+// The stage for a pick the hero data does not hold: the Assembly's stone vocabulary, drawn in DOM and SVG
+// from the pick and its issue. Four fluted columns stand on the rules; on each, the issue's top band
+// (91–100) holds that family's top 9% of the scored stocks (percentile ranks are uniform, so the band holds
+// 9% of them, spread evenly in rank); everything else has fallen into the sediment on the floor, one grain
+// per stock that did not reach the rule. The pick's own grain sits at its percentile on every column, and
+// the lintel of quorum light is laid across the columns that agreed. Decoration only (aria-hidden): the
+// numbers are in the note's colonnade (01).
+function stageColumns(pick, { R, locale, issue }) {
   const th = R.topPct ?? 0.91;
   const agree = new Set(pick.agreeing ?? []);
   const ks = ['A', 'B', 'C', 'D'];
   const on = ks.map((f, k) => (agree.has(f) ? k : -1)).filter((k) => k >= 0);
-  const cols = ks.map((f) => {
+  // a small seeded generator: the same pick always draws the same stone
+  let seed = (Number(pick.no) || 1) * 2654435761;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const n = Number.isFinite(issue?.nScored) ? issue.nScored : null;
+  const band = n ? Math.round(n * (1 - th)) : 0;
+  const cols = ks.map((f, k) => {
     const pct = pick.families?.[f]?.pct;
+    const v = Number.isFinite(pct) ? Math.max(0, Math.min(1, pct)) : 0;
+    // the band's grains: `band` stocks evenly in rank from the rule to 100, jittered across the column
+    let d = '';
+    for (let i = 0; i < band; i++) {
+      const y = Math.round(1000 - (th + ((i + rnd()) / band) * (1 - th)) * 1000);
+      const x = Math.round(30 + (rnd() - 0.5) * (8 + 34 * rnd()));
+      d += `M${x} ${y}h0`;
+    }
+    const grains = band ? svg('svg', { class: 'pk-st__band', viewBox: '0 0 60 1000', preserveAspectRatio: 'none', 'aria-hidden': 'true', focusable: 'false' }, svg('path', { d })) : null;
     const el = h(
       'span',
-      { class: ['pk-pillar', agree.has(f) && 'is-agree'] },
-      h('span', { class: 'pk-pillar__k mono' }, `${f} · ${Number.isFinite(pct) ? Math.floor(pct * 100) : '–'}${agree.has(f) ? '' : locale === 'sl' ? ' · brez glasu' : ' · no vote'}`),
+      { class: ['pk-st', agree.has(f) && 'is-agree'] },
+      h('span', { class: 'pk-st__stone' }, h('i'), h('i'), h('i')),
+      grains,
+      h('span', { class: 'pk-st__mote' }),
+      agree.has(f) ? null : colNoVoteLabel(f, Number.isFinite(pct) ? pct * 100 : NaN, locale, 'pk-st__k', 'span'),
     );
-    el.style.setProperty('--h', String(Number.isFinite(pct) ? Math.max(0.02, pct) : 0));
+    el.style.setProperty('--h', String(v));
     return el;
   });
-  const lintel = on.length >= 2 ? h('span', { class: 'pk-cols__lintel' }) : null;
-  if (lintel) {
-    lintel.style.gridColumn = `r${on[0] + 1} / r${on[on.length - 1] + 1}`;
-    lintel.style.setProperty('--t', String(th));
+  // the sediment: one grain per stock that did not reach the rule, in a band on the floor
+  let sediment = null;
+  if (n) {
+    const fallen = Math.max(0, n - (Number.isFinite(issue.reached) ? issue.reached : 0));
+    const ds = ['', '', ''];
+    for (let i = 0; i < fallen; i++) {
+      const x = Math.round(rnd() * 2000);
+      const y = Math.round(40 - Math.pow(rnd(), 1.8) * 34);
+      ds[Math.min(2, Math.floor(rnd() * 3))] += `M${x} ${y}h0`;
+    }
+    sediment = svg('svg', { class: 'pk-sediment', viewBox: '0 0 2000 44', preserveAspectRatio: 'none', 'aria-hidden': 'true', focusable: 'false' }, ds.map((d, i) => svg('path', { class: `pk-sediment__g${i}`, d })));
   }
-  const node = h('div', { class: 'pk-cols', 'aria-hidden': 'true' }, cols, lintel);
+  const lintel = on.length >= 2 ? h('span', { class: 'pk-cols__lintel' }, colPickLabel(pick.ticker, on.length, 'pk-cols__pick')) : null;
+  if (lintel) lintel.style.gridColumn = `r${on[0] + 1} / r${on[on.length - 1] + 1}`;
+  const slab = h('span', { class: 'pk-cols__slab' });
+  const node = h('div', { class: ['pk-cols', n && 'has-floor'], 'aria-hidden': 'true' }, slab, cols, lintel, sediment);
   node.style.setProperty('--t', String(th));
   return node;
 }

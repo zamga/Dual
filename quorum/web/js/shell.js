@@ -195,6 +195,8 @@ export function createShell(app) {
     let k = 0;
     sheet.replaceChildren(
       lit,
+      // the sheet covers the page, so it carries the demo disclaimer at its own top, as the page does
+      h('p', { class: 'sheet__demo label' }, t('demo.notice')),
       h('div', { class: 'sheet__top' }, mark(), closeBtn),
       h(
         'nav',
@@ -402,11 +404,12 @@ export function createShell(app) {
     const hgt = tip.offsetHeight;
     let x = r.left + 12;
     if (x + w > window.innerWidth - 12) x = r.left - w - 12;
-    let y = pointerY != null ? pointerY - hgt / 2 : plinth.getBoundingClientRect().top - hgt - 10;
+    // the plumb label is pinned 12 px under the header's edge (no ground: it never covers a caption); the
+    // keyboard's plinth label stands above its plinth on its own ground
+    let y = plumb ? Math.max(0, header.getBoundingClientRect().bottom) + 12 : plinth.getBoundingClientRect().top - hgt - 10;
     y = Math.max(12, Math.min(window.innerHeight - hgt - 12, y));
-    // the label never lands on display type (its opaque ground would clip a headline's descenders): it
-    // steps above or below the headline's box, whichever is nearer the pointer
-    for (const d of qsa('#view .display, #view .asm__h, #view .asm__d2')) {
+    // the plinth label never lands on display type: it steps above or below the headline's box
+    if (!plumb) for (const d of qsa('#view .display, #view .asm__h, #view .asm__d2')) {
       const b = d.getBoundingClientRect();
       if (!b.height || b.right < x || b.left > x + w || b.bottom < y - 4 || b.top > y + hgt + 4) continue;
       const py = pointerY ?? y + hgt / 2;
@@ -416,7 +419,8 @@ export function createShell(app) {
     tip.style.setProperty('--y', `${Math.round(y)}px`);
     const surf = pointerY != null ? surfaceAt(pointerX ?? r.left, pointerY, [header, sheet, plinths, tip]) : plinths.dataset.surface ?? 'karst';
     const night = surf === 'chamber' || surf === 'hero';
-    tip.dataset.surface = night ? 'night' : 'karst';
+    const tipSurf = plumb ? surfaceAt(Math.min(window.innerWidth - 1, x + 2), y + hgt / 2, [header, sheet, plinths, tip]) : surf;
+    tip.dataset.surface = tipSurf === 'chamber' || tipSurf === 'hero' ? 'night' : 'karst';
     rulesEl.dataset.surface = night ? 'night' : 'karst';
     rules.forEach((el, k) => {
       el.classList.toggle('is-lit', k === i);
@@ -488,6 +492,7 @@ export function createShell(app) {
 
   // ---- header behaviour: surface under it, hide on scroll down, show on scroll up ---------------
   let lastY = window.scrollY;
+  let lastHdrY = '';
   let ticking = false;
   function onScroll() {
     if (ticking) return;
@@ -502,6 +507,9 @@ export function createShell(app) {
       const focusInside = header.contains(document.activeElement);
       if (stuck && y > lastY + 6 && y > demoH + hh * 2 && !focusInside) header.classList.add('is-hidden');
       else if (y < lastY - 6 || !stuck) header.classList.remove('is-hidden');
+      // sticky things under the header (the HYPOTHETICAL banner, the join preview) follow it up and down
+      const hdrY = header.classList.contains('is-hidden') ? '0px' : 'var(--header-h)';
+      if (hdrY !== lastHdrY) document.documentElement.style.setProperty('--hdr-y', (lastHdrY = hdrY));
       lastY = y;
       updateSurfaces();
     });
@@ -540,7 +548,10 @@ export function createShell(app) {
     },
     { passive: true },
   );
-  header.addEventListener('focusin', () => header.classList.remove('is-hidden'));
+  header.addEventListener('focusin', () => {
+    header.classList.remove('is-hidden');
+    document.documentElement.style.setProperty('--hdr-y', (lastHdrY = 'var(--header-h)'));
+  });
 
   // The hero pulls up under the demo bar and header; it needs their combined height.
   const setChrome = () => {

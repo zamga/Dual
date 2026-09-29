@@ -3,13 +3,19 @@
 //   export async function render(ctx) -> { title, node, cleanup?, top?, afterMount? }
 import { matchRoute, isRouteHash, routeOfHref, href } from './router.js';
 import { setLocale, t, tp, formatters, LOCALES } from './i18n.js';
-import { h, announce, focusEl, store, prefersReducedMotion, qs, qsa, copyText, reveal, playDigits, sweepLine, sweep } from './dom.js';
+import { h, announce, focusEl, store, prefersReducedMotion, qs, qsa, copyText, reveal, playDigits, sweepLine, sweep, groundDisplays } from './dom.js';
 import { createClock } from './clock.js';
 import { createShell } from './shell.js';
 import { launchInfo } from './launch.js';
 
 const root = document.documentElement;
 const view = qs('#view');
+// headlines a page adds after its first render (tabs, late data) get their per-line ground too
+if ('MutationObserver' in window) {
+  new MutationObserver((recs) => {
+    for (const r of recs) for (const n of r.addedNodes) if (n.nodeType === 1 && !n.classList.contains('display__gl') && !n.classList.contains('display__t') && !n.closest('.display__gl')) groundDisplays(n);
+  }).observe(view, { childList: true, subtree: true });
+}
 const flags = Object.fromEntries(new URLSearchParams(location.search));
 const TIERS = ['free', 'signal', 'research'];
 const NOOP = () => {};
@@ -367,6 +373,8 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
     }
     current?.controller.abort();
     app.route = route;
+    root.classList.remove('is-leaving-stage');
+    groundDisplays(result.node);
     view.replaceChildren(result.node);
     document.title = result.title ? `${result.title} · Quorum Research` : 'Quorum Research';
     root.dataset.top = result.top ?? 'karst';
@@ -397,6 +405,13 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
       oldPick.classList.add('vt-pick');
     }
     let vt;
+    await stageFaded();
+    if (seq !== navSeq) {
+      result?.cleanup?.();
+      return;
+    }
+    // the old main is cut away above the sweep line as the new one is revealed under it (playSweep)
+    oldRect = view.getBoundingClientRect();
     root.classList.add('is-vt');
     try {
       vt = document.startViewTransition(swap);
@@ -419,6 +434,7 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
       }
     }
   } else {
+    if (moving) await stageFaded();
     swap();
     if (moving) playSweep(line, false);
     else line?.remove();
@@ -442,12 +458,27 @@ const reduced = () => prefersReducedMotion();
 // --e-io and the new main is wiped in behind it on the same curve; the old main has already lifted 16 px
 // and faded (180 ms, CSS). The rules, the header and the stage never move.
 const pending = { line: null };
+let oldRect = null;
 function headerEdge() {
   const hb = qs('#site-header').getBoundingClientRect();
   return Math.max(0, hb.bottom);
 }
+// Leaving a page with a scene on screen (the Assembly, a pick's colonnade): the scene fades to 0 over
+// 180 ms first (CSS: html.is-leaving-stage), and the route change waits for it before the snapshot.
+const stageFade = { until: 0 };
+function fadeStage() {
+  const scene = qs('.asm__stage, .pk-cols', view);
+  if (!scene) return;
+  const r = scene.getBoundingClientRect();
+  if (r.bottom <= 0 || r.top >= window.innerHeight) return;
+  root.classList.add('is-leaving-stage');
+  stageFade.until = performance.now() + 180;
+}
+const stageFaded = () => new Promise((res) => setTimeout(res, Math.max(0, stageFade.until - performance.now())));
+
 function startLine() {
   if (reduced() || !app.started) return;
+  fadeStage();
   pending.line?.remove();
   const line = sweepLine(headerEdge());
   line.style.viewTransitionName = 'sweep';
@@ -468,6 +499,18 @@ function playSweep(line, vt) {
       document.documentElement.animate({ clipPath: [cut(from), cut(to)] }, { duration: 420, easing: 'cubic-bezier(.7,0,.2,1)', fill: 'both', pseudoElement: '::view-transition-new(main)' });
     } catch {
       /* the CSS wipe stays */
+    }
+    // and the old main is cut away above the same line: no frame ever shows the two pages through each other
+    if (oldRect) {
+      const o = oldRect;
+      // the group does not move (CSS), so the old image is put back where the old main stood
+      const dy = `translate3d(0, ${Math.round(o.top - r.top)}px, 0)`;
+      const top = (yy) => `inset(${Math.max(0, Math.round(yy - o.top))}px 0 0 0)`;
+      try {
+        document.documentElement.animate({ clipPath: [top(from), top(to)], transform: [dy, dy] }, { duration: 420, easing: 'cubic-bezier(.7,0,.2,1)', fill: 'both', pseudoElement: '::view-transition-old(main)' });
+      } catch {
+        /* the old main stays opaque under the new one */
+      }
     }
     sweep(line, from, to, { pseudo: '::view-transition-group(sweep)' }).then(() => line.remove());
   } else {
@@ -551,6 +594,17 @@ const fontWait = document.fonts?.load
     ])
   : Promise.resolve();
 const fontsReady = boot.active ? fontWait : Promise.race([fontWait, new Promise((r) => setTimeout(r, 700))]);
+// html.fonts-mona: only once a Mona Sans face has really loaded (document.fonts.check() is true when the
+// family is not declared at all, so it cannot tell a blocked stylesheet from a loaded font)
+const markFonts = () => {
+  try {
+    if ([...document.fonts].some((f) => f.family.replace(/["']/g, '') === 'Mona Sans' && f.status === 'loaded')) root.classList.add('fonts-mona');
+  } catch {
+    /* no FontFaceSet: the fallback settings stay */
+  }
+};
+fontsReady.then(markFonts);
+document.fonts?.addEventListener?.('loadingdone', markFonts);
 
 // Live mode renders the first page only once the server has said who is viewing.
 const viewerReady = app.mode === 'live' ? app.refreshViewer().catch(() => false) : Promise.resolve();

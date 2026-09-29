@@ -1,11 +1,6 @@
-/* Per-page layout. Home first (the Assembly and its sections), then content pages. */
+/* Per-page layout. */
 
-/* ============================================================================================
-   THE ASSEMBLY (home hero) · WP-B · docs/DESIGN-V2.md §4.1, §4.3, §4.6
-   Markup and behaviour: web/js/hero/assembly.js. The scene is drawn by web/js/hero/gl.js (WebGL),
-   flat.js (2D canvas, and the SVG first paint). `.lv` stays on the section as the shared hero hook
-   (shell.js header surface, base.css grounds, e2e). Only this block styles .asm.
-   ============================================================================================ */
+/* ==== THE ASSEMBLY */
 .asm {
   position: relative;
   height: 520vh;
@@ -36,6 +31,12 @@
   padding: 0 !important;
   pointer-events: none;
   z-index: 0;
+}
+
+/* leaving: the scene fades (180 ms) before the route change snapshots it (app.js) */
+:root.is-leaving-stage :is(.asm__stage, .asm__fams, .asm__slablabel, .asm__quorum-label, .asm__novote, .asm__lintel-line, .pk-cols) {
+  opacity: 0 !important;
+  transition: opacity 180ms var(--e-exit) !important;
 }
 
 .asm__svg,
@@ -116,13 +117,13 @@
   filter: drop-shadow(0 0 5px var(--ultra));
 }
 
-/* ---- the issue line and the story beats ---------------------------------------------------- */
-/* the scene's columns pass behind the issue line: a night ground clipped to the line (the display mask) */
+/* ---- the issue line and the story beats */
+/* the issue line has no ground */
 .asm__issue {
   width: fit-content;
-  background: var(--night);
-  padding: 0.45em 0.4em !important;
-  margin-left: calc(var(--inset) - 0.4em);
+  background: transparent;
+  padding: 0.45em 0 !important;
+  margin-left: var(--inset);
   transition: opacity var(--d-2) var(--e-ui);
   grid-row: a;
   grid-column: r1 / r4;
@@ -131,6 +132,10 @@
   margin-top: calc(clamp(10px, 2.2vh, 24px) - 0.45em);
   color: var(--mist-2);
   z-index: 2;
+}
+
+.asm__issue-s {
+  display: none;
 }
 
 .asm__beat {
@@ -154,8 +159,7 @@
   grid-row: 1;
 }
 
-/* masked lines (§4.7): in 700 ms on --e-out, 60 ms apart; out 450 ms, 25 ms apart. The clip box is
-   padded so descenders and č š ž survive the tight leading. */
+/* masked lines (§4.7): in 700 ms on --e-out, 60 ms apart; out 450 ms */
 .asm__ln {
   display: block;
   overflow: clip;
@@ -165,8 +169,7 @@
 
 .asm__li {
   display: block;
-  /* each line keeps its own layer from the start, so a beat change starts transitions on layers that are
-     already rastered instead of promoting and rastering ~15 display lines in the same frame */
+  /* each line keeps its own layer, so a beat change never rasters ~15 lines in one frame */
   will-change: transform;
   transform: translate3d(0, 140%, 0);
   transition: transform 450ms var(--e-io) calc(var(--i, 0) * 25ms);
@@ -197,7 +200,7 @@
     transform var(--d-3) var(--e-out) 260ms;
 }
 
-/* stacked lines in a flex column: the clip boxes' negative margins must not collapse */
+/* stacked lines in a flex column */
 .asm__h,
 .asm__d2,
 .asm__wide,
@@ -213,12 +216,13 @@
   font-stretch: 75%;
   color: var(--mist);
   text-wrap: balance;
-  word-spacing: 0.06em;
+  word-spacing: var(--ws-condensed);
   margin-left: -0.04em;
 }
 
 .asm__h {
   grid-column: r1 / full-end;
+  word-spacing: var(--ws-hero);
   font-size: var(--t-hero);
   font-weight: 460;
   line-height: var(--lh-hero, 0.84);
@@ -279,9 +283,13 @@
   grid-row: 3;
 }
 
-.asm__beat--3 {
+.asm__beat--3,
+.asm__beat--4 {
   grid-template-rows: auto auto;
   row-gap: clamp(10px, 1.6vh, 18px);
+}
+.asm__beat--4 > .asm__sub {
+  grid-row: 2;
 }
 .asm__beat--3 > .asm__wide {
   grid-row: 1;
@@ -290,7 +298,7 @@
   grid-row: 2;
 }
 
-/* ---- labels that follow the scene (positioned from the projection by assembly.js) -------------- */
+/* ---- labels that follow the scene */
 .asm__fams,
 .asm__slablabel,
 .asm__quorum-label,
@@ -349,33 +357,46 @@
   transition: opacity var(--d-2) var(--e-ui);
 }
 
-.asm__quorum-label {
+/* the colonnade's labels */
+.col-quorum {
+  margin: 0;
   font-family: var(--font-mono);
   font-stretch: 75%;
   font-size: 0.8125rem;
   font-weight: 420;
+  line-height: 1.35;
   letter-spacing: 0.02em;
   color: var(--lift);
   white-space: nowrap;
+}
+
+.col-quorum b {
+  font-weight: 520;
+  letter-spacing: 0.04em;
+}
+
+.col-novote {
+  color: var(--mist-2);
+  white-space: nowrap;
+}
+
+.asm__quorum-label {
   translate: calc(-100% - 22px) 14px;
   opacity: 0;
   transition: opacity var(--d-2) var(--e-ui);
 }
 
-.asm__quorum-label b {
-  font-weight: 520;
-  letter-spacing: 0.04em;
+.asm__novote.is-left {
+  translate: calc(-100% - 12px) -50%;
 }
 
 .asm__novote {
-  color: var(--mist-2);
-  white-space: nowrap;
   translate: 12px -50%;
   opacity: 0;
   transition: opacity var(--d-2) var(--e-ui);
 }
 
-/* ---- the phone and the SMS baseline (§4.6) --------------------------------------------------- */
+/* ---- the phone and the SMS baseline (§4.6) */
 .asm__phonewrap {
   grid-row: a;
   grid-column: r3 / r4;
@@ -393,7 +414,7 @@
   --phone-w: min(300px, 78vw, calc((100svh - var(--chrome-h, 92px) - 120px) * 300 / 620));
 }
 
-/* the bubble grows up from the baseline, as on #join: the thread stands at the bottom of the screen */
+/* the bubble grows up from the baseline, as on #join */
 .asm .phone__thread {
   align-content: end;
   min-height: 100%;
@@ -429,7 +450,7 @@
   transition: text-decoration-color var(--d-2) var(--e-ui) 900ms;
 }
 
-/* ---- the note: the phone screen expands into it (FLIP, 700 ms) ------------------------------ */
+/* ---- the note: the phone screen expands into it (FLIP, 700 ms) */
 .asm__note {
   grid-row: a;
   grid-column: r1 / r4;
@@ -527,7 +548,7 @@
   stroke: var(--graphite);
 }
 
-/* the zero line's own label, at the right end under the line (the path ends above or below it) */
+/* the zero line's own label, at the right end under the line */
 .asm__zerolabel {
   position: absolute;
   right: 0;
@@ -584,9 +605,17 @@
 
 .asm__notesub {
   color: var(--slate);
+  /* net and benchmark belong to the result: they wait for its reveal */
+  opacity: 0;
+  transition: opacity var(--d-1) var(--e-ui);
 }
 
-/* the result as a digit reveal (§4.7): sign and arrow first, then each character drops from blank */
+.asm__note.is-result .asm__notesub {
+  opacity: 1;
+  transition: opacity var(--d-3) var(--e-out) 480ms;
+}
+
+/* the result as a digit reveal */
 .asm__digits {
   display: inline-flex;
   align-items: baseline;
@@ -647,7 +676,7 @@
   color: var(--slate);
 }
 
-/* ---- the step buttons and the cue ------------------------------------------------------------- */
+/* ---- the step buttons and the cue */
 .asm__steps {
   grid-row: steps;
   grid-column: r1 / r4;
@@ -729,7 +758,7 @@
   display: none;
 }
 
-/* ---- desktop: the lede stands in bay 3 beside the headline's short second line --------------- */
+/* ---- desktop: the lede stands in bay 3 beside the headline's short second line */
 @media (min-width: 1024px) {
   .asm__beat--0 > .asm__lede {
     grid-column: r3 / r4;
@@ -762,16 +791,13 @@
     align-self: end;
   }
   /* the text beat: the words stand under the floor in bays 1–2, the phone rises in bay 3 */
+  .asm__beat--4 > .asm__d2,
   .asm__beat--4 > .asm__sub {
     grid-column: r1 / r3;
-    font-size: var(--t-lede);
-    line-height: 1.3;
-    max-width: 30ch;
-    color: var(--mist);
   }
 }
 
-/* ---- tablet and phone ---------------------------------------------------------------------- */
+/* ---- tablet and phone */
 @media (max-width: 1023.98px) {
   .asm__beat {
     row-gap: 14px;
@@ -789,12 +815,12 @@
     align-self: end;
     margin-bottom: 4px;
   }
-  .asm .phone {
-    --phone-w: min(300px, 78vw, calc((100svh - var(--chrome-h, 92px) - 250px) * 300 / 620));
+  /* the phone stands above the text beat's words */
+  .asm__phonewrap {
+    margin-bottom: calc(var(--b4h, 180px) + 8px);
   }
-  .asm__beat--4 {
-    align-self: start;
-    padding: 12px 0 0 !important;
+  .asm .phone {
+    --phone-w: min(300px, 78vw, calc(min(56svh, 620px) * 300 / 620), calc((100svh - var(--chrome-h, 92px) - var(--b4h, 180px) - 120px) * 300 / 620));
   }
   .asm__cue {
     display: none;
@@ -821,6 +847,15 @@
 }
 
 @media (max-width: 639.98px) {
+  .asm__issue-l {
+    display: none;
+  }
+  .asm__issue-s {
+    display: inline;
+  }
+  .asm__issue {
+    text-shadow: 0 0 3px var(--bg), 0 0 8px var(--bg);
+  }
   .asm__lede,
   .asm__sub {
     font-size: 0.9375rem;
@@ -835,7 +870,6 @@
     row-gap: 10px;
   }
 }
-
 
 .home > .section:first-of-type {
   border-top: 0;
@@ -874,7 +908,7 @@
   border-bottom-color: var(--mist);
 }
 
-/* 01 Silence Calendar ---------------------------------------------------------------------------- */
+/* 01 Silence Calendar */
 .sc-meta {
   display: grid;
   gap: 10px;
@@ -889,10 +923,19 @@
 }
 
 .sc-legend {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
   margin-bottom: 14px;
   font-size: var(--fs-small);
+}
+
+.sc-legend.c-wide {
+  margin: var(--s-6) 0 0;
+}
+
+.sc-legend + .sc-figure {
+  margin-top: var(--s-4);
 }
 
 .sc-legend li {
@@ -1045,7 +1088,7 @@
   }
 }
 
-/* 02 How a pick happens --------------------------------------------------------------------------- */
+/* 02 How a pick happens */
 .how-steps {
   position: relative;
   display: grid;
@@ -1138,12 +1181,13 @@
   padding-top: 0.4em;
 }
 
-/* the four families take four equal columns on r1→r4 (family D no longer squeezed into the margin) */
+/* the families stand on the rules, ≤ 300 px wide */
 .how-fams {
-  grid-column: r1 / r4;
+  grid-column: full-start / full-end;
   grid-row: 2;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: subgrid;
+  row-gap: 28px;
   margin-top: 12px;
   padding: 0 !important;
 }
@@ -1152,9 +1196,47 @@
   display: grid;
   gap: 6px;
   align-content: start;
+  max-width: 300px;
   padding: 0 var(--inset);
 }
 
+.how-fam:nth-child(odd) {
+  grid-column: r1 / r2;
+}
+.how-fam:nth-child(even) {
+  grid-column: r2 / r3;
+}
+
+/* 1024–1599 px: the four families in four equal columns from r1 to r4 */
+@media (min-width: 1024px) and (max-width: 1599.98px) {
+  .how-fams {
+    grid-column: r1 / r4;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .how-fam:nth-child(n) {
+    grid-column: auto;
+    grid-row: 1;
+    max-width: none;
+  }
+}
+
+@media (min-width: 1600px) {
+  .how-fam:nth-child(n) {
+    grid-row: 1;
+  }
+  .how-fam:nth-child(1) {
+    grid-column: r1 / r2;
+  }
+  .how-fam:nth-child(2) {
+    grid-column: r2 / r3;
+  }
+  .how-fam:nth-child(3) {
+    grid-column: r3 / r4;
+  }
+  .how-fam:nth-child(4) {
+    grid-column: r4 / full-end;
+  }
+}
 
 .how-fam__id {
   font-stretch: 62%;
@@ -1334,10 +1416,11 @@
   }
   .how-fam:nth-child(n) {
     grid-column: auto;
+    max-width: none;
   }
 }
 
-/* 03 Ledger chain on Chamber -------------------------------------------------------------------------- */
+/* 03 Ledger chain on Chamber */
 .home-ledger .lede {
   color: var(--mist);
 }
@@ -1517,7 +1600,7 @@
   }
 }
 
-/* 04 Scoreboard teaser ----------------------------------------------------------------------------------- */
+/* 04 Scoreboard teaser */
 .sb {
   grid-column: full-start / full-end;
   display: grid;
@@ -1723,9 +1806,8 @@
   }
 }
 
-/* 05 Pricing teaser --------------------------------------------------------------------------------------- */
-.home-price .honest,
-.pricing-honest {
+/* 05 Pricing teaser */
+.home-price .honest {
   font-family: var(--font-sans);
   font-size: 1.125rem;
   line-height: 1.4;
@@ -1737,12 +1819,20 @@
 }
 
 .pl-note {
-  padding-inline: var(--inset);
+  padding-inline: 0 !important;
+  max-width: none;
 }
 
+/* its rule runs r1→r3 like the row it heads */
 .pl-note .launch-note {
   display: grid;
   gap: 6px;
+  max-width: none;
+  padding-inline: var(--inset);
+}
+
+.pl-note .launch-note > * {
+  max-width: 64ch;
 }
 
 .pl__cta {
@@ -1766,10 +1856,6 @@
 
 .masthead__lede {
   margin-top: var(--s-4);
-}
-
-.draft-row {
-  margin-bottom: var(--s-6);
 }
 
 .content {
@@ -1804,15 +1890,7 @@
   max-width: 18ch;
 }
 
-.content-sec .sec-num {
-  font-family: var(--font-mono);
-  font-stretch: var(--wdth-mono);
-  font-size: var(--fs-label);
-  letter-spacing: var(--track-label);
-  color: var(--slate);
-}
-
-/* ---- 404 / pending -------------------------------------------------------------------------------------- */
+/* ---- 404 / pending */
 .nf {
   min-height: calc(100svh - var(--chrome-h, 112px) - 40px);
   padding-block: var(--s-9);
@@ -1874,7 +1952,7 @@
   align-items: center;
 }
 
-/* ---- long-form pages ------------------------------------------------------------------------------ */
+/* ---- long-form pages */
 .page-masthead {
   padding-block: clamp(32px, 4vw, 56px) clamp(2.5rem, 1.5rem + 2.5vw, 4rem);
 }
@@ -1901,6 +1979,19 @@
 
 .page-masthead > .draft-banner {
   grid-row: 4;
+}
+
+/* a masthead with the page's object under the headline */
+.masthead--object > .ltb {
+  grid-row: 3;
+}
+.masthead--object > .masthead__lede {
+  grid-row: 4;
+  margin-top: var(--s-5);
+}
+.masthead--object > .c-meta {
+  grid-row: 4 / span 2;
+  margin-top: var(--s-5);
 }
 
 @media (max-width: 639.98px) {
@@ -1958,11 +2049,6 @@
 .table--fams th[scope='row'] {
   width: 30%;
   padding-right: 24px;
-}
-
-.table--cadence th[scope='row'] {
-  width: 9.5em;
-  white-space: nowrap;
 }
 
 .table--compact th,
@@ -2105,7 +2191,7 @@
   }
 }
 
-/* ---- changelog ---------------------------------------------------------------------------------- */
+/* ---- changelog */
 .changelog {
   grid-column: full-start / full-end;
   padding: 0 !important;
@@ -2140,7 +2226,7 @@
   vertical-align: middle;
 }
 
-/* ---- about: people on the rules ------------------------------------------------------------------ */
+/* ---- about: people on the rules */
 .people {
   padding-block: var(--s-7) var(--s-9);
   border-top: 1px solid var(--line);
@@ -2201,7 +2287,7 @@
   }
 }
 
-/* ---- pricing page ---------------------------------------------------------------------------------- */
+/* ---- pricing page */
 .pl-head {
   padding-block: clamp(32px, 4vw, 56px) var(--s-6);
   row-gap: var(--s-4);
@@ -2227,12 +2313,6 @@
   display: grid;
   gap: 10px;
   justify-items: start;
-}
-
-.pricing-meta {
-  display: grid;
-  gap: var(--s-6);
-  align-content: start;
 }
 
 .seg--light {
@@ -2272,7 +2352,7 @@
   align-self: end;
 }
 
-/* ---- legal ----------------------------------------------------------------------------------------- */
+/* ---- legal */
 .legal-nav ul {
   display: grid;
   gap: 2px;
@@ -2337,12 +2417,6 @@
   color: var(--fg-2);
   line-height: 1.5;
   max-width: 68ch;
-}
-
-.rec-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 28px;
 }
 
 :is(.ledger, .bt, .issue, .stock, .disc, .pk) :is(.display, h2, h3),
@@ -2440,18 +2514,51 @@
   color: var(--mist);
 }
 
-/* in flow, in the stage's first row: it takes the free height and stops 40 px above the kicker */
+/* the strip: name and tags, then the date and the identifiers on Martian rows */
+.pk-when,
+.pk-idline {
+  flex-basis: 100%;
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: var(--t-fig);
+  letter-spacing: 0;
+  color: var(--mist-2);
+}
+
+.pk-idline {
+  margin-top: -6px;
+}
+
+/* the frozen Assembly paints night over the section's rules: lay them over it */
+.pk-stage.has-scene > .pk-scene {
+  z-index: -2;
+}
+
+/* portrait tablets */
+@media (min-width: 640px) and (max-width: 1023.98px) and (orientation: portrait) {
+  .pk-stage.has-scene {
+    min-height: 0;
+    padding-top: calc(min(62svh, 560px) + var(--s-6));
+  }
+  .pk-stage:not(.has-scene) {
+    min-height: 0;
+    grid-template-rows: min(46svh, 420px);
+  }
+}
+
+/* in flow, in the stage's first row */
 .pk-stage:not(.has-scene) {
   grid-template-rows: minmax(clamp(160px, 30svh, 360px), 1fr);
   align-content: stretch;
 }
 
 .pk-cols {
+  --floor: 0px;
   position: relative;
   grid-row: 1;
   grid-column: full-start / full-end;
   align-self: stretch;
-  margin: 28px 0 40px;
+  margin: clamp(56px, 10svh, 120px) 0 40px;
   padding-inline: 0 !important;
   z-index: 0;
   display: grid;
@@ -2460,82 +2567,179 @@
   pointer-events: none;
 }
 
-.pk-pillar {
+.pk-cols.has-floor {
+  --floor: 22px;
+}
+
+/* phones: A and D step in 12 px from the gutter; B and C stay on their rules */
+@media (max-width: 639.98px) {
+  .pk-cols {
+    --pk-bay: calc((100% - 2 * var(--gutter)) / 3);
+    grid-template-columns: [full-start] calc(var(--gutter) + 12px) [r1] calc(var(--pk-bay) - 12px) [r2] var(--pk-bay) [r3] calc(var(--pk-bay) - 12px) [r4] calc(var(--gutter) + 12px) [full-end];
+  }
+}
+
+/* 0 = the floor, 1 = the stage top */
+.pk-cols > * {
+  --at: calc(var(--floor) + var(--v, 0) * (100% - var(--floor)));
   grid-row: 1;
-  align-self: end;
-  justify-self: start;
+}
+
+/* stone: 10 px, three flutes, a plinth; the band's grains; the pick's grain at its percentile */
+.pk-st {
   position: relative;
-  width: 9px;
-  margin-left: -4.5px;
-  height: calc(var(--h) * 100%);
-  background: var(--line);
-  border: 1px solid var(--line);
-  border-bottom: 0;
+  justify-self: start;
+  width: 60px;
+  margin-left: -30px;
+  height: 100%;
+  --v: var(--h);
 }
 
-.pk-pillar.is-agree {
-  background: var(--mist-2);
-}
-
-.pk-pillar:nth-child(1) {
+.pk-st:nth-child(2) {
   grid-column: r1;
 }
-.pk-pillar:nth-child(2) {
+.pk-st:nth-child(3) {
   grid-column: r2;
 }
-.pk-pillar:nth-child(3) {
+.pk-st:nth-child(4) {
   grid-column: r3;
 }
-.pk-pillar:nth-child(4) {
+.pk-st:nth-child(5) {
   grid-column: r4;
 }
 
-/* the label stands over its column, 14 px clear of the lintel (never struck by it); the last column's
-   label hangs to the left so it never leaves the page */
-.pk-pillar__k {
+.pk-st__stone {
   position: absolute;
-  left: 0;
-  bottom: calc(100% + 10px);
-  font-size: var(--t-label);
-  color: var(--mist-2);
-  white-space: nowrap;
+  top: -400px;
+  bottom: 6px;
+  left: 25px;
+  width: 10px;
+  display: flex;
 }
 
-.pk-pillar.is-agree .pk-pillar__k {
-  bottom: calc(max(100%, 100% * var(--t) / var(--h)) + 14px);
-  color: var(--mist);
+.pk-st__stone > i {
+  flex: 34;
+  background: var(--mist);
+  opacity: 0.34;
+}
+.pk-st__stone > i + i {
+  flex: 36;
+  opacity: 0.22;
+}
+.pk-st__stone > i + i + i {
+  flex: 30;
+  opacity: 0.12;
 }
 
-.pk-pillar:nth-child(4) .pk-pillar__k {
+.pk-st__stone::after {
+  content: '';
+  position: absolute;
+  inset: auto -2px -6px;
+  height: 6px;
+  background: var(--mist);
+  opacity: 0.16;
+}
+
+.pk-st__band {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 60px;
+  height: calc(100% - var(--floor));
+  overflow: visible;
+}
+
+.pk-st__band path,
+.pk-sediment path {
+  fill: none;
+  stroke: var(--mist);
+  stroke-width: 2px;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.55;
+}
+
+.pk-st__mote {
+  position: absolute;
+  left: 30px;
+  bottom: var(--at);
+  width: 7px;
+  height: 7px;
+  margin: 0 0 -3.5px -3.5px;
+  border-radius: 50%;
+  background: var(--mist-2);
+}
+
+.pk-st.is-agree .pk-st__mote {
+  background: var(--mist);
+}
+
+/* a column that did not vote is labelled beside its grain */
+.pk-st__k {
+  position: absolute;
+  left: 44px;
+  bottom: var(--at);
+  translate: 0 50%;
+}
+
+.pk-cols__pick {
+  position: absolute;
+  right: 30px;
+  top: calc(50% + 14px);
+}
+
+.pk-st:nth-child(5) .pk-st__k {
   left: auto;
-  right: 0;
+  right: 44px;
+}
+
+@media (max-width: 639.98px) {
+  .pk-st:not(:nth-child(2)):not(.is-agree) .pk-st__k {
+    left: auto;
+    right: 44px;
+  }
+}
+
+.pk-cols__slab {
+  grid-column: r1 / r4;
+  align-self: start;
+  margin-inline: 0;
+  height: calc((1 - var(--t)) * (100% - var(--floor)));
+  background: var(--mist);
+  opacity: 0.06;
 }
 
 .pk-cols__lintel {
-  grid-row: 1;
   align-self: end;
   position: relative;
-  bottom: calc(var(--t) * 100%);
+  bottom: calc(var(--floor) + var(--t) * (100% - var(--floor)));
   height: 3px;
-  margin-inline: -8px;
+  margin: 0 -8px -1.5px;
   background: var(--ultra);
   box-shadow: 0 0 0 1px var(--lift), 0 0 18px 2px var(--ultra);
+}
+
+.pk-sediment {
+  grid-column: full-start / full-end;
+  align-self: end;
+  width: 100%;
+  height: var(--floor);
+}
+
+.pk-sediment path {
+  stroke-width: 1.6px;
+  opacity: 0.16;
+}
+.pk-sediment__g1 {
+  opacity: 0.28 !important;
+}
+.pk-sediment__g2 {
+  opacity: 0.42 !important;
 }
 
 .pk-badge {
   min-height: 28px;
   padding: 0 11px;
   font-size: 0.75rem;
-}
-
-@media (min-width: 640px) {
-  .pk-head > .pk-id {
-    grid-row: 3;
-  }
-  .pk-head > .pk-state {
-    grid-row: 3;
-    padding-top: 6px;
-  }
 }
 
 .pk-summary {
@@ -2865,36 +3069,39 @@
   margin-top: var(--s-4);
 }
 
-/* ---- the colonnade chart --------------------------------------------------------------------------- */
+/* ---- the colonnade chart */
 .colonnade {
   grid-column: full-start / full-end;
   display: grid;
   grid-template-columns: subgrid;
   margin-top: var(--s-5);
-  --zlen: clamp(64px, 9vw, 160px);
+  --zlen: 50%;
 }
 
-.col-caps,
-.col-drivers {
+.col-caps {
   grid-column: full-start / full-end;
   display: grid;
   grid-template-columns: subgrid;
 }
 
-.col-cap:nth-child(1),
-.col-fam:nth-child(1) {
+/* drivers: four equal columns on r1→r4; bars grow from a zero line mid-track */
+.col-drivers {
+  grid-column: r1 / r4;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 0;
+}
+
+.col-cap:nth-child(1) {
   grid-column: r1 / r2;
 }
-.col-cap:nth-child(2),
-.col-fam:nth-child(2) {
+.col-cap:nth-child(2) {
   grid-column: r2 / r3;
 }
-.col-cap:nth-child(3),
-.col-fam:nth-child(3) {
+.col-cap:nth-child(3) {
   grid-column: r3 / r4;
 }
-.col-cap:nth-child(4),
-.col-fam:nth-child(4) {
+.col-cap:nth-child(4) {
   grid-column: r4 / full-end;
 }
 
@@ -2941,6 +3148,8 @@
 .col-plot {
   grid-column: r1 / r4;
   position: relative;
+  /* phones set --edge */
+  --edge: 0px;
   height: clamp(220px, 22vw, 330px);
   border-bottom: 1px solid var(--line);
 }
@@ -2991,7 +3200,7 @@
 .col-col {
   position: absolute;
   bottom: 0;
-  left: calc(var(--k) * 100% / 3);
+  left: calc(var(--k) * 100% / 3 + var(--edge) * (max(0, 1 - var(--k)) - max(0, var(--k) - 2)));
   width: 8px;
   height: calc(var(--h) * 100%);
   transform: translateX(-4px);
@@ -3009,8 +3218,8 @@
 
 .col-lintel {
   position: absolute;
-  left: calc(var(--from) * 100% / 3 - 9px);
-  width: calc((var(--to) - var(--from)) * 100% / 3 + 18px);
+  left: calc(var(--from) * 100% / 3 + var(--edge) * max(0, 1 - var(--from)) - 9px);
+  width: calc((var(--to) - var(--from)) * 100% / 3 - var(--edge) * (max(0, var(--to) - 2) + max(0, 1 - var(--from))) + 18px);
   bottom: calc(var(--thr) * 100%);
   height: 10px;
   background: var(--quorum);
@@ -3061,7 +3270,15 @@
 .col-drv__track {
   position: relative;
   height: 6px;
-  margin-left: calc(-1 * var(--inset));
+}
+
+.col-drv__track::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  bottom: -4px;
+  border-left: 1px solid var(--fg-2);
 }
 
 .col-bar {
@@ -3073,11 +3290,11 @@
 }
 
 .col-bar.is-pos {
-  left: 0;
+  left: 50%;
 }
 
 .col-bar.is-neg {
-  right: 100%;
+  right: 50%;
   background: transparent;
   border: 1px solid var(--line);
 }
@@ -3111,14 +3328,11 @@
 }
 
 @media (max-width: 1279.98px) {
-  .colonnade {
-    --zlen: 50%;
-  }
   .col-drivers {
-    grid-template-columns: var(--cols);
+    grid-template-columns: minmax(0, 1fr);
   }
   .col-fam:nth-child(n) {
-    grid-column: r1 / r4;
+    grid-column: auto;
   }
   .col-fam {
     padding-top: 14px;
@@ -3131,24 +3345,6 @@
   }
   .col-drv__label {
     max-width: none;
-  }
-  .col-drv__track {
-    margin-left: 0;
-    border-left: 0;
-  }
-  .col-drv__track::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: -4px;
-    bottom: -4px;
-    border-left: 1px solid var(--fg-2);
-  }
-  .col-bar.is-pos {
-    left: 50%;
-  }
-  .col-bar.is-neg {
-    right: 50%;
   }
   .col-drv__v {
     text-align: right;
@@ -3230,6 +3426,16 @@
 }
 
 @media (max-width: 639.98px) {
+  .col-plot {
+    --edge: 12px;
+  }
+  .col-grid__v {
+    left: calc(var(--edge) + 12px);
+  }
+  /* the band's label stands in bay 2, clear of the columns and of the gridline values in bay 1 */
+  .col-thrlabel {
+    left: 50%;
+  }
   .col-cap {
     grid-template-columns: 1fr;
     padding: 0 4px 12px 6px;
@@ -3247,7 +3453,7 @@
     padding: 0 6px 12px 4px;
   }
   .col-thrlabel {
-    top: 18px;
+    top: calc((1 - var(--thr)) * 100% + 12px);
   }
   .col-cap__id {
     grid-row: auto;
@@ -3277,7 +3483,7 @@
   }
 }
 
-/* ---- the path chart -------------------------------------------------------------------------------- */
+/* ---- the path chart */
 .path-fig {
   grid-column: full-start / full-end;
   display: grid;
@@ -3535,10 +3741,6 @@
   align-self: end;
 }
 
-.lg-stats__strip .stats {
-  border-top-color: var(--fg);
-}
-
 .lg-gap {
   display: grid;
   gap: 6px;
@@ -3715,10 +3917,9 @@
 
 .lg-name {
   display: block;
-  max-width: 24ch;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 30ch;
+  /* a long name takes a second line; never an ellipsis */
+  text-wrap: balance;
 }
 
 .lg-sealed {
@@ -3746,25 +3947,51 @@
   font-weight: 520;
 }
 
-.lg-row.is-open {
-  --bg: color-mix(in srgb, var(--paper) 55%, var(--karst));
-}
-
 .lg-row:hover {
   --bg: var(--paper);
 }
 
-.lg-row.is-open td,
-.lg-row.is-open th {
-  background: color-mix(in srgb, var(--paper) 55%, transparent);
+/* desktop: the columns stand in the bays (fixed layout */
+@media (min-width: 1024px) {
+  .lg-table {
+    table-layout: fixed;
+    width: 100%;
+  }
+  .lg-table th.lg-c-no {
+    width: 5.6%;
+  }
+  .lg-table th.lg-c-issueDate {
+    width: 8.2%;
+  }
+  .lg-table th.lg-c-agreement {
+    width: 7.4%;
+  }
+  .lg-table th.lg-c-entryOpen {
+    width: 9.4%;
+  }
+  .lg-table th.lg-c-exitDate {
+    width: 8.4%;
+  }
+  .lg-table th.lg-c-net {
+    width: 8.133%;
+  }
+  .lg-table th.lg-c-bench {
+    width: 11%;
+  }
+  .lg-table th.lg-c-excess {
+    width: 9.2%;
+  }
+  .lg-table th.lg-c-status {
+    width: 13.133%;
+  }
+  .lg-table td.lg-c-net,
+  .lg-table th.lg-c-net .lg-sort {
+    padding-right: 16px;
+  }
 }
 
 @media (min-width: 640px) and (max-width: 1023.98px) {
   .lg-table :is(th, td) {
-    background: var(--bg);
-  }
-  .lg-row.is-open td,
-  .lg-row.is-open th {
     background: var(--bg);
   }
 }
@@ -4229,10 +4456,6 @@
   background: var(--graphite);
   width: 12px;
   height: 12px;
-}
-
-.sb__row--quorum .sb__k b {
-  font-weight: 520;
 }
 
 .sb__track.is-empty .sb__dot {
@@ -5078,8 +5301,7 @@
   gap: var(--s-3);
 }
 
-/* the 12-month list takes r1→r4 from 640 px (at 834 it was squeezed into bays 1–2 and hid Excess behind
-   a sideways scroll); the section's note falls under it */
+/* the 12-month list takes r1→r4 from 640 px; the note falls under it */
 @media (min-width: 640px) {
   .content-sec:has(.dc-table) .prose {
     max-width: none;
@@ -5111,22 +5333,11 @@
   white-space: nowrap;
 }
 
-.dc-name {
-  display: inline-block;
-  max-width: 26ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
-}
-
 @media (min-width: 640px) and (max-width: 1023.98px) {
   .dc-table .table td:not(.num) {
     white-space: normal;
   }
-  .dc-name {
-    display: inline;
-    max-width: none;
-  }
+
 }
 
 .dc-plain {
@@ -5837,7 +6048,7 @@ p.bt-lv {
   }
 }
 
-/* ---- phones: the 12-month list and a stock's history become cards on the bays ------------------ */
+/* ---- phones: the 12-month list and a stock's history become cards on the bays */
 @media (max-width: 639.98px) {
   .dc-list,
   .dc-list tbody,
@@ -5901,11 +6112,7 @@ p.bt-lv {
   .dc-c-stock::before {
     display: none !important;
   }
-  .dc-name {
-    max-width: none;
-    white-space: normal;
-    display: inline;
-  }
+
   .st-list tr.st-row {
     grid-template-areas:
       'no kind status'
@@ -6377,16 +6584,50 @@ p.bt-lv {
 }
 
 .jn .page-masthead {
-  padding-bottom: var(--s-8);
+  padding-bottom: var(--s-6);
 }
 
 .jn-meta {
   display: grid;
-  gap: var(--s-5);
+  gap: var(--s-4);
+}
+
+.jc__meta {
+  grid-column: r1 / r4;
+  padding-bottom: var(--s-3);
 }
 
 .jn .jc {
-  padding-block: var(--s-6) var(--s-9);
+  padding-block: 0 var(--s-9);
+  row-gap: 0;
+}
+
+/* desktop: lede in bay 3 beside the headline, launch note over the steps */
+@media (min-width: 1024px) {
+  .jn-head > h1 {
+    grid-column: r1 / r3;
+  }
+  .jn-head > .masthead__lede {
+    grid-column: r3 / r4;
+    grid-row: 2;
+    align-self: end;
+    font-size: 1.125rem;
+    line-height: 1.45;
+    margin-bottom: 0.3em;
+  }
+  .jc__meta {
+    grid-column: r1 / r3;
+    grid-row: 1;
+  }
+  .jc__meta .m-launch {
+    max-width: 62ch;
+  }
+  .jc__steps {
+    grid-row: 2;
+  }
+  .jc__preview {
+    grid-row: 1 / span 2;
+  }
 }
 
 .jn-step.is-current {
@@ -6423,7 +6664,6 @@ p.bt-lv {
   max-width: 44ch;
 }
 
-
 .jn-idx {
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
@@ -6431,11 +6671,6 @@ p.bt-lv {
   letter-spacing: var(--track-label);
   color: var(--fg-2);
   padding-top: 0.35em;
-}
-
-.jn-idx__state {
-  margin-left: 8px;
-  color: var(--fg);
 }
 
 .is-current > .jn-idx {
@@ -6448,10 +6683,6 @@ p.bt-lv {
     text-align: right;
     padding-right: calc(var(--inset) + 4px);
   }
-}
-
-.jn-idx-inline {
-  display: none;
 }
 
 .jn-step__title {
@@ -6790,6 +7021,11 @@ p.bt-lv {
 
 .jn-preview__phone {
   width: 100%;
+}
+
+/* the sample text is already there on arrival */
+.jn-preview .m-thread {
+  align-content: start;
 }
 
 .jn-meter-wrap {
@@ -8860,12 +9096,12 @@ p.bt-lv {
   }
 }
 
-/* #how-it-works: "Lower the bar" under the silence section, its columns on the four rules */
+/* #how-it-works: "Lower the bar" straight under the headline */
 .how-ltb {
-  margin-top: var(--s-6);
+  margin-block: var(--s-4) var(--s-3);
 }
 
-/* research: the universe strips are the page's object; the head stays short so they start in the first screen */
+/* research: the universe strips are the page's object; a short head */
 .rx > .masthead {
   padding-bottom: var(--s-4);
 }
@@ -8877,7 +9113,7 @@ p.bt-lv {
 }
 
 @media (min-width: 1024px) {
-  /* research: the lede stands in bay 3 beside the title, the note under it; the strips rise into view */
+  /* research: the lede stands in bay 3 beside the title */
   .rx > .masthead {
     grid-template-rows: auto auto auto;
   }

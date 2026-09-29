@@ -132,8 +132,11 @@ export async function render(ctx) {
       'Choose a tier, confirm where you live and which number to text, read exactly what you agree to, then pay through Stripe. Most days after that, nothing arrives: we only text when three of four models agree.',
       'Izberite paket, potrdite, kje živite in na katero številko pošiljamo, preberite natanko, s čim se strinjate, nato plačajte prek Stripa. Večino dni potem ne prispe nič: SMS pošljemo samo, ko se strinjajo trije od štirih modelov.',
     ),
-    meta: h('div', { class: 'jn-meta' }, launchBox(ctx, backtest), modeNote(ctx, live ? null : L('Demo: nothing is sent, nothing is stored, no number is collected.', 'Demo: nič se ne pošlje, nič se ne shrani, nobena številka se ne zbira.'))),
   });
+  head.classList.add('jn-head');
+  // the launch state and the demo note head the steps (where the paid tiers are offered), so the headline
+  // and its standfirst fill the first screen and step 01 starts right under them
+  const meta = h('div', { class: 'jn-meta jc__meta' }, launchBox(ctx, backtest), modeNote(ctx, live ? null : L('Demo: nothing is sent, nothing is stored, no number is collected.', 'Demo: nič se ne pošlje, nič se ne shrani, nobena številka se ne zbira.')));
 
   // The join colonnade (DESIGN-V2 §5): the seven steps stand on rule 1, a finished step draws a short
   // lintel (Graphite: not a quorum); the live SMS preview stays in view beside them (a bottom sheet on
@@ -182,7 +185,7 @@ export async function render(ctx) {
     );
   };
   drawPreview();
-  const colonnade = h('section', { class: 'jc grid', 'aria-label': L('Join, step by step', 'Pridružitev, korak za korakom') }, stepsWrap, preview);
+  const colonnade = h('section', { class: 'jc grid', 'aria-label': L('Join, step by step', 'Pridružitev, korak za korakom') }, meta, stepsWrap, preview);
   const node = h('div', { class: 'page jn' }, head, colonnade, finalWrap);
 
   const TITLES = {

@@ -1,4 +1,4 @@
-/* Reset, type, the grid of four column rules, focus, grain, reveals, motion preferences, View Transitions. */
+/* Reset, type, the grid of four column rules, focus, grain, reveals */
 
 *,
 *::before,
@@ -123,7 +123,7 @@ b {
   font-weight: 520;
 }
 
-/* ---- focus: 2 px Graphite (Mist on night), 2 px offset --------------------------------------- */
+/* ---- focus: 2 px Graphite (Mist on night), 2 px offset */
 :focus {
   outline: none;
 }
@@ -138,7 +138,7 @@ b {
   outline: none;
 }
 
-/* ---- the grid: four column rules --------------------------------------------------------------- */
+/* ---- the grid: four column rules */
 :root {
   --cols: [full-start] var(--gutter) [r1] minmax(0, 1fr) [r2] minmax(0, 1fr) [r3] minmax(0, 1fr) [r4] var(--gutter) [full-end];
 }
@@ -232,7 +232,7 @@ b {
   }
 }
 
-/* The fixed rules: painted once by index.html, continuous and faint (Graphite 11%), behind everything. */
+/* The fixed rules */
 .rules {
   position: fixed;
   inset: 0;
@@ -288,7 +288,7 @@ b {
   grid-column: r4 / full-end;
 }
 
-/* Opaque full-width surfaces continue the rules themselves (their own --rule). */
+/* Opaque full-width surfaces continue the rules themselves */
 .ruled {
   position: relative;
   isolation: isolate;
@@ -315,11 +315,6 @@ b {
   grid-column: r2 / r3;
 }
 
-.ruled.is-lit-rules::before,
-.ruled.is-lit-rules::after {
-  border-color: var(--line);
-}
-
 #view,
 .site-header,
 .site-footer,
@@ -333,7 +328,7 @@ b {
   min-height: 100svh;
 }
 
-/* Static luminance grain (no WebGL, or the GL composite is not running): an feTurbulence tile, never animated; html[data-grain=gl] hides it. */
+/* Static luminance grain */
 body::before {
   content: '';
   position: fixed;
@@ -355,7 +350,18 @@ html[data-grain='off'] body::before {
   display: none;
 }
 
-/* ---- type (DESIGN-V2 §3.1) ------------------------------------------------------------------------ */
+/* no Mona Sans (blocked): display falls back larger and tighter; app.js sets html.fonts-mona */
+html:not(.fonts-mona) {
+  --font-display: 'Mona Sans', 'Mona Sans Fallback N', 'Mona Sans Fallback ND', 'Mona Sans Fallback W', ui-sans-serif, system-ui, sans-serif;
+}
+
+html:not(.fonts-mona) :is(.display, .asm__h, .asm__d2) {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  word-spacing: -0.04em;
+}
+
+/* ---- type (DESIGN-V2 §3.1) */
 .display {
   font-family: var(--font-display);
   font-stretch: var(--wdth-display);
@@ -379,11 +385,45 @@ html[data-grain='off'] body::before {
   background-color: transparent;
 }
 
+/* grounded headline */
+.display:has(> .display__gl) {
+  display: grid;
+  background-color: transparent;
+}
+
+.display__gl,
+.display__t {
+  grid-area: 1 / 1;
+  display: block;
+  min-width: 0;
+}
+
+.display__gl {
+  color: transparent;
+  user-select: none;
+  pointer-events: none;
+}
+
+.display__g {
+  /* the ground starts at the first letter */
+  padding: 0.02em 0.14em 0.02em 0;
+  margin-inline: 0 -0.14em;
+  background-color: var(--bg);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.display__g * {
+  color: transparent !important;
+  text-decoration: none !important;
+}
+
 .d-hero {
   font-size: var(--t-hero);
   font-weight: 460;
   line-height: var(--lh-hero);
   letter-spacing: var(--tr-hero);
+  word-spacing: var(--ws-hero);
 }
 .d1 {
   font-size: var(--t-d1);
@@ -561,7 +601,7 @@ html[data-grain='off'] body::before {
   justify-self: start;
 }
 
-/* ---- utilities -------------------------------------------------------------------------------- */
+/* ---- utilities */
 .visually-hidden {
   position: absolute !important;
   width: 1px !important;
@@ -582,7 +622,7 @@ html[data-grain='off'] body::before {
   display: none !important;
 }
 
-/* ---- reveals (DESIGN-V2 §4.7) ------------------------------------------------------------------ */
+/* ---- reveals (DESIGN-V2 §4.7) */
 @keyframes q-reveal {
   from {
     opacity: 0;
@@ -665,7 +705,7 @@ html[data-grain='off'] body::before {
   font-style: normal;
 }
 
-/* a monospace point takes a whole cell; pull its neighbours in so "2.3%" does not read "2 . 3 %" */
+/* a monospace point takes a whole cell */
 .dg__c.is-p {
   margin-inline: -0.17em;
 }
@@ -702,7 +742,7 @@ html[data-grain='off'] body::before {
   }
 }
 
-/* ---- the 14:00 boot (DESIGN-V2 §4.2): html.is-boot, set by app.js on a first visit only ---------- */
+/* ---- the 14:00 boot */
 .boot {
   position: fixed;
   z-index: 60;
@@ -746,7 +786,7 @@ html[data-grain='off'] body::before {
   }
 }
 
-/* the boot's own four rules (the page's rules are never touched): they rise from the base, A to D */
+/* the boot's own four rules */
 .boot__rules {
   position: absolute;
   inset: 0;
@@ -777,7 +817,7 @@ html[data-grain='off'] body::before {
   animation-delay: 260ms;
 }
 
-/* ---- motion preferences ------------------------------------------------------------------------- */
+/* ---- motion preferences */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -802,7 +842,7 @@ html[data-grain='off'] body::before {
   transition-duration: 0.01ms !important;
 }
 
-/* ---- View Transitions: the lintel sweep (DESIGN-V2 §4.4) ---------------------------------------- */
+/* ---- View Transitions: the lintel sweep (DESIGN-V2 §4.4) */
 #view {
   view-transition-name: main;
 }
@@ -830,16 +870,25 @@ html[data-grain='off'] body::before {
   animation: none;
 }
 
-/* during a route change the header (its own layer, `chrome`) never fades or tints: it holds still and
-   switches its theme at the swap */
+/* main never travels: app.js puts the old image back where it stood */
+::view-transition-group(main) {
+  animation: none;
+}
+
+/* during a route change the header holds still and switches its theme at the swap */
 :root.is-vt .site-header,
 :root.is-vt .site-header * {
   transition: none !important;
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  /* the old main never fades */
   :root:not([data-motion='reduce'])::view-transition-old(main) {
-    animation: vt-out 180ms var(--e-exit) both;
+    animation: none;
+  }
+  :root:not([data-motion='reduce'])::view-transition-old(main),
+  :root:not([data-motion='reduce'])::view-transition-new(main) {
+    mix-blend-mode: normal;
   }
   :root:not([data-motion='reduce'])::view-transition-new(main) {
     animation: vt-wipe var(--d-3) var(--e-io) both;
@@ -884,13 +933,6 @@ html[data-grain='off'] body::before {
   display: none;
 }
 
-@keyframes vt-out {
-  to {
-    opacity: 0;
-    transform: translate3d(0, -16px, 0);
-  }
-}
-
 @keyframes vt-wipe {
   from {
     clip-path: inset(0 0 100% 0);
@@ -925,7 +967,7 @@ html[data-top='night'] .sweep::before {
   background: var(--mist);
 }
 
-/* Body text arriving after a route change: fades up 12 px over 420 ms after 200 ms (.vt-in on #view). */
+/* Body text arriving after a route change */
 .vt-in .reveal-in {
   animation: q-reveal var(--d-3) var(--e-out) 200ms both;
 }

@@ -202,6 +202,8 @@ const split = new WeakMap();
 // wrapped as span.ml > span.ml__i. Returns the inner spans, or null when the element holds markup other than
 // text (it is then left alone). The words keep their spaces, so textContent is unchanged.
 export function splitLines(el) {
+  // a grounded headline (groundDisplays) splits its text layer; the ground layer stays still
+  el = el?.querySelector?.(':scope > .display__t') ?? el;
   if (!el || split.has(el)) return split.get(el)?.lines ?? null;
   if ([...el.childNodes].some((n) => n.nodeType === 1 && n.tagName !== 'BR')) return null;
   const text = el.textContent.replace(/\s+/g, ' ').trim();
@@ -237,7 +239,50 @@ export function splitLines(el) {
   return lines;
 }
 
+// Display type masks the rules only where there are letters (DESIGN-V2 §3.3). A headline's own box is wider
+// than its balanced lines, so a box ground chops a rule where there is no text. Instead the headline holds
+// two layers in one grid cell: an aria-hidden copy whose inline span paints --bg per line box
+// (box-decoration-break: clone) and, above it, the real text. Both wrap identically (same cell, same
+// type); the ground layer is painted first as a whole, so a line's ground never covers the descenders of
+// the line above. Idempotent; headlines with block content keep a box ground (.display--box).
+const INLINE = new Set(['BR', 'EM', 'I', 'B', 'STRONG', 'SPAN', 'A', 'SMALL', 'SUP', 'SUB', 'ABBR', 'TIME', 'BDI']);
+export function groundDisplays(root) {
+  if (!root?.querySelectorAll) return;
+  const list = root.matches?.('.display') ? [root] : root.querySelectorAll('.display:not(.display--open)');
+  for (const el of list) {
+    if (el.classList.contains('display--open') || el.closest('.lv, .asm') || split.has(el)) continue;
+    if (el.firstElementChild?.classList.contains('display__gl')) continue;
+    const kids = [...el.childNodes];
+    if (!kids.length || !el.textContent.trim()) continue;
+    if (kids.some((n) => n.nodeType === 1 && !INLINE.has(n.tagName))) {
+      el.classList.add('display--box');
+      continue;
+    }
+    const copy = document.createElement('span');
+    copy.className = 'display__g';
+    for (const n of kids) {
+      const c = n.cloneNode(true);
+      if (c.nodeType === 1) {
+        c.removeAttribute('id');
+        c.querySelectorAll?.('[id]').forEach((x) => x.removeAttribute('id'));
+        c.querySelectorAll?.('a, button').forEach((x) => x.setAttribute('tabindex', '-1'));
+      }
+      copy.append(c);
+    }
+    const gl = document.createElement('span');
+    gl.className = 'display__gl';
+    gl.setAttribute('aria-hidden', 'true');
+    gl.append(copy);
+    const txt = document.createElement('span');
+    txt.className = 'display__t';
+    txt.append(...kids);
+    el.append(gl, txt);
+  }
+}
+
 export function unsplitLines(el) {
+  el?.classList?.remove('is-in', 'is-out');
+  el = el?.querySelector?.(':scope > .display__t') ?? el;
   const s = split.get(el);
   if (!s) return;
   split.delete(el);
@@ -256,7 +301,8 @@ export function reveal(el, { delay = 0 } = {}) {
   const last = lines[lines.length - 1];
   const done = () => unsplitLines(el);
   last.addEventListener('animationend', done, { once: true });
-  setTimeout(() => split.has(el) && done(), delay + lines.length * 60 + 1200);
+  const key = el.querySelector(':scope > .display__t') ?? el;
+  setTimeout(() => split.has(key) && done(), delay + lines.length * 60 + 1200);
 }
 
 // A figure as a digit reveal: the sign and arrow fade in, then each digit drops from blank to its value,
