@@ -29,11 +29,13 @@ export const SIM_DEFAULTS = Object.freeze({
   nInitial: 1430,
   ipoScale: 1.2,
   params: {},
-  // Sealed-record year (after the engine freeze): its daily draws come from sub-stream `scenario`.
-  // Scenario 7 was chosen from 12 evaluated sub-streams as the one whose consensus hit rate matches
-  // the research window (~55%); the median over the 12 was ~53%. Set 0 for the unselected stream.
-  scenarioFrom: '2025-10-01',
-  scenario: 7,
+  // No chosen future: by default the simulated world simply continues on its own random stream after
+  // the engine freeze, and the sealed record shows whatever that stream produces. For experiments
+  // only, `scenarioFrom: 'YYYY-MM-DD'` switches the daily and event draws from that date to the
+  // numbered sub-stream `scenario`. Never set it for the published record: picking a sub-stream by
+  // its outcome would be selection bias in our own track record.
+  scenarioFrom: null,
+  scenario: 0,
 });
 
 // Hidden-process parameters (calibrated; see engine/tools/model-report.js).
@@ -538,9 +540,8 @@ export function simulateMarket(options = {}) {
   const diag = o.diagnostics ? { K: DIAG_K, keys: ['mom', 'value', 'quality', 'dtc', 'ivol', 'pead21', 'reversal', 'M', 'mu'], every: 21, data: new Float32Array(Math.ceil(S / 21) * N * DIAG_K).fill(NaN) } : null;
   let rng = makeRng(o.seed, 'daily');
   let rngE = makeRng(o.seed, 'events');
-  // From `scenarioFrom` (the first day after the engine freeze) the daily draws come from a named
-  // sub-stream, so the sealed-record year is a separately chosen scenario of the same world. The
-  // frozen models never see it: their training labels end before the freeze.
+  // Experiments only (off by default, see SIM_DEFAULTS): from `scenarioFrom` the daily and event draws
+  // come from the numbered sub-stream `scenario` instead of continuing the main stream.
   const scenarioIdx = o.scenarioFrom ? idxOnOrAfter(dates, o.scenarioFrom) : -1;
   const hc = c; // alias
 
@@ -873,6 +874,8 @@ export function simulateMarket(options = {}) {
   return {
     kind: 'quorum-sim-market',
     opts: o,
+    // null unless an experiment switched the draws to a numbered sub-stream (never in the default run)
+    scenarioSwitch: scenarioIdx >= 0 && scenarioIdx < S ? { from: dates[scenarioIdx], scenario: o.scenario } : null,
     hidden: H,
     dates,
     S,

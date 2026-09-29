@@ -9,6 +9,7 @@ import {
   FAMS, round, periodRange, episodeSets, outcomeStats, followEquity, monthEnds, monthEndSignals, universeStats, vetoBits, vetoKeysOf,
 } from './backtest.js';
 import { MODEL_VERSION, PERSONS } from './record.js';
+import { buildLaunch, sealedEquity } from './launch.js';
 
 export const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'data');
 export const FILES = ['meta', 'summary', 'issues', 'ledger', 'picks', 'scoreboard', 'deciles', 'hero', 'universe', 'backtest'];
@@ -82,13 +83,90 @@ export function buildMeta(model, rec, validation) {
       llmVeto: 'stand-in',
       counting: 'picks = BUY records, renews = RENEW records; closed = records whose 21-day window has ended (closed or renewed); open = records still inside their window',
       prices: 'Simulated prices, adjusted for simulated 2-for-1 share splits dated before the sealed record; returns are unaffected',
+      stream: model.internals?.market?.scenarioSwitch
+        ? `EXPERIMENT: the simulation switched to sub-stream ${model.internals.market.scenarioSwitch.scenario} from ${model.internals.market.scenarioSwitch.from}`
+        : 'The simulated world continues on its own random stream after the engine freeze; the sealed record is not a chosen scenario',
     },
   };
 }
 
-function followFor(model, picks, from, to) {
-  const pos = picks.map((p) => ({ i: p._i, t: p._t, tExit: p._closeT ?? p._t + 21, cost: p.costOneWay }));
-  return followEquity(model, pos, from, to);
+// ---- alert gap (brief §3.1: the capacity floor doubles if the median gap exceeds 30 bps over 20 picks) --
+
+export const ALERT_GAP = Object.freeze({ window: 20, thresholdBps: 30 });
+
+const fmtInt0 = (x) => String(Math.round(x));
+const bpsEn = (x) => `${x < 0 ? '-' : ''}${fmtInt0(Math.abs(x))} bps`;
+const bpsSl = (x) => `${x < 0 ? '-' : ''}${fmtInt0(Math.abs(x))} b.t.`;
+
+/**
+ * Alert gap of every record (entry open vs the dissemination price, the previous close), the rolling
+ * 20-record medians the brief monitors, and the records whose entry open is the first open after an
+ * earnings filing at the signal close (the simulation prices each earnings reaction at the next open).
+ */
+export function alertGapStats(model, rec, { window = ALERT_GAP.window, thresholdBps = ALERT_GAP.thresholdBps } = {}) {
+  const gap = (p) => (p.entry.open / p.dissemination.price - 1) * 1e4;
+  const gaps = rec.picks.map(gap);
+  const rolling = [];
+  for (let k = window - 1; k < gaps.length; k++) rolling.push(median(gaps.slice(k - window + 1, k + 1)));
+  const m = model.internals?.market;
+  const off = model.internals?.simOffset ?? 0;
+  const filed = new Set();
+  if (m?.filings) for (let f = 0; f < m.filings.F; f++) filed.add(`${m.filings.company[f]}:${m.filings.filingIdx[f]}`);
+  const isEarn = rec.picks.map((p) => filed.has(`${p._i}:${p._t - 1 + off}`));
+  const earn = gaps.filter((_, k) => isEarn[k]);
+  const other = gaps.filter((_, k) => !isEarn[k]);
+  return {
+    n: gaps.length,
+    medianBps: median(gaps),
+    window,
+    thresholdBps,
+    latestWindowBps: rolling.length ? rolling[rolling.length - 1] : null,
+    maxWindowBps: rolling.length ? Math.max(...rolling) : null,
+    windows: rolling.length,
+    windowsAbove: rolling.filter((x) => x > thresholdBps).length,
+    earningsEntries: earn.length,
+    earningsMedianBps: earn.length ? median(earn) : null,
+    otherEntries: other.length,
+    otherMedianBps: other.length ? median(other) : null,
+  };
+}
+
+/** Slovene grammatical number by the last two digits: [1, 2, 3-4, other]. */
+function slForm(n, [one, two, few, many]) {
+  const h = n % 100;
+  return h === 1 ? one : h === 2 ? two : h === 3 || h === 4 ? few : many;
+}
+
+/** Plain EN/SL explanation of the alert gap against the brief's 30 bps monitoring trigger. */
+export function alertGapNote(g) {
+  const T = g.thresholdBps;
+  const latest = g.latestWindowBps;
+  const aboveAll = g.medianBps > T;
+  const aboveLatest = latest !== null && latest > T;
+  const abs = (x) => Math.abs(x);
+  const dirEn = (x) => (x >= 0 ? 'above' : 'below');
+  const dirSl = (x) => (x >= 0 ? 'nad' : 'pod');
+  let en1;
+  let sl1;
+  if (latest === null) {
+    en1 = `The median alert gap is ${bpsEn(g.medianBps)} across all ${g.n} records, ${aboveAll ? 'above' : 'within'} the brief's ${T} bps monitoring trigger; fewer than ${g.window} records exist, so no ${g.window}-pick window is complete yet.`;
+    sl1 = `Mediana razlike ob obvestilu je ${bpsSl(g.medianBps)} pri vseh ${g.n} zapisih, kar je ${aboveAll ? 'nad mejo' : 'pod mejo'} ${T} b.t., pri kateri izhodišča sprožijo nadzor; zapisov je manj kot ${g.window}, zato nobeno okno ${g.window} izbir še ni polno.`;
+  } else {
+    const but = aboveAll !== aboveLatest;
+    const windowsEn = g.windowsAbove ? `${g.windowsAbove} of the ${g.windows} rolling ${g.window}-pick windows so far were above it` : `none of the ${g.windows} rolling ${g.window}-pick windows so far was above it`;
+    const windowsSl = g.windowsAbove ? `nad mejo je bilo doslej ${g.windowsAbove} od ${g.windows} drsečih oken po ${g.window} izbir` : `nobeno od ${g.windows} drsečih oken po ${g.window} izbir doslej ni bilo nad mejo`;
+    en1 = `The median alert gap is ${bpsEn(g.medianBps)} across all ${g.n} records ${but ? 'but' : 'and'} ${bpsEn(latest)} over the latest ${g.window}, which is ${aboveLatest ? 'above' : 'within'} the brief's ${T} bps monitoring trigger (${windowsEn}).`;
+    sl1 = `Mediana razlike ob obvestilu je ${bpsSl(g.medianBps)} pri vseh ${g.n} zapisih${but ? ', a' : ' in'} ${bpsSl(latest)} pri zadnjih ${g.window}, kar je ${aboveLatest ? 'nad mejo' : 'pod mejo'} ${T} b.t., pri kateri izhodišča sprožijo nadzor (${windowsSl}).`;
+  }
+  const en2 = g.earningsEntries
+    ? ` The simulation puts every earnings reaction into the next US open, and a fresh earnings surprise is one of the signals that trigger picks, so the ${g.earningsEntries} record${g.earningsEntries === 1 ? '' : 's'} issued the morning after an earnings filing opened a median ${bpsEn(abs(g.earningsMedianBps))} ${dirEn(g.earningsMedianBps)} the previous close, against ${bpsEn(abs(g.otherMedianBps))} ${dirEn(g.otherMedianBps)} for the other ${g.otherEntries}.`
+    : ' The simulation puts every earnings reaction into the next US open; no record in this period was issued the morning after an earnings filing.';
+  const sl2 = g.earningsEntries
+    ? ` Simulacija vsak odziv na poslovne rezultate postavi v naslednje odprtje borze v ZDA, sveže presenečenje pri dobičku pa je eden od signalov, ki sprožijo izbiro, zato je bila pri ${g.earningsEntries} ${slForm(g.earningsEntries, ['zapisu, izdanem', 'zapisih, izdanih', 'zapisih, izdanih', 'zapisih, izdanih'])} zjutraj po objavi rezultatov, mediana odprtja ${bpsSl(abs(g.earningsMedianBps))} ${dirSl(g.earningsMedianBps)} prejšnjim zaprtjem, pri preostalih ${g.otherEntries} pa ${bpsSl(abs(g.otherMedianBps))} ${dirSl(g.otherMedianBps)} njim.`
+    : ' Simulacija vsak odziv na poslovne rezultate postavi v naslednje odprtje borze v ZDA; v tem obdobju noben zapis ni bil izdan zjutraj po objavi rezultatov.';
+  const en3 = " There are no subscribers yet, so the gap is not herding; the brief's doubling of the capacity floor applies to live subscriber flow and is not triggered by the pre-launch record.";
+  const sl3 = ' Naročnikov še ni, zato razlika ni posledica črednega trgovanja; podvojitev praga zmogljivosti iz izhodišč velja za tok naročil naročnikov po zagonu, zapis pred zagonom je ne sproži.';
+  return { en: en1 + en2 + en3, sl: sl1 + sl2 + sl3 };
 }
 
 export function buildSummary(model, rec) {
@@ -107,7 +185,8 @@ export function buildSummary(model, rec) {
   const pickRef = (p) => (p ? { no: p.no, ticker: revealed(p) ? p.ticker : null, excess: p.outcome.excess, ...(revealed(p) ? {} : { sealed: true }) } : null);
   const worst = measured.reduce((a, b) => (!a || b.outcome.excess < a.outcome.excess ? b : a), null);
   const best = measured.reduce((a, b) => (!a || b.outcome.excess > a.outcome.excess ? b : a), null);
-  const eq = followFor(model, rec.picks, rec.from, model.T - 1);
+  const eq = sealedEquity(model, rec);
+  const gap = alertGapStats(model, rec);
   const vetoes = { rule: 0, llm: 0, human: 0, capped: 0 };
   for (const iss of rec.issues) for (const k of Object.keys(vetoes)) vetoes[k] += iss.vetoes[k];
   return {
@@ -123,7 +202,20 @@ export function buildSummary(model, rec) {
     worstPick: pickRef(worst),
     bestPick: pickRef(best),
     maxDrawdown: r4(maxDrawdown(Array.from(eq.idx))),
-    medianAlertGapBps: round(median(rec.picks.map((p) => (p.entry.open / p.dissemination.price - 1) * 1e4)), 1),
+    medianAlertGapBps: round(gap.medianBps, 1),
+    alertGapNote: alertGapNote(gap),
+    alertGap: {
+      window: gap.window,
+      thresholdBps: gap.thresholdBps,
+      latestWindowBps: round(gap.latestWindowBps, 1),
+      maxWindowBps: round(gap.maxWindowBps, 1),
+      windows: gap.windows,
+      windowsAbove: gap.windowsAbove,
+      earningsEntries: gap.earningsEntries,
+      earningsMedianBps: round(gap.earningsMedianBps, 1),
+      otherMedianBps: round(gap.otherMedianBps, 1),
+      basis: 'entry open vs the dissemination price (previous close) of every BUY and RENEW record; rolling medians over consecutive records in issue order; earnings entries are records whose signal close fell on an earnings filing date',
+    },
     cumulative: { follow: r4(eq.idx[eq.idx.length - 1] - 1), bench: r4(eq.bench[eq.bench.length - 1] - 1) },
     vetoes,
     equity: eq.dates.map((d, k) => [d, r6(eq.idx[k]), r6(eq.bench[k])]),
@@ -313,7 +405,7 @@ export function buildUniverse(model, rule) {
 
 // ---- backtest (HYPOTHETICAL) ------------------------------------------------------------------------------
 
-export function buildBacktest(model, validation) {
+export function buildBacktest(model, validation, rec) {
   const R = validation.research;
   const H = validation.holdout;
   const [rf] = periodRange(model, 'research');
@@ -353,18 +445,44 @@ export function buildBacktest(model, validation) {
     maxDrawdown: r4(ev.maxDrawdown),
   });
   const v = validation.variants;
+  const { raw, clustered } = validation.deflation;
+  // The flat fields describe the published "dsr" (clustered); raw and clustered hold both settings.
   const dsrDetail = {
     basis: 'holdout monthly excess returns of the follow-every-pick portfolio, net of costs',
+    deflation: 'clustered',
     srMonthly: r4(H.monthlySharpe),
     months: H.monthlyExcess.length,
     skew: r3(H.skew),
     kurtosis: r3(H.kurt),
-    nTrials: v.n,
-    varSRMonthly: round(v.varSRMonthly, 6),
-    expectedMaxSharpeMonthly: r4(v.expectedMaxSharpeMonthly),
+    nTrials: clustered.K,
+    varSRMonthly: round(clustered.varSR, 6),
+    expectedMaxSharpeMonthly: r4(clustered.sr0),
     dsrResearch: r4(validation.dsrResearch),
     researchSrMonthly: r4(R.monthlySharpe),
     researchMonths: R.monthlyExcess.length,
+    raw: {
+      nTrials: raw.nTrials,
+      varSRMonthly: round(raw.varSR, 6),
+      expectedMaxSharpeMonthly: r4(raw.sr0),
+      dsr: r4(validation.dsrRaw),
+      dsrResearch: r4(validation.dsrResearchRaw),
+      basis: 'every variant tried counted as an independent trial; SR0 from the variance of all variant Sharpes',
+    },
+    clustered: {
+      K: clustered.K,
+      nTrials: clustered.K,
+      silhouette: r4(clustered.silhouette),
+      silhouetteByK: clustered.silhouetteByK.map(([k, x]) => [k, r4(x)]),
+      sizes: clustered.sizes,
+      clusterSharpes: clustered.sharpes.map((x) => r3(x * Math.sqrt(12))),
+      varSRMonthly: round(clustered.varSR, 6),
+      expectedMaxSharpeMonthly: r4(clustered.sr0),
+      dsr: r4(validation.dsr),
+      dsrResearch: r4(validation.dsrResearch),
+      labels: Array.from(clustered.labels),
+      method: clustered.method,
+      order: 'labels[k] is the cluster of variantSharpes[k]; clusterSharpes are annualised Sharpes of the equal-weight cluster series',
+    },
   };
   return {
     simulated: true,
@@ -398,6 +516,7 @@ export function buildBacktest(model, validation) {
       variants: validation.calibration.variants,
     },
     crashSwitchPeriods: model.crashPeriods.filter(([a]) => a <= H.to),
+    launch: buildLaunch(model, validation, rec),
   };
 }
 
@@ -416,7 +535,7 @@ export function buildAll(model, validation, rec) {
     deciles,
     hero: buildHero(model, rec),
     universe: buildUniverse(model, validation.rule),
-    backtest: buildBacktest(model, validation),
+    backtest: buildBacktest(model, validation, rec),
   };
 }
 

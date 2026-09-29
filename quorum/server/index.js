@@ -1,5 +1,6 @@
 // The Quorum server: node:http + node:sqlite, no framework.
-//   createApp({ db, config, transports, clock, fetch, log }) -> { server, ctx, router, handle, listen, close }
+//   createApp({ db, config, transports, clock, fetch, log, sleep }) -> { server, ctx, router, handle, listen, close }
+//     transports: { sms, email, stripe, push, pager, anthropic (explainer client), engineSource }
 //   node server/index.js   starts it with the configuration from the environment (server/config.js)
 import { createServer } from 'node:http';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -19,7 +20,17 @@ import {
 } from './http.js';
 import { createTwilio, createConsoleSms } from './vendors/twilio.js';
 import { createStripe } from './vendors/stripe.js';
-import { createConsoleEmail } from './vendors/email.js';
+import { makeEmail } from './vendors/email.js';
+import { createWebPush, createConsolePush } from './vendors/push.js';
+import { createAlerts, createConsolePager, createWebhookPager } from './alerts.js';
+import { createExplainer } from './explainer.js';
+import { createAnchorer } from './anchor.js';
+import { createNotifier, registerPushRoutes, realSleep } from './notifier.js';
+import { createPublisher } from './publisher.js';
+import { createReceipts } from './receipts.js';
+import { createScheduler, createDirSource } from './scheduler.js';
+import { registerAdminRoutes } from './admin.js';
+import { registerStatusRoute } from './status.js';
 import { createMessaging } from './messaging.js';
 import { createOptOut, registerOptOutRoutes } from './optout.js';
 import { createAuth, registerAuthRoutes } from './auth.js';
@@ -35,7 +46,7 @@ import { createLogger } from './util.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_WEB_ROOT = join(HERE, '..', 'web');
 
-// makeTransports(config, { fetch, log }) -> { sms, email, stripe } from the configuration.
+// makeTransports(config, { fetch, log, clock }) -> { sms, email, stripe, push } from the configuration.
 export function makeTransports(config, { fetch = globalThis.fetch, log, clock } = {}) {
   const sms =
     config.smsTransport === 'twilio'
@@ -47,7 +58,11 @@ export function makeTransports(config, { fetch = globalThis.fetch, log, clock } 
           fetch,
         })
       : createConsoleSms({ log, clock, authToken: config.twilio.authToken || 'console-auth-token' });
-  const email = createConsoleEmail({ log, clock });
+  const email = makeEmail(config, { fetch, log, clock });
+  const push =
+    config.pushTransport === 'webpush'
+      ? createWebPush({ vapid: config.vapid, fetch, clock })
+      : createConsolePush({ log, clock, publicKey: config.vapid.publicKey || null });
   const stripe = createStripe({
     secretKey: config.stripe.secretKey,
     webhookSecret: config.stripe.webhookSecret,
@@ -55,10 +70,10 @@ export function makeTransports(config, { fetch = globalThis.fetch, log, clock } 
     toleranceSec: config.stripe.toleranceSec,
     fetch,
   });
-  return { sms, email, stripe };
+  return { sms, email, stripe, push };
 }
 
-export function createApp({ db, config, transports = {}, clock, fetch = globalThis.fetch, log, webRoot } = {}) {
+export function createApp({ db, config, transports = {}, clock, fetch = globalThis.fetch, log, webRoot, sleep } = {}) {
   config ??= loadConfig();
   log ??= createLogger();
   db ??= openDb(config.dbPath);
@@ -73,14 +88,34 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
     sms: transports.sms ?? made.sms,
     email: transports.email ?? made.email,
     stripe: transports.stripe ?? made.stripe,
+    push: transports.push ?? made.push,
+    fetch,
+    sleep: sleep ?? realSleep,
     rateLimiter: createRateLimiter({ clock: now }),
-    // Seams for part 2 (publisher, notifier, status callbacks, scheduler, explainer, admin).
     hooks: {},
   };
+  ctx.alerts = createAlerts(ctx, {
+    pager: transports.pager ?? (config.pagerWebhookUrl ? createWebhookPager({ url: config.pagerWebhookUrl, fetch, log }) : createConsolePager({ log })),
+  });
   ctx.messaging = createMessaging(ctx);
   ctx.optout = createOptOut(ctx);
   ctx.auth = createAuth(ctx);
   ctx.billing = createBilling(ctx);
+  // Part 2: the daily pipeline and everything around it.
+  ctx.explainer = createExplainer({ config, db, log, now, client: transports.anthropic ?? null });
+  ctx.anchorer = createAnchorer(ctx);
+  ctx.notifier = createNotifier(ctx);
+  ctx.publisher = createPublisher(ctx, { explainer: ctx.explainer, anchorer: ctx.anchorer, notifier: ctx.notifier });
+  ctx.receipts = createReceipts(ctx);
+  ctx.engineSource = transports.engineSource ?? (config.engineDayDir ? createDirSource(config.engineDayDir) : null);
+  ctx.scheduler = createScheduler(ctx, { publisher: ctx.publisher, notifier: ctx.notifier, source: ctx.engineSource });
+  ctx.hooks.onTwilioStatus = (e) => ctx.receipts.onStatus(e);
+  // runIssueDay({ date, input?, approve?, marketData? }) runs one whole issue day (tests, demo).
+  ctx.hooks.runIssueDay = async ({ date, input = null, approve = null, marketData = null, anchor = true } = {}) => {
+    const day = input ?? (ctx.engineSource ? await ctx.engineSource.getDay(date) : null);
+    if (!day) throw new Error(`runIssueDay: no engine output for ${date}`);
+    return ctx.publisher.runDay(day, { approve, marketData, anchor });
+  };
 
   const root = webRoot ?? config.webRoot ?? DEFAULT_WEB_ROOT;
   const router = createRouter();
@@ -91,6 +126,9 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
   registerBillingRoutes(router, ctx);
   registerTwilioStatusRoute(router, ctx);
   registerOptOutRoutes(router, ctx);
+  registerPushRoutes(router, ctx);
+  registerAdminRoutes(router, ctx);
+  registerStatusRoute(router, ctx);
   ctx.data = registerDataRoutes(router, ctx, join(root, 'data'));
   // Short links used in texts and emails (qrm.si/p/0417, qrm.si/help, qrm.si/account) land on the
   // hash routes of the single-page site.
@@ -200,6 +238,7 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
         server.listen(port, host, () => {
           server.off('error', reject);
           startOutbox();
+          ctx.scheduler.start();
           const a = server.address();
           resolve(`http://${a.family === 'IPv6' ? `[${a.address}]` : a.address}:${a.port}`);
         });
@@ -208,6 +247,7 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
     async close({ closeDb = true } = {}) {
       if (timer) clearInterval(timer);
       timer = null;
+      ctx.scheduler.stop();
       if (server.listening) {
         server.closeAllConnections?.();
         await new Promise((r) => server.close(() => r()));
@@ -245,9 +285,15 @@ async function main() {
     log.error('SMS_TRANSPORT=twilio needs TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN');
     process.exit(1);
   }
+  if (config.pushTransport === 'webpush' && !config.vapid.privateKey) {
+    log.error('PUSH_TRANSPORT=webpush needs VAPID_PRIVATE_KEY (and VAPID_SUBJECT)');
+    process.exit(1);
+  }
   const app = createApp({ config, log });
   const url = await app.listen();
-  log.info(`Quorum server on ${url} (public ${config.publicBaseUrl}); db ${config.dbPath}; sms ${app.ctx.sms.kind}; email ${app.ctx.email.kind}`);
+  log.info(`Quorum server on ${url} (public ${config.publicBaseUrl}); db ${config.dbPath}; sms ${app.ctx.sms.kind}; email ${app.ctx.email.kind}; push ${app.ctx.push.kind}; scheduler ${config.scheduler}`);
+  if (!app.ctx.explainer.enabled) log.warn(`${app.ctx.explainer.disabledReason}: every candidate goes to the approver to write`);
+  if (!config.adminToken) log.warn('ADMIN_TOKEN not set: the approver console is off');
   if (config.sessionSecretGenerated) log.warn('SESSION_SECRET not set: using a per-process secret (sessions end on restart)');
   const stop = async () => {
     await app.close();

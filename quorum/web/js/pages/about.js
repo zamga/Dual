@@ -1,4 +1,4 @@
-// #/about: the company in formation and the named responsible persons (meta.json persons,
+// #about: the company in formation and the named responsible persons (meta.json persons,
 // every one fictional and flagged). SL: first draft, needs native review.
 import { h } from '../dom.js';
 import { masthead, contentSections, page } from './_content.js';

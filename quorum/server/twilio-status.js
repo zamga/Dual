@@ -1,8 +1,7 @@
 // POST /api/webhooks/twilio/status — Twilio delivery receipts (status callbacks).
-// Part 1 (this file): validate X-Twilio-Signature and persist the raw callback, append-only, with
-// the phone numbers replaced by their SHA-256. Part 2 completes it through ctx.hooks.onTwilioStatus
-// (forward-only status moves on `notifications`, 21610 -> opted out, 30003/30005/30006 -> invalid
-// number, 30007 spike -> pause SMS).
+// This file validates X-Twilio-Signature and persists the raw callback, append-only, with the phone
+// numbers replaced by their SHA-256; then ctx.hooks.onTwilioStatus (server/receipts.js) moves the
+// status forward, handles 21610 (opted out), 30003/30005/30006 (invalid number) and 30007 spikes.
 import { sendJson } from './http.js';
 import { iso, sha256 } from './util.js';
 

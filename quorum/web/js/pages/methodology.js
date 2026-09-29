@@ -1,6 +1,7 @@
-// #/methodology: versions, the named models behind every "AI" claim, validation, ship gates,
+// #methodology: versions, the named models behind every "AI" claim, validation, ship gates,
 // look-ahead controls, measurement and the retirement rule. SL: first draft, needs native review.
 import { h } from '../dom.js';
+import { href } from '../router.js';
 import { masthead, contentSections, toc, page, table } from './_content.js';
 import { familyName } from '../ui.js';
 
@@ -173,7 +174,7 @@ export async function render(ctx) {
           }),
         ),
         gateTable,
-        h('p', {}, h('a', { class: 'arrow-link', href: '#/backtest' }, C.validation.backtest, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
+        h('p', {}, h('a', { class: 'arrow-link', href: href('backtest') }, C.validation.backtest, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
       ],
       aside: C.validation.aside,
     },
@@ -186,7 +187,7 @@ export async function render(ctx) {
     'div',
     { class: 'masthead__stack' },
     h('p', { class: 'label' }, C.version({ v: last.version, eff: fmt.date(last.effective), model: meta.modelVersion, frozen: fmt.date(meta.engineFrozen) })),
-    h('p', {}, h('a', { class: 'arrow-link', href: '#/methodology/changelog' }, C.changelog, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
+    h('p', {}, h('a', { class: 'arrow-link', href: href('methodology-changelog') }, C.changelog, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
     toc(ctx, sections, C.toc),
   );
 

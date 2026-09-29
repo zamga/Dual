@@ -12,8 +12,13 @@
 //
 // The approver (Head of Research, or the deputy on her away days) can only remove picks, with a
 // logged reason; on one day neither is available and the day's would-be picks are not issued.
+// Removal reasons are simulated deterministically. Some are read from data known at the signal close
+// (sector concentration, earnings just outside the veto window, high short interest, a sharp run-up,
+// a fresh filing whose figures need reconciling); the process failures (a thesis draft that fails the
+// numeric validator twice, an 8-K after the data cut-off) are drawn from a hash of the seed, the date
+// and the stock. None of them looks at prices after the signal close, so removals carry no hindsight.
 import { createEntry, merkleRoot, commitment } from '../core/ledger.js';
-import { issueSlot, zonedToInstant, formatInZone, addTradingDays, countTradingDays, LJUBLJANA, NEW_YORK } from '../core/calendar.js';
+import { issueSlot, zonedToInstant, formatInZone, addTradingDays, countTradingDays, fmtLong, LJUBLJANA, NEW_YORK } from '../core/calendar.js';
 import { sensitivity } from '../core/quorum-rule.js';
 import { renderSms } from '../core/sms-templates.js';
 import { randomToken } from '../core/hash.js';
@@ -94,10 +99,12 @@ export function methodologyVersions(model, rule) {
       summary: {
         en:
           `Frozen engine (ensemble 1.0.0). A pick needs at least 3 of the 4 model families (trend, fundamental momentum, quality/value, ML ranker) to place the stock in their ${topEn} on the issue date (calibrated on ${years} to 3-6 picks a month) and no veto: top days-to-cover decile, top idiosyncratic-volatility decile, earnings within 3 trading days, pending merger or split, material negative news in the last 48 hours (a stand-in classifier in this simulation). ` +
-          'Caps: 2 new picks per issue, 8 per month, 3 open per sector, no re-issue within 10 trading days of a close except by RENEW, and no new pick that would take the month past 16 alert messages (picks plus exits). Entry at the US open on the issue day, exit at the open 21 trading days later; RENEW if the rule still holds. After bear-market rebounds the crash switch suspends trend and all three other families must agree.',
+          'Caps: 2 new picks per issue, 8 per month, 3 open per sector, no re-issue within 10 trading days of a close except by RENEW, and no new pick that would take the month past 16 alert messages (picks plus exits). Entry at the US open on the issue day, exit at the open 21 trading days later; RENEW if the rule still holds. After bear-market rebounds the crash switch suspends trend and all three other families must agree. ' +
+          `Launch protocol amendment A-1 (${fmtLong(model.periods.freeze, 'en')}): ship gate (d) is also re-tested at every month-end on the holdout plus this sealed record, with the same deflation; SMS alerts wait until it passes.`,
         sl:
           `Zamrznjen model (ansambel 1.0.0). Za izbiro morajo vsaj 3 od 4 modelskih družin (trend, fundamentalni momentum, kakovost/vrednost, rangirnik ML) uvrstiti delnico med ${topSl} na dan izdaje (umerjeno na obdobju ${years} na 3-6 izbir na mesec), in noben veto ne velja: zgornji decil dni za pokritje, zgornji decil idiosinkratične volatilnosti, rezultati v 3 dneh trgovanja, čakajoča združitev ali delitev, pomembna negativna novica v zadnjih 48 urah (v tej simulaciji nadomestni klasifikator). ` +
-          'Omejitve: 2 novi izbiri na izdajo, 8 na mesec, 3 odprte na sektor, brez ponovne izdaje v 10 dneh trgovanja po zaprtju, razen s podaljšanjem, in nobene nove izbire, ki bi v mesecu presegla 16 sporočil (izbire in izhodi). Vstop ob odprtju borze v ZDA na dan izdaje, izstop ob odprtju 21 dni trgovanja pozneje; podaljšanje, če pravilo še velja. Po odboju iz medvedjega trga stikalo za zlom momentuma izključi trend in se morajo strinjati vse tri druge družine.',
+          'Omejitve: 2 novi izbiri na izdajo, 8 na mesec, 3 odprte na sektor, brez ponovne izdaje v 10 dneh trgovanja po zaprtju, razen s podaljšanjem, in nobene nove izbire, ki bi v mesecu presegla 16 sporočil (izbire in izhodi). Vstop ob odprtju borze v ZDA na dan izdaje, izstop ob odprtju 21 dni trgovanja pozneje; podaljšanje, če pravilo še velja. Po odboju iz medvedjega trga stikalo za zlom momentuma izključi trend in se morajo strinjati vse tri druge družine. ' +
+          `Dopolnilo zagonskega protokola A-1 (${fmtLong(model.periods.freeze, 'sl')}): pogoj (d) se ob koncu vsakega meseca znova preveri tudi na preizkusnem obdobju skupaj s tem zapečatenim zapisom, z enako deflacijo; obvestila SMS čakajo, dokler ni izpolnjen.`,
       },
       modelVersion: MODEL_VERSION,
     },
@@ -119,33 +126,84 @@ export function methodologyVersions(model, rule) {
 
 // ---- approver decisions ---------------------------------------------------------------------------------
 
-function reasonsFor(model, rec, dtcCache, records) {
+// Share of BUY candidates on which each process failure is simulated (hash draw per date and stock).
+export const PROCESS_FAILURE_RATES = Object.freeze({ validator_failed: 0.06, late_8k: 0.05, source_mismatch: 0.35 });
+// Order in which reasons are preferred when several apply to one candidate.
+export const REASON_CODES = Object.freeze(['validator_failed', 'late_8k', 'source_mismatch', 'sector_concentration', 'earnings_soon', 'short_interest', 'data_check']);
+
+function draw(seed, code, date, figi) {
+  return mulberry32(hashSeed(seed, 'approver', code, date, figi))();
+}
+
+/** The latest 10-Q or 10-K filed in the 10 trading days up to the signal close, or null. */
+function freshFiling(model, i, s) {
+  const m = model.internals?.market;
+  const fl = m?.filings;
+  if (!fl) return null;
+  const ts = s + (model.internals.simOffset ?? 0);
+  let best = null;
+  for (let f = fl.start[i]; f < fl.end[i]; f++) {
+    const fi = fl.filingIdx[f];
+    if (fi <= ts && fi > ts - 10) best = f;
+  }
+  if (best === null) return null;
+  return { date: m.dates[fl.filingIdx[best]], form: fl.fiscalQ[best] === 4 ? '10-K' : '10-Q' };
+}
+
+/** Every reason the approver could log for removing this BUY candidate, in REASON_CODES order. */
+export function reasonsFor(model, rec, dtcCache, records, seed = model.seed ?? 20260928) {
   const { s, i, t } = rec;
   const N = model.N;
   const date = model.dates[t];
+  const c = model.companies[i];
   const f = model.vetoFlags(s, i);
   const out = [];
-  // 0. sector concentration: the pick would be the third open pick in its sector (the cap allows it)
+  // process: the thesis draft failed the numeric validator twice and the approver did not write it
+  if (draw(seed, 'validator_failed', date, c.figi) < PROCESS_FAILURE_RATES.validator_failed) {
+    out.push({
+      code: 'validator_failed',
+      en: 'The thesis draft failed the numeric validator twice (it quoted figures that are not in the source data); the approver declined to write it by hand before the 13:45 seal, so the pick was removed.',
+      sl: 'Osnutek utemeljitve dvakrat ni prestal numeričnega preverjanja (navajal je številke, ki jih ni v izvornih podatkih); odobriteljica ga pred pečatenjem ob 13:45 ni želela napisati sama, zato je bila izbira odstranjena.',
+    });
+  }
+  // process: a material 8-K after the 22:15 data cut-off
+  if (draw(seed, 'late_8k', date, c.figi) < PROCESS_FAILURE_RATES.late_8k) {
+    out.push({
+      code: 'late_8k',
+      en: 'A material 8-K arrived after the 22:15 data cut-off and is not yet in the model inputs; the approver removed the pick rather than publish it on stale data.',
+      sl: 'Pomembno poročilo 8-K je prispelo po zajemu podatkov ob 22:15 in še ni med vhodnimi podatki modelov; odobriteljica je izbiro odstranila, namesto da bi jo objavila na zastarelih podatkih.',
+    });
+  }
+  // data: a fresh filing whose figures differ between the two fundamentals sources
+  const fresh = freshFiling(model, i, s);
+  if (fresh && draw(seed, 'source_mismatch', date, c.figi) < PROCESS_FAILURE_RATES.source_mismatch) {
+    out.push({
+      code: 'source_mismatch',
+      en: `Figures in the ${fresh.form} filed on ${fmtLong(fresh.date, 'en')} differ between our two fundamentals sources; the approver held the pick until they are reconciled.`,
+      sl: `Podatki iz poročila ${fresh.form}, oddanega ${fmtLong(fresh.date, 'sl')}, se v naših dveh virih temeljnih podatkov razlikujejo; odobriteljica je izbiro zadržala, dokler ne bodo usklajeni.`,
+    });
+  }
+  // sector concentration: the pick would be the third open pick in its sector (the cap allows it)
   const sameSector = records.filter((r) => r !== rec && r.sector === rec.sector && r.t <= t && (r.closeT === null || r.closeT > t) && (r.t < t || r.k < rec.k)).length;
   if (sameSector >= 2) {
     out.push({
       code: 'sector_concentration',
       en: `It would have been the third open pick in ${rec.sector}; the approver kept the sector at two open picks.`,
-      sl: `Bila bi tretja odprta izbira v sektorju ${model.companies[i].sectorSl}; odobriteljica je v sektorju obdržala dve odprti izbiri.`,
+      sl: `Bila bi tretja odprta izbira v sektorju ${c.sectorSl}; odobriteljica je v sektorju obdržala dve odprti izbiri.`,
     });
   }
-  // 1. earnings just outside the 3-day veto window
+  // earnings just outside the 3-day veto window
   if (f.nextEarnings) {
     const k = countTradingDays(date, f.nextEarnings);
     if (k >= 3 && k <= 6) {
       out.push({
         code: 'earnings_soon',
-        en: `Earnings are due on ${f.nextEarnings}, ${k} trading days after entry and just outside the 3-day veto window; the approver declined to publish a pick into the report.`,
-        sl: `Rezultati bodo objavljeni ${f.nextEarnings}, ${k} dni trgovanja po vstopu, tik zunaj 3-dnevnega okna veta; odobriteljica izbire ni želela objaviti tik pred poročilom.`,
+        en: `Earnings are due on ${fmtLong(f.nextEarnings, 'en')}, ${k} trading days after entry and just outside the 3-day veto window; the approver declined to publish a pick into the report.`,
+        sl: `Rezultati bodo objavljeni ${fmtLong(f.nextEarnings, 'sl')}, ${k} dni trgovanja po vstopu, tik zunaj 3-dnevnega okna veta; odobriteljica izbire ni želela objaviti tik pred poročilom.`,
       });
     }
   }
-  // 2. short interest high, though below the top-decile veto
+  // short interest high, though below the top-decile veto
   if (f.daysToCover !== null) {
     let q = dtcCache.get(s);
     if (!q) {
@@ -165,7 +223,7 @@ function reasonsFor(model, rec, dtcCache, records) {
       });
     }
   }
-  // 3. a sharp run-up before the issue: the price check did not complete before the seal
+  // a sharp run-up before the issue: the price check did not complete before the seal
   if (s >= 5) {
     const r5 = model.close[s * N + i] / model.close[(s - 5) * N + i] - 1;
     if (r5 > 0.1) {
@@ -184,7 +242,7 @@ function reasonsFor(model, rec, dtcCache, records) {
  * approver, chosen deterministically. Each decision is taken at a date after all earlier decisions, so
  * adding it never changes the state an earlier decision saw.
  */
-export function sealedRun(model, rule, { maxRemovals = 4, gapDays = 40 } = {}) {
+export function sealedRun(model, rule, { maxRemovals = 5, gapDays = 35, seed = model.seed ?? 20260928 } = {}) {
   const [from, to] = periodRange(model, 'sealed');
   const start = model.dates[from];
   const unissuedTarget = firstOnOrAfter(model, addMonths(start, 7));
@@ -216,7 +274,7 @@ export function sealedRun(model, rule, { maxRemovals = 4, gapDays = 40 } = {}) {
       for (const rec of run.records) {
         if (rec.kind !== 'BUY' || rec.t <= lastDecision || rec.t < lastRm + gapDays || rec.t === unissuedT) continue;
         if (rec.t > to - 5) break;
-        const all = reasonsFor(model, rec, dtcCache, run.records);
+        const all = reasonsFor(model, rec, dtcCache, run.records, seed);
         if (!all.length) continue;
         if (!any) any = { rec, reason: all[0] };
         const f = all.find((x) => !used.has(x.code));
@@ -265,7 +323,7 @@ function nyCloseIso(date) {
  */
 export async function buildRecord(model, rule, { seed = model.seed ?? 20260928, token = SMS_TOKEN } = {}) {
   const { N, T, dates } = model;
-  const { run, from, to, removals, unissuedT } = sealedRun(model, rule);
+  const { run, from, to, removals, unissuedT } = sealedRun(model, rule, { seed });
   const methodology = methodologyVersions(model, rule);
   const versionOn = (date) => (date >= methodology[1].effective ? methodology[1].version : methodology[0].version);
   const recs = run.records;

@@ -1,6 +1,7 @@
 // Shared UI components with behaviour. Every page builds from these so the system stays one system.
 // All take the page ctx (or its t/fmt/locale) and return DOM nodes.
 import { h, copyText, announce } from './dom.js';
+import { href } from './router.js';
 import { t as tGlobal, formatters, pickL } from './i18n.js';
 import { formatInZone, LJUBLJANA } from './core/calendar.js';
 
@@ -122,7 +123,7 @@ export function statStrip(summary, { t = tGlobal, fmt = formatters(), locale } =
     [
       L('Worst pick', 'Najslabša izbira'),
       signed(worst?.excess, { fmt }),
-      worst ? h('span', {}, `#${worst.no} · `, h('a', { href: `#/p/${worst.no}` }, worst.ticker)) : '',
+      worst ? h('span', {}, `#${worst.no} · `, h('a', { href: href('pick', worst.no) }, worst.ticker)) : '',
     ],
     [L('Max drawdown, follow every pick', 'Največji padec, vse izbire'), fmt.pct(summary.maxDrawdown).replace(/^-/, '−'), L('paper portfolio, net', 'papirni portfelj, neto')],
     [L('Median alert gap', 'Mediana razlike ob obvestilu'), fmt.bps(summary.medianAlertGapBps), L('dissemination price vs entry open', 'cena ob objavi proti vstopni ceni')],

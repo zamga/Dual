@@ -12,6 +12,20 @@ function list(value, fallback) {
     .filter(Boolean);
 }
 
+function urls(value, fallback) {
+  const raw = value == null || value === '' ? fallback : value;
+  if (/^(off|none|0)$/i.test(String(raw))) return [];
+  return String(raw)
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+    .filter((s) => /^https:\/\//.test(s));
+}
+
+function num(value, fallback) {
+  const n = Number(value);
+  return value != null && value !== '' && Number.isFinite(n) ? n : fallback;
+}
+
 function bool(value, fallback = false) {
   if (value == null || value === '') return fallback;
   return /^(1|true|on|yes)$/i.test(String(value));
@@ -46,7 +60,19 @@ export function loadConfig(env = process.env, overrides = {}) {
     linkBase: (env.LINK_BASE || 'https://qrm.si').replace(/\/+$/, ''),
     webRoot: env.WEB_ROOT || null, // default resolved in index.js (../web)
     smsTransport: env.SMS_TRANSPORT === 'twilio' ? 'twilio' : 'console',
-    emailTransport: env.EMAIL_TRANSPORT || 'console',
+    emailTransport: env.EMAIL_TRANSPORT === 'postmark' ? 'postmark' : 'console',
+    postmark: {
+      serverToken: env.POSTMARK_SERVER_TOKEN || '',
+      messageStream: env.POSTMARK_MESSAGE_STREAM || 'outbound',
+      baseUrl: (env.POSTMARK_BASE_URL || 'https://api.postmarkapp.com').replace(/\/+$/, ''),
+    },
+    // Web Push (VAPID, RFC 8292). PUSH_TRANSPORT=webpush needs the key pair; console records pushes.
+    pushTransport: env.PUSH_TRANSPORT === 'webpush' ? 'webpush' : 'console',
+    vapid: {
+      publicKey: env.VAPID_PUBLIC_KEY || '',
+      privateKey: env.VAPID_PRIVATE_KEY || '',
+      subject: env.VAPID_SUBJECT || 'mailto:support@qrm.si',
+    },
     emailFrom: env.EMAIL_FROM || 'Quorum <hello@qrm.si>',
     supportEmail: env.SUPPORT_EMAIL || 'support@qrm.si',
     twilio: {
@@ -74,6 +100,32 @@ export function loadConfig(env = process.env, overrides = {}) {
     sessionTtlMs: int(env.SESSION_TTL_DAYS, 30) * DAY,
     magicLinkTtlMs: int(env.MAGIC_LINK_TTL_MIN, 15) * 60_000,
     adminToken: env.ADMIN_TOKEN || '',
+    // Pick fan-out: SMS paced to this many messages per second (the Messaging Service's confirmed
+    // throughput, UNVERIFIED until Twilio quotes it); the whole 14:00 fan-out must end inside the window.
+    fanout: {
+      smsPerSecond: num(env.SMS_MPS, 10),
+      windowSec: 600,
+      pushConcurrency: int(env.PUSH_CONCURRENCY, 8),
+      emailConcurrency: int(env.EMAIL_CONCURRENCY, 4),
+    },
+    // Delivery receipts (brief §4.4).
+    receipts: {
+      invalidCodes: ['30003', '30005', '30006'],
+      invalidAfter: int(env.INVALID_NUMBER_AFTER, 2), // this many consecutive failures with those codes
+      spikeCode: '30007',
+      spikeWindowMs: 10 * 60_000,
+      spikeRatio: num(env.SPIKE_30007_RATIO, 0.02), // pause SMS when 30007s exceed this share of sends
+      spikeMinErrors: int(env.SPIKE_30007_MIN, 1),
+    },
+    // Daily anchoring: OpenTimestamps calendars (OTS_CALENDARS=off to disable) and an RFC 3161 TSA.
+    anchor: {
+      otsCalendars: urls(env.OTS_CALENDARS, 'https://a.pool.opentimestamps.org,https://b.pool.opentimestamps.org,https://a.pool.eternitywall.com'),
+      rfc3161Url: env.RFC3161_URL || '',
+    },
+    // On-call pages go to this webhook (JSON POST) as well as the log and the ops_alerts table.
+    pagerWebhookUrl: env.PAGER_WEBHOOK_URL || '',
+    // Where the engine drops its daily output (<dir>/<YYYY-MM-DD>.json) before 06:00 Ljubljana.
+    engineDayDir: env.ENGINE_DAY_DIR || '',
     smsCountries: list(env.SMS_COUNTRIES, 'SI,AT,DE,HR,IT'),
     scheduler: env.SCHEDULER === 'on' ? 'on' : 'off',
     // Geofence: the request header a trusted edge sets with the client's ISO country (for example
@@ -106,6 +158,9 @@ export function loadConfig(env = process.env, overrides = {}) {
       optout: { capacity: 30, windowMs: 60_000 },
       account: { capacity: 10, windowMs: 60 * 60_000 },
       webhook: { capacity: 1200, windowMs: 60_000 },
+      admin: { capacity: 120, windowMs: 60_000 },
+      adminLogin: { capacity: 10, windowMs: 15 * 60_000 },
+      status: { capacity: 120, windowMs: 60_000 },
     },
     researchTier: env.RESEARCH_TIER !== 'off',
   };
@@ -139,4 +194,7 @@ export const ENV_VARS = [
   'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_SIGNAL_M', 'STRIPE_PRICE_SIGNAL_Y', 'STRIPE_PRICE_RESEARCH_M', 'STRIPE_PRICE_RESEARCH_Y',
   'ANTHROPIC_API_KEY', 'EXPLAINER_MODEL', 'SESSION_SECRET', 'SESSION_TTL_DAYS', 'MAGIC_LINK_TTL_MIN', 'ADMIN_TOKEN',
   'SMS_COUNTRIES', 'SCHEDULER', 'IP_COUNTRY_HEADER', 'GEO_REQUIRE_IP', 'TRUST_PROXY', 'OUTBOX_INTERVAL_MS', 'RESEARCH_TIER',
+  'POSTMARK_SERVER_TOKEN', 'POSTMARK_MESSAGE_STREAM', 'POSTMARK_BASE_URL', 'PUSH_TRANSPORT', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT',
+  'SMS_MPS', 'PUSH_CONCURRENCY', 'EMAIL_CONCURRENCY', 'INVALID_NUMBER_AFTER', 'SPIKE_30007_RATIO', 'SPIKE_30007_MIN',
+  'OTS_CALENDARS', 'RFC3161_URL', 'PAGER_WEBHOOK_URL', 'ENGINE_DAY_DIR',
 ];

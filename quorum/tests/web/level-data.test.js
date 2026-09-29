@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseHero, subsample, lineRandoms, buildVertices, STRIDE, stateAt, excessPath, THRESHOLD } from '../../web/js/hero/level-data.js';
+import { parseHero, subsample, lineRandoms, buildVertices, STRIDE, stateAt, excessPath, thresholdOf, DEFAULT_THRESHOLD } from '../../web/js/hero/level-data.js';
 
 function hero(n = 500) {
   const p = [];
@@ -14,7 +14,16 @@ test('parseHero reads the flat percentile array and counts agreement', () => {
   assert.equal(x.n, 500);
   assert.deepEqual(x.pickRow, [960, 620, 950, 980]);
   assert.equal(x.agree[3], 3);
-  assert.ok(THRESHOLD === 900);
+  assert.equal(x.threshold, DEFAULT_THRESHOLD);
+});
+
+test('the threshold comes from meta.rule.topPct and changes who agrees', () => {
+  assert.equal(thresholdOf({ rule: { topPct: 0.95 } }), 950);
+  assert.equal(thresholdOf({ rule: { topPct: 0.9 } }), 900);
+  assert.equal(thresholdOf(null), DEFAULT_THRESHOLD);
+  const h = hero();
+  assert.equal(parseHero(h, 900).agree[3], 3);
+  assert.equal(parseHero(h, 955).agree[3], 2); // 960 and 980 clear 955; 950 does not
 });
 
 test('subsample is deterministic, sized, sorted and never contains the pick', () => {

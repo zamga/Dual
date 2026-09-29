@@ -9,7 +9,14 @@
 // open-to-open excess return, net of costs, of every stock that meets the variant's rule that day
 // (A, B, C from the families, D from that configuration's out-of-fold ranks, crash switch and vetoes
 // applied; 0 when no stock qualifies). Rows are CV dates (about one a month), columns are variants.
+//
+// Deflation. The DSR deflates by the effective number of independent trials (engine/cluster.js: the
+// variants clustered on the correlation of their CV-period returns, K by the best mean silhouette, one
+// equal-weight return series per cluster, SR0 from K and the variance of the K cluster Sharpes). The
+// raw figure (every one of the variants counted as an independent trial, SR0 from the variance of all
+// their Sharpes) is computed and published beside it. "dsr" is the clustered value.
 import { deflatedSharpe, expectedMaxSharpe, pbo, mean, std, skewness, kurtosis, sharpe, maxDrawdown, spearman } from '../core/stats.js';
+import { clusterVariants, clusterSeries, columnSharpes } from './cluster.js';
 import { DEFAULT_RULE } from '../core/quorum-rule.js';
 import {
   runQuorum, periodRange, picksPerMonth, outcomeStats, lastOnOrBefore, vetoBits, measure, episodeSets,
@@ -21,6 +28,8 @@ export const THRESHOLD_GRID = Object.freeze({
   minAgree: [3, 4],
 });
 export const TARGET_PICKS = Object.freeze({ min: 3, max: 6 });
+export const DSR_MIN = 0.95;
+export const PBO_MAX = 0.3;
 
 // ---- calibration on the research window ------------------------------------------------------------------
 
@@ -168,6 +177,53 @@ export function variantMatrix(model, { grid = THRESHOLD_GRID } = {}) {
   return { rows, cols, matrix, sharpes, periodDays: 20, thresholds, nExp };
 }
 
+// ---- deflation: raw and effective (clustered) trials --------------------------------------------------------
+
+/**
+ * The two deflation settings of a variant matrix. Sharpes are per month (the CV periods are 20 trading
+ * days, scaled by sqrt(21 / 20)).
+ * @returns { raw: {nTrials, varSR, sr0, sharpes}, clustered: {K, nTrials, varSR, sr0, sharpes, sizes,
+ *   labels, silhouette, silhouetteByK} }
+ */
+export function deflation(vm, { kMax = 40 } = {}) {
+  const scale = Math.sqrt(21 / vm.periodDays);
+  const rawSharpes = vm.sharpes.map((x) => x * scale);
+  const nRaw = vm.cols.length;
+  const varRaw = std(rawSharpes) ** 2;
+  const cl = clusterVariants(vm.matrix, { kMax });
+  const clSharpes = columnSharpes(clusterSeries(vm.matrix, cl.labels, cl.K)).map((x) => x * scale);
+  const varCl = cl.K > 1 ? std(clSharpes) ** 2 : 0;
+  return {
+    raw: { nTrials: nRaw, varSR: varRaw, sr0: expectedMaxSharpe(nRaw, varRaw), sharpes: rawSharpes },
+    clustered: {
+      K: cl.K,
+      nTrials: cl.K,
+      varSR: varCl,
+      sr0: expectedMaxSharpe(cl.K, varCl),
+      sharpes: clSharpes,
+      sizes: cl.sizes,
+      labels: cl.labels,
+      silhouette: cl.silhouette,
+      silhouetteByK: cl.silhouetteByK,
+      method: 'average-linkage hierarchical clustering on sqrt((1 - rho) / 2) of the CV-period returns; K by the best mean silhouette over 2..40; one equal-weight return series per cluster',
+    },
+  };
+}
+
+/**
+ * DSR of a monthly excess-return series under one deflation setting ({nTrials, varSR}).
+ * `months` is [[month, excess]] or plain numbers.
+ */
+export function dsrOfSeries(months, trials) {
+  const ex = months.map((x) => (Array.isArray(x) ? x[1] : x));
+  if (ex.length < 3) return null;
+  const sd = std(ex);
+  if (!(sd > 0)) return null;
+  const sk = skewness(ex);
+  const ku = kurtosis(ex);
+  return deflatedSharpe({ sr: mean(ex) / sd, nTrials: trials.nTrials, varSR: trials.varSR, T: ex.length, skew: Number.isFinite(sk) ? sk : 0, kurt: Number.isFinite(ku) ? ku : 3 });
+}
+
 // ---- ship gates on the holdout ------------------------------------------------------------------------------
 
 function fmtP(x, d = 1, locale = 'en') {
@@ -282,23 +338,21 @@ export function validate(model, { log = () => {} } = {}) {
   log(`calibration: ${calibration.variants.length} threshold variants, chosen topPct ${rule.topPct} minAgree ${rule.minAgree} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   const t1 = Date.now();
   const vm = variantMatrix(model);
-  const cvRatio = Math.sqrt(21 / vm.periodDays); // per-CV-period Sharpe -> monthly Sharpe
-  const monthlySharpes = vm.sharpes.map((x) => x * cvRatio);
-  const varSR = std(monthlySharpes) ** 2;
+  const defl = deflation(vm);
   const nTrials = vm.cols.length;
   const P = pbo(vm.matrix, 16);
-  log(`variants: ${nTrials} (${vm.thresholds.length} thresholds x ${vm.nExp} GBDT configurations) over ${vm.rows.length} CV dates; PBO ${P.pbo.toFixed(3)} (${((Date.now() - t1) / 1000).toFixed(1)}s)`);
+  log(`variants: ${nTrials} (${vm.thresholds.length} thresholds x ${vm.nExp} GBDT configurations) over ${vm.rows.length} CV dates; ${defl.clustered.K} effective trials (silhouette ${defl.clustered.silhouette?.toFixed(3)}); PBO ${P.pbo.toFixed(3)} (${((Date.now() - t1) / 1000).toFixed(1)}s)`);
   const t2 = Date.now();
   const composite = compositeABC(model);
   const research = evaluatePeriod(model, rule, 'research', { composite });
   // ---- the holdout is opened here, once, with the frozen rule ----
   const holdout = evaluatePeriod(model, rule, 'holdout', { composite });
   log(`research + holdout evaluated (${((Date.now() - t2) / 1000).toFixed(1)}s)`);
-  const dsr = (ev) =>
-    deflatedSharpe({ sr: ev.monthlySharpe, nTrials, varSR, T: ev.monthlyExcess.length, skew: Number.isFinite(ev.skew) ? ev.skew : 0, kurt: Number.isFinite(ev.kurt) ? ev.kurt : 3 });
-  const dsrHoldout = dsr(holdout);
-  const dsrResearch = dsr(research);
-  const gates = shipGates({ holdout, dsr: dsrHoldout, pbo: P.pbo, nTrials, varSR });
+  const dsrHoldout = dsrOfSeries(holdout.monthlyExcess, defl.clustered);
+  const dsrResearch = dsrOfSeries(research.monthlyExcess, defl.clustered);
+  const dsrHoldoutRaw = dsrOfSeries(holdout.monthlyExcess, defl.raw);
+  const dsrResearchRaw = dsrOfSeries(research.monthlyExcess, defl.raw);
+  const gates = shipGates({ holdout, dsr: dsrHoldout, pbo: P.pbo, nTrials: defl.clustered.K, dsrRaw: dsrHoldoutRaw, nTrialsRaw: nTrials });
   return {
     calibration,
     rule,
@@ -310,13 +364,16 @@ export function validate(model, { log = () => {} } = {}) {
       rowsFrom: vm.rows[0]?.date,
       rowsTo: vm.rows[vm.rows.length - 1]?.date,
       cols: vm.cols,
-      sharpesAnnual: monthlySharpes.map((x) => x * Math.sqrt(12)),
-      varSRMonthly: varSR,
-      expectedMaxSharpeMonthly: expectedMaxSharpe(nTrials, varSR),
+      sharpesAnnual: defl.raw.sharpes.map((x) => x * Math.sqrt(12)),
+      varSRMonthly: defl.raw.varSR,
+      expectedMaxSharpeMonthly: defl.raw.sr0,
     },
+    deflation: defl,
     pbo: P.pbo,
     dsr: dsrHoldout,
+    dsrRaw: dsrHoldoutRaw,
     dsrResearch,
+    dsrResearchRaw,
     research,
     holdout,
     gates,
@@ -325,7 +382,7 @@ export function validate(model, { log = () => {} } = {}) {
 }
 
 /** Brief §3.4.6 gates (a)-(e) on the holdout, net of costs. */
-export function shipGates({ holdout, dsr, pbo: pboValue, nTrials }) {
+export function shipGates({ holdout, dsr, pbo: pboValue, nTrials, dsrRaw = null, nTrialsRaw = null }) {
   const q = holdout.quorum;
   const sets = holdout.sets;
   const gates = [];
@@ -386,18 +443,34 @@ export function shipGates({ holdout, dsr, pbo: pboValue, nTrials }) {
       values: { dExcess: round(d, 6), compositeExcess: round(c, 6), dIC: round(holdout.icMean.D, 4), compositeIC: round(holdout.compositeIC, 4), n: { D: sets.D.n, composite: sets.compositeABC.n } },
     });
   }
-  // (d) DSR >= 0.95 and PBO < 0.3
+  // (d) DSR >= 0.95 and PBO < 0.3, on the holdout exactly as the brief wrote it. `dsr` deflates by the
+  // effective (clustered) number of trials `nTrials`; `dsrRaw`, when given, by all `nTrialsRaw` variants.
   {
-    const pass = dsr >= 0.95 && pboValue < 0.3;
+    const pass = dsr >= DSR_MIN && pboValue < PBO_MAX;
+    const months = holdout.monthlyExcess.length;
+    const hasRaw = dsrRaw !== null && dsrRaw !== undefined && nTrialsRaw;
+    const rawEn = hasRaw ? ` Counting every one of the ${nTrialsRaw} variants as an independent trial gives ${fmtN(dsrRaw, 3)}.` : '';
+    const rawSl = hasRaw ? ` Če vsako od ${nTrialsRaw} različic štejemo kot neodvisen poskus, je DSR ${fmtN(dsrRaw, 3, 'sl')}.` : '';
+    const trialsEn = hasRaw ? `${nTrials} effective independent trials (clusters of the ${nTrialsRaw} variants tried)` : `${nTrials} variants`;
+    const trialsSl = hasRaw ? `${nTrials} dejansko neodvisnih poskusov (skupin izmed ${nTrialsRaw} preizkušenih različic)` : `${nTrials} različic`;
     gates.push({
       id: 'd',
       pass,
       label: { en: 'Deflated Sharpe probability at least 0.95 and PBO below 0.3', sl: 'Verjetnost deflacioniranega Sharpovega razmerja vsaj 0,95 in PBO pod 0,3' },
       detail: {
-        en: `DSR ${fmtN(dsr, 3)} for the holdout's monthly excess returns (Sharpe ${fmtN(holdout.annualisedSharpe, 2)} annualised, ${holdout.monthlyExcess.length} months), deflated for ${nTrials} variants. PBO ${fmtN(pboValue, 3)} (CSCV, 16 blocks) over the research-window variant matrix.`,
-        sl: `DSR ${fmtN(dsr, 3, 'sl')} za mesečne presežne donose preizkusnega obdobja (Sharpe ${fmtN(holdout.annualisedSharpe, 2, 'sl')} letno, ${holdout.monthlyExcess.length} mesecev), deflacionirano za ${nTrials} različic. PBO ${fmtN(pboValue, 3, 'sl')} (CSCV, 16 blokov) na matriki različic raziskovalnega obdobja.`,
+        en: `DSR ${fmtN(dsr, 3)} for the holdout's monthly excess returns (Sharpe ${fmtN(holdout.annualisedSharpe, 2)} annualised, ${months} months), deflated for ${trialsEn}.${rawEn} PBO ${fmtN(pboValue, 3)} (CSCV, 16 blocks) over the research-window variant matrix.`,
+        sl: `DSR ${fmtN(dsr, 3, 'sl')} za mesečne presežne donose preizkusnega obdobja (Sharpe ${fmtN(holdout.annualisedSharpe, 2, 'sl')} letno, ${months} mesecev), deflacionirano za ${trialsSl}.${rawSl} PBO ${fmtN(pboValue, 3, 'sl')} (CSCV, 16 blokov) na matriki različic raziskovalnega obdobja.`,
       },
-      values: { dsr: round(dsr, 4), pbo: round(pboValue, 4), nTrials, sharpeAnnual: round(holdout.annualisedSharpe, 4), months: holdout.monthlyExcess.length, dsrThreshold: 0.95, pboThreshold: 0.3 },
+      values: {
+        dsr: round(dsr, 4),
+        pbo: round(pboValue, 4),
+        nTrials,
+        ...(hasRaw ? { dsrRaw: round(dsrRaw, 4), nTrialsRaw, nTrialsEff: nTrials } : {}),
+        sharpeAnnual: round(holdout.annualisedSharpe, 4),
+        months,
+        dsrThreshold: DSR_MIN,
+        pboThreshold: PBO_MAX,
+      },
     });
   }
   // (e) pick frequency 3-8 a month

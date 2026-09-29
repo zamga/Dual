@@ -1,6 +1,8 @@
-// #/help: SMS help (qrm.si/help is printed in the opt-in text) and the FAQ.
+// #help: SMS help (qrm.si/help is printed in the opt-in text) and the FAQ.
 // SL: first draft, needs native review.
 import { h } from '../dom.js';
+import { href } from '../router.js';
+import { ruleLabels } from '../rule.js';
 import { masthead, contentSections, page, toNode } from './_content.js';
 
 const COPY = {
@@ -24,18 +26,18 @@ const COPY = {
     },
     stop: {
       title: 'Stop the texts',
-      body: `<ol><li><strong>Tap the stop link</strong> at the end of any text (qrm.si/u/…). It opens a confirmation page; one tap turns SMS off immediately, across every message.</li><li>Or switch SMS off in <a href="#/account">your account</a>.</li><li>Or email <span class="mono">support@quorum.example</span> from the address on your account.</li></ol><p>You get one final text confirming that SMS is off. Your subscription is not affected: picks still arrive by email and push.</p>`,
+      body: `<ol><li><strong>Tap the stop link</strong> at the end of any text (qrm.si/u/…). It opens a confirmation page; one tap turns SMS off immediately, across every message.</li><li>Or switch SMS off in <a href="${href('account')}">your account</a>.</li><li>Or email <span class="mono">support@quorum.example</span> from the address on your account.</li></ol><p>You get one final text confirming that SMS is off. Your subscription is not affected: picks still arrive by email and push.</p>`,
     },
     missing: {
       title: 'Not receiving texts?',
-      body: `<ul><li>Most days there is no quorum and no text. Check <a href="#/ledger">the latest issue</a> first.</li><li>Check that your number is verified and SMS is on in <a href="#/account">your account</a>.</li><li>Texts are sent only to numbers in the five SMS countries.</li><li>Some phones file alphanumeric senders separately; look for QUORUM in your message list.</li><li>Delivery status for each channel is on <a href="#/status">the status page</a>.</li></ul>`,
+      body: `<ul><li>Most days there is no quorum and no text. Check <a href="${href('ledger')}">the latest issue</a> first.</li><li>Check that your number is verified and SMS is on in <a href="${href('account')}">your account</a>.</li><li>Texts are sent only to numbers in the five SMS countries.</li><li>Some phones file alphanumeric senders separately; look for QUORUM in your message list.</li><li>Delivery status for each channel is on <a href="${href('status')}">the status page</a>.</li></ul>`,
     },
     faq: {
       title: 'Questions',
       items: [
         ['Is this investment advice?', '<p>No. We publish general research to the public. It does not take your situation into account, and we cannot tell you whether to buy or sell. Support and any assistant will refuse that question.</p>'],
-        ['Why was there no text today?', '<p>Because no stock had at least three of four families in their top decile without a veto. The issue still published at 14:00, with the number of stocks scored and the closest agreement reached.</p>'],
-        ['What does 3/4 mean?', '<p>Three of our four model families ranked the stock in their top decile that day. 4/4 means all four. We show conviction only this way, never as a probability or a score.</p>'],
+        ['Why was there no text today?', '<p>Because no stock had at least three of four families {inTop} without a veto. The issue still published at 14:00, with the number of stocks scored and the closest agreement reached.</p>'],
+        ['What does 3/4 mean?', '<p>Three of our four model families ranked the stock {inTop} that day. 4/4 means all four. We show conviction only this way, never as a probability or a score.</p>'],
         ['When is a pick measured from?', '<p>From the US regular-session open on the issue day, 90 minutes after the text (60 minutes in the weeks when the EU and US change clocks on different dates). The exit is the open 21 trading days later.</p>'],
         ['What is the alert gap?', '<p>The difference between the price when the pick was published and the entry open. We publish it for every pick. If the median gap exceeds 30 bps over 20 picks, the liquidity floor doubles.</p>'],
         ['Why can I not see the ticker of an open pick?', '<p>On the free Ledger tier, open picks are sealed: you see the number, the time and a commitment hash. The ticker is revealed at close, and anyone can check that it matches the hash.</p>'],
@@ -66,18 +68,18 @@ const COPY = {
     },
     stop: {
       title: 'Ustavite SMS',
-      body: `<ol><li><strong>Tapnite povezavo za odjavo</strong> na koncu katerega koli SMS (qrm.si/u/…). Odpre stran za potrditev; en dotik takoj izklopi SMS za vsa sporočila.</li><li>Ali izklopite SMS v <a href="#/account">svojem računu</a>.</li><li>Ali pišite na <span class="mono">support@quorum.example</span> z naslova, ki je povezan z računom.</li></ol><p>Prejmete še en SMS s potrditvijo, da so SMS izklopljeni. Naročnina ostane nespremenjena: izbire še vedno prejemate po e-pošti in s potisnimi obvestili.</p>`,
+      body: `<ol><li><strong>Tapnite povezavo za odjavo</strong> na koncu katerega koli SMS (qrm.si/u/…). Odpre stran za potrditev; en dotik takoj izklopi SMS za vsa sporočila.</li><li>Ali izklopite SMS v <a href="${href('account')}">svojem računu</a>.</li><li>Ali pišite na <span class="mono">support@quorum.example</span> z naslova, ki je povezan z računom.</li></ol><p>Prejmete še en SMS s potrditvijo, da so SMS izklopljeni. Naročnina ostane nespremenjena: izbire še vedno prejemate po e-pošti in s potisnimi obvestili.</p>`,
     },
     missing: {
       title: 'Ne prejemate SMS?',
-      body: `<ul><li>Večino dni ni kvoruma in ni SMS. Najprej preverite <a href="#/ledger">zadnjo izdajo</a>.</li><li>Preverite, ali je vaša številka potrjena in SMS vklopljen v <a href="#/account">vašem računu</a>.</li><li>SMS pošiljamo samo na številke v petih državah SMS.</li><li>Nekateri telefoni alfanumerične pošiljatelje razvrstijo posebej; poiščite QUORUM med sporočili.</li><li>Stanje dostave za vsak kanal je na <a href="#/status">strani s stanjem</a>.</li></ul>`,
+      body: `<ul><li>Večino dni ni kvoruma in ni SMS. Najprej preverite <a href="${href('ledger')}">zadnjo izdajo</a>.</li><li>Preverite, ali je vaša številka potrjena in SMS vklopljen v <a href="${href('account')}">vašem računu</a>.</li><li>SMS pošiljamo samo na številke v petih državah SMS.</li><li>Nekateri telefoni alfanumerične pošiljatelje razvrstijo posebej; poiščite QUORUM med sporočili.</li><li>Stanje dostave za vsak kanal je na <a href="${href('status')}">strani s stanjem</a>.</li></ul>`,
     },
     faq: {
       title: 'Vprašanja',
       items: [
         ['Je to investicijski nasvet?', '<p>Ne. Javnosti objavljamo splošne raziskave. Ne upoštevajo vaših okoliščin in vam ne moremo reči, ali kupiti ali prodati. Podpora in vsak pomočnik bosta to vprašanje zavrnila.</p>'],
-        ['Zakaj danes ni bilo SMS?', '<p>Ker nobena delnica ni imela vsaj treh od štirih družin v zgornjem decilu brez veta. Izdaja je kljub temu izšla ob 14:00, s številom ocenjenih delnic in največjim doseženim soglasjem.</p>'],
-        ['Kaj pomeni 3/4?', '<p>Tri od naših štirih družin modelov so delnico tisti dan uvrstile v zgornji decil. 4/4 pomeni vse štiri. Prepričanje prikažemo samo tako, nikoli kot verjetnost ali oceno.</p>'],
+        ['Zakaj danes ni bilo SMS?', '<p>Ker nobena delnica ni imela vsaj treh od štirih družin {inTop} brez veta. Izdaja je kljub temu izšla ob 14:00, s številom ocenjenih delnic in največjim doseženim soglasjem.</p>'],
+        ['Kaj pomeni 3/4?', '<p>Tri od naših štirih družin modelov so delnico tisti dan uvrstile {inTop}. 4/4 pomeni vse štiri. Prepričanje prikažemo samo tako, nikoli kot verjetnost ali oceno.</p>'],
         ['Od kdaj se meri izbira?', '<p>Od rednega odprtja ameriškega trga na dan izdaje, 90 minut po SMS (60 minut v tednih, ko EU in ZDA premikata uro na različna dneva). Izstop je odprtje 21 trgovalnih dni pozneje.</p>'],
         ['Kaj je razlika ob obvestilu?', '<p>Razlika med ceno ob objavi izbire in vstopno ceno ob odprtju. Objavimo jo za vsako izbiro. Če mediana v 20 izbirah preseže 30 b.t., se prag likvidnosti podvoji.</p>'],
         ['Zakaj ne vidim oznake odprte izbire?', '<p>V brezplačnem paketu Ledger so odprte izbire zapečatene: vidite številko, čas in zgoščeno zavezo. Oznaka se razkrije ob zaprtju in vsakdo lahko preveri, ali se ujema z zgoščeno vrednostjo.</p>'],
@@ -92,10 +94,13 @@ const COPY = {
 
 export async function render(ctx) {
   const C = COPY[ctx.locale] ?? COPY.en;
+  // The rule threshold is data (meta.rule.topPct), never copy.
+  const R = ruleLabels(await ctx.data('meta').catch(() => null), ctx.locale);
+  const fill = (str) => str.replace(/\{inTop\}/g, R.inTop);
   const faq = h(
     'div',
     { class: 'faq' },
-    C.faq.items.map(([q, a]) => h('details', {}, h('summary', {}, q), h('div', { class: 'faq__a' }, toNode(a)))),
+    C.faq.items.map(([q, a]) => h('details', {}, h('summary', {}, q), h('div', { class: 'faq__a' }, toNode(fill(a))))),
   );
   const node = page(
     masthead({ kicker: C.kicker, title: C.h1, lede: C.lede }),

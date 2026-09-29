@@ -1,5 +1,6 @@
 // The designed 404: four columns, none of them reaching the lintel.
 import { h } from '../dom.js';
+import { href } from '../router.js';
 
 export async function render(ctx, { pending = false } = {}) {
   const path = ctx.route?.pathname ?? '/';
@@ -20,8 +21,8 @@ export async function render(ctx, { pending = false } = {}) {
     h(
       'p',
       { class: 'nf__actions c-body' },
-      h('a', { class: 'btn', href: '#/' }, ctx.t('notFound.home'), h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
-      h('a', { class: 'arrow-link', href: '#/ledger' }, ctx.t('notFound.ledger')),
+      h('a', { class: 'btn', href: href('home') }, ctx.t('notFound.home'), h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
+      h('a', { class: 'arrow-link', href: href('ledger') }, ctx.t('notFound.ledger')),
     ),
   );
   return { title, node };

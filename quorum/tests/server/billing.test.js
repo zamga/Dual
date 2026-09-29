@@ -391,3 +391,19 @@ test('billing emails: 3-D Secure link, annual renewal reminder; portal session f
     await t.close();
   }
 });
+
+test('Stripe outage: checkout answers 503 billing_unavailable (nothing charged), then works again', async () => {
+  const t = await makeApp();
+  try {
+    const { client } = await readyUser(t);
+    t.fake.failNext('/v1/checkout/sessions', 500);
+    const down = await client.post('/api/checkout', { tier: 'signal', interval: 'month' });
+    assert.equal(down.status, 503);
+    assert.equal(down.body.error, 'billing_unavailable');
+    assert.equal(down.headers.get('retry-after'), '60');
+    const up = await client.post('/api/checkout', { tier: 'signal', interval: 'month' });
+    assert.equal(up.status, 200);
+  } finally {
+    await t.close();
+  }
+});

@@ -1,6 +1,7 @@
-// The outbox. Every SMS and notification email is a `notifications` row, persisted with a unique
+// The outbox. Every SMS, push and email is a `notifications` row, persisted with a unique
 // idempotency key BEFORE the provider is called; dispatch() claims queued rows and sends them.
-// Part 2's notifier fans picks out through queue() with idemKey `${recId}:${userId}:${channel}`.
+// The notifier (server/notifier.js) fans picks out through queue() with idemKey
+// `${recId}:${userId}:${channel}`.
 import { renderSms, validateSms } from '../core/sms-templates.js';
 import { consentText, maskPhone } from '../core/consent-texts.js';
 import { COUNTRY_TZ } from './geofence.js';
@@ -8,9 +9,34 @@ import { latestConsent } from './consent.js';
 import { isEntitled } from './entitlements.js';
 import { ensureUnsubscribeToken } from './tokens.js';
 import { iso, sha256, quietHoursNextAllowed, addMs } from './util.js';
-import { TwilioError } from './vendors/twilio.js';
 
 const MAX_ATTEMPTS = 5;
+
+export function validTimeZone(tz) {
+  if (typeof tz !== 'string' || !tz || tz.length > 64) return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// recipientZone(db, userId) -> IANA zone for recipient-local quiet hours: the zone the user set in
+// their account, else the phone number's country, else Ljubljana.
+export function recipientZone(db, userId, country = null) {
+  const u = db.get('SELECT timezone FROM users WHERE id = ?', userId);
+  if (u?.timezone && validTimeZone(u.timezone)) return u.timezone;
+  const cc = country ?? db.get('SELECT country FROM phone_numbers WHERE user_id = ?', userId)?.country;
+  return COUNTRY_TZ[cc] || COUNTRY_TZ.SI;
+}
+
+// A provider error is permanent when the provider answered 4xx other than 429 (bad number, bad
+// request, unknown subscription): retrying cannot help.
+function isPermanent(e) {
+  const s = Number(e?.status);
+  return Number.isInteger(s) && s >= 400 && s < 500 && s !== 429 && s !== 408;
+}
 
 export function createMessaging(ctx) {
   const { db, config } = ctx;
@@ -36,18 +62,18 @@ export function createMessaging(ctx) {
   // queue({ userId, channel, kind, to, body, subject?, idemKey, recId?, notBefore? }) -> { id, created }
   // Synchronous, so it can run inside the caller's transaction. SMS rows outside recipient-local
   // quiet hours get not_before = the next 08:00 local.
-  function queue({ userId, channel, kind, to, body, subject = null, idemKey, recId = null, notBefore = null, country = null }) {
+  function queue({ userId, channel, kind, to, body, subject = null, idemKey, recId = null, notBefore = null, country = null, timeZone = null, expiresAt = null, status = 'queued', errorCode = null }) {
     if (!idemKey) throw new Error('messaging.queue: idemKey is required');
     const now = ctx.now();
     let nb = notBefore ? iso(notBefore) : null;
-    if (channel === 'sms') {
-      const tz = COUNTRY_TZ[country] || COUNTRY_TZ.SI;
+    if (channel === 'sms' && status === 'queued') {
+      const tz = timeZone ?? recipientZone(db, userId, country);
       const next = quietHoursNextAllowed(nb ? new Date(nb) : now, tz, config.quietHours);
       if (next) nb = iso(next);
     }
     const r = db.run(
-      `INSERT INTO notifications (idem_key, rec_id, user_id, channel, kind, to_addr, subject, body, body_sha256, status, not_before, queued_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?) ON CONFLICT DO NOTHING`,
+      `INSERT INTO notifications (idem_key, rec_id, user_id, channel, kind, to_addr, subject, body, body_sha256, status, error_code, not_before, expires_at, queued_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       idemKey,
       recId,
       userId,
@@ -57,7 +83,10 @@ export function createMessaging(ctx) {
       subject,
       body,
       sha256(body),
+      status,
+      errorCode,
       nb,
+      expiresAt ? iso(expiresAt) : null,
       iso(now),
       iso(now),
     );
@@ -78,6 +107,11 @@ export function createMessaging(ctx) {
   async function sendOne(row) {
     const now = ctx.now();
     if (row.status !== 'queued') return { id: row.id, skipped: row.status };
+    // A pick text is never sent after its validity (the US open of the issue day): no late texts.
+    if (row.expires_at && new Date(row.expires_at) <= now) {
+      finish(row.id, { status: 'cancelled', error_code: 'expired' });
+      return { id: row.id, cancelled: 'expired' };
+    }
     if (row.not_before && new Date(row.not_before) > now) return { id: row.id, skipped: 'not_before' };
     if (row.channel === 'sms') {
       if (db.getSetting('sms_paused') === '1') return { id: row.id, skipped: 'sms_paused' };
@@ -94,9 +128,12 @@ export function createMessaging(ctx) {
         return { id: row.id, cancelled: 'no_recipient' };
       }
       // Quiet hours are checked again at send time (retries and late dispatch runs).
-      const country = db.get('SELECT country FROM phone_numbers WHERE user_id = ?', row.user_id)?.country;
-      const next = quietHoursNextAllowed(now, COUNTRY_TZ[country] || COUNTRY_TZ.SI, config.quietHours);
+      const next = quietHoursNextAllowed(now, recipientZone(db, row.user_id), config.quietHours);
       if (next) {
+        if (row.expires_at && next >= new Date(row.expires_at)) {
+          finish(row.id, { status: 'cancelled', error_code: 'quiet_hours' });
+          return { id: row.id, cancelled: 'quiet_hours' };
+        }
         finish(row.id, { not_before: iso(next) });
         return { id: row.id, skipped: 'quiet_hours' };
       }
@@ -104,6 +141,7 @@ export function createMessaging(ctx) {
       if (!v.ok) {
         finish(row.id, { status: 'failed', error_code: 'template_invalid' });
         ctx.log.error(`[messaging] refusing to send notification ${row.id}: ${v.errors.join('; ')}`);
+        ctx.alerts?.raise('sms_template_invalid', `Blocked ${row.kind} text ${row.id}: ${v.errors.join('; ')}`, { severity: 'page', dedupeKey: `template:${row.kind}:${row.rec_id ?? ''}` });
         return { id: row.id, failed: 'template_invalid' };
       }
     }
@@ -123,12 +161,12 @@ export function createMessaging(ctx) {
         finish(row.id, { status: 'sent', provider_sid: r?.id ?? null, sent_at: iso(ctx.now()) });
         return { id: row.id, sent: true, sid: r?.id ?? null };
       }
-      // push is part 2 (notifier)
-      finish(row.id, { status: 'queued' });
-      return { id: row.id, skipped: 'channel_not_implemented' };
+      if (row.channel === 'push') return await sendPush(row);
+      finish(row.id, { status: 'failed', error_code: 'unknown_channel' });
+      return { id: row.id, failed: 'unknown_channel' };
     } catch (e) {
       const attempts = db.get('SELECT attempts FROM notifications WHERE id = ?', row.id)?.attempts ?? MAX_ATTEMPTS;
-      const permanent = e instanceof TwilioError && e.status >= 400 && e.status < 500 && e.status !== 429;
+      const permanent = isPermanent(e);
       if (permanent || attempts >= MAX_ATTEMPTS) {
         finish(row.id, { status: 'failed', error_code: String(e.code ?? e.status ?? 'error') });
       } else {
@@ -137,6 +175,47 @@ export function createMessaging(ctx) {
       ctx.log.warn(`[messaging] notification ${row.id} (${row.channel} ${row.kind}) failed: ${e.message}`);
       return { id: row.id, error: e.message };
     }
+  }
+
+  // Web Push to every live subscription of the user (one notification row per user and item).
+  // 404/410 revokes that subscription; the row is sent when at least one device accepted it.
+  async function sendPush(row) {
+    if (!ctx.push) {
+      finish(row.id, { status: 'queued' });
+      return { id: row.id, skipped: 'no_push_transport' };
+    }
+    const subs = db.all('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ? AND revoked_at IS NULL ORDER BY id', row.user_id);
+    if (!subs.length) {
+      finish(row.id, { status: 'cancelled', error_code: 'no_subscription' });
+      return { id: row.id, cancelled: 'no_subscription' };
+    }
+    let sent = 0;
+    let gone = 0;
+    let lastError = null;
+    const ids = [];
+    for (const s of subs) {
+      try {
+        const r = await ctx.push.send({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, row.body, { ttl: 3600, urgency: 'normal' });
+        if (r.gone) {
+          gone++;
+          db.run('UPDATE push_subscriptions SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?', iso(ctx.now()), s.id);
+        } else {
+          sent++;
+          if (r.id) ids.push(r.id);
+        }
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (sent > 0) {
+      finish(row.id, { status: 'sent', provider_sid: ids[0] ?? `push:${sent}/${subs.length}`, sent_at: iso(ctx.now()) });
+      return { id: row.id, sent: true, devices: sent };
+    }
+    if (gone === subs.length) {
+      finish(row.id, { status: 'cancelled', error_code: 'subscription_gone' });
+      return { id: row.id, cancelled: 'subscription_gone' };
+    }
+    throw lastError ?? new Error('push: no device accepted the message');
   }
 
   // dispatch(ids) -> results; sends the given queued rows that are due.

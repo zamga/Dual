@@ -47,6 +47,19 @@ test('gates follow brief §3.4.6 from the computed values', () => {
   }
 });
 
+test('gate (d) stays on the holdout, deflated by the effective trials, with the raw count beside it', () => {
+  const g = shipGates({ holdout: holdout(), dsr: 0.66, pbo: 0.07, nTrials: 5, dsrRaw: 0.25, nTrialsRaw: 480 })[3];
+  assert.equal(g.pass, false);
+  assert.equal(g.values.nTrialsEff, 5);
+  assert.equal(g.values.nTrialsRaw, 480);
+  assert.equal(g.values.dsrRaw, 0.25);
+  assert.match(g.detail.en, /deflated for 5 effective independent trials \(clusters of the 480 variants tried\)/);
+  assert.match(g.detail.en, /480 variants as an independent trial gives 0\.250/);
+  assert.match(g.detail.sl, /5 dejansko neodvisnih poskusov/);
+  // the clustered DSR decides the gate, never the raw one
+  assert.equal(shipGates({ holdout: holdout(), dsr: 0.96, pbo: 0.07, nTrials: 5, dsrRaw: 0.25, nTrialsRaw: 480 })[3].pass, true);
+});
+
 const PICK = {
   kind: 'BUY', no: '0042', priorNo: null, ticker: 'KRST', name: 'Karst Robotics Inc.', sector: 'Industrials', sectorSl: 'Industrija',
   agreement: 3, agreeing: ['A', 'C', 'D'], crashSwitch: false, topPct: 0.95,

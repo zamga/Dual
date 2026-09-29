@@ -3,10 +3,17 @@
 import { mulberry32, hashSeed } from '../core/random.js';
 
 export const FAMS = ['A', 'B', 'C', 'D'];
-export const THRESHOLD = 900; // top decile on the 0–1000 scale of hero.json
+// The rule threshold on the 0–1000 scale of hero.json comes from the data (meta.rule.topPct, calibrated
+// per methodology version). DEFAULT_THRESHOLD is used only when meta.json is unavailable.
+export const DEFAULT_THRESHOLD = 950;
+export function thresholdOf(meta) {
+  const v = meta?.rule?.topPct;
+  return Number.isFinite(v) && v > 0 && v < 1 ? Math.round(v * 1000) : DEFAULT_THRESHOLD;
+}
 
 // hero.p is flat [A0,B0,C0,D0, A1,…]; -1 = not scored by that family.
-export function parseHero(hero) {
+export function parseHero(hero, threshold = DEFAULT_THRESHOLD) {
+  const THRESHOLD = threshold;
   const p = hero.p;
   const n = Math.floor(p.length / 4);
   const pick = hero.pick;
@@ -17,7 +24,7 @@ export function parseHero(hero) {
     for (let f = 0; f < 4; f++) if (p[i * 4 + f] >= THRESHOLD) c++;
     agree[i] = c;
   }
-  return { n, p, pick, pickRow, agree };
+  return { n, p, pick, pickRow, agree, threshold };
 }
 
 // A deterministic subsample of k rows (never the pick), seeded by the issue date, sorted ascending.

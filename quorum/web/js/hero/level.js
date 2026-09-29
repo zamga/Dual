@@ -5,7 +5,8 @@
 // Native scroll only: progress = how far the tall section has scrolled. No scroll hijacking.
 import { h, svg, prefersReducedMotion } from '../dom.js';
 import { formatInZone, LJUBLJANA, fmtDDMMYY } from '../core/calendar.js';
-import { parseHero, subsample, lineRandoms, buildVertices, STRIDE, stateAt, ease, excessPath, THRESHOLD, FAMS } from './level-data.js';
+import { parseHero, subsample, lineRandoms, buildVertices, STRIDE, stateAt, ease, excessPath, thresholdOf, FAMS } from './level-data.js';
+import { ruleLabels } from '../rule.js';
 import { phone as phoneEl, signed, quorumBadge, familyName } from '../ui.js';
 
 const MIST = [201 / 255, 207 / 255, 210 / 255];
@@ -29,13 +30,12 @@ const COPY = {
     headline: ['No quorum,', 'no text.'],
     kicker: 'The Level · our latest closed pick',
     cap0: (x) =>
-      `Every US trading day four independent model families rank about ${x.n} stocks. A pick exists only when three of them put the same stock in their top decile. Most days, none do.`,
+      `Every US trading day four independent model families rank about ${x.n} stocks. A pick exists only when three of them put the same stock ${x.R.inTop}. Most days, none do.`,
     cap1: (x) => `Issue #${x.issueNo}, ${x.date}. ${x.nScored} stocks scored. One stood on ${x.agreement === 4 ? 'all four columns' : 'three of four columns'}: ${x.ticker}.`,
     cap2: (x) => `Sealed at 13:45. Published and texted at 14:00:00 ${x.tz}. Entry at the US open, ${x.minutes} minutes later.`,
     cap3: 'Our latest closed pick. Whatever happened.',
     meta: (x) => `Issue #${x.issueNo} · ${x.date} · ${x.nScored} scored · ${x.q}`,
     q: (n) => (n === 1 ? '1 quorum' : `${n} quorums`),
-    topDecile: 'Top decile',
     steps: ['The issue', 'The quorum', 'The text', 'The result'],
     stepsLabel: 'The Level, step by step',
     jump: (i, s) => `Step ${i}: ${s}`,
@@ -54,11 +54,11 @@ const COPY = {
     altTitle: 'The Level: our latest closed pick, described',
     alt1: (x) =>
       `Issue #${x.issueNo} was published on ${x.date} at 14:00 ${x.tz}. ${x.nScored} stocks were scored by four model families. ${x.q}. The chart draws every stock as a line across the four columns A to D, at the height of its percentile in each family.`,
-    alt2: (x) => `The pick: ${x.ticker}, ${x.name} (fictional), ${x.agreement} of 4 families in their top decile.`,
-    altTable: 'Percentile the pick received from each family (top decile is 90 and above)',
+    alt2: (x) => `The pick: ${x.ticker}, ${x.name} (fictional), ${x.agreement} of 4 families ${x.R.inTop}.`,
+    altTable: (x) => `Percentile the pick received from each family (${x.R.top} is ${x.R.plus})`,
     altFamily: 'Family',
     altPct: 'Percentile',
-    altTop: 'Top decile',
+    altTop: (x) => x.R.topCap,
     yes: 'yes',
     no: 'no',
     altSms: 'The SMS sent at 14:00:00:',
@@ -69,13 +69,12 @@ const COPY = {
     headline: ['Brez kvoruma', 'ni SMS.'],
     kicker: 'Nivelir · naša zadnja zaprta izbira',
     cap0: (x) =>
-      `Vsak dan trgovanja v ZDA štiri neodvisne družine modelov rangirajo približno ${x.n} delnic. Izbira nastane samo, ko tri isto delnico uvrstijo v svoj zgornji decil. Večino dni se to ne zgodi.`,
+      `Vsak dan trgovanja v ZDA štiri neodvisne družine modelov rangirajo približno ${x.n} delnic. Izbira nastane samo, ko tri isto delnico uvrstijo ${x.R.inTop}. Večino dni se to ne zgodi.`,
     cap1: (x) => `Izdaja #${x.issueNo}, ${x.date}. ${x.nScored} ocenjenih delnic. Ena je stala na ${x.agreement === 4 ? 'vseh štirih stebrih' : 'treh od štirih stebrov'}: ${x.ticker}.`,
     cap2: (x) => `Zapečateno ob 13:45. Objavljeno in poslano ob 14:00:00 ${x.tz}. Vstop ob odprtju ameriškega trga, ${x.minutes} minut pozneje.`,
     cap3: 'Naša zadnja zaprta izbira. Ne glede na izid.',
     meta: (x) => `Izdaja #${x.issueNo} · ${x.date} · ${x.nScored} ocenjenih · ${x.q}`,
     q: (n) => (n === 1 ? '1 kvorum' : `${n} kvorumi`),
-    topDecile: 'Zgornji decil',
     steps: ['Izdaja', 'Kvorum', 'SMS', 'Izid'],
     stepsLabel: 'Nivelir po korakih',
     jump: (i, s) => `Korak ${i}: ${s}`,
@@ -94,11 +93,11 @@ const COPY = {
     altTitle: 'Nivelir: opis naše zadnje zaprte izbire',
     alt1: (x) =>
       `Izdaja #${x.issueNo} je izšla ${x.date} ob 14:00 ${x.tz}. Štiri družine modelov so ocenile ${x.nScored} delnic. ${x.q}. Grafikon vsako delnico nariše kot črto čez štiri stebre od A do D, na višini njenega percentila v posamezni družini.`,
-    alt2: (x) => `Izbira: ${x.ticker}, ${x.name} (izmišljeno), ${x.agreement} od 4 družin v zgornjem decilu.`,
-    altTable: 'Percentil, ki ga je izbira dobila v posamezni družini (zgornji decil je 90 in več)',
+    alt2: (x) => `Izbira: ${x.ticker}, ${x.name} (izmišljeno), ${x.agreement} od 4 družin ${x.R.inTop}.`,
+    altTable: (x) => `Percentil, ki ga je izbira dobila v posamezni družini (${x.R.top} je ${x.R.plus})`,
     altFamily: 'Družina',
     altPct: 'Percentil',
-    altTop: 'Zgornji decil',
+    altTop: (x) => x.R.topCap,
     yes: 'da',
     no: 'ne',
     altSms: 'SMS, poslan ob 14:00:00:',
@@ -382,7 +381,9 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
   const locale = ctx.locale;
   const C = COPY[locale] ?? COPY.en;
   const fmt = ctx.fmt;
-  const parsed = parseHero(hero);
+  const THRESHOLD = thresholdOf(meta);
+  const R = ruleLabels(meta, locale);
+  const parsed = parseHero(hero, THRESHOLD);
   const seedKey = hero.issueDate;
   const sub = subsample(parsed.n, hero.pick.index, 300, seedKey);
   const rand = lineRandoms(parsed.n, seedKey);
@@ -403,6 +404,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     tz,
     minutes: 90,
     q: C.q(hero.quorumCount),
+    R,
   };
   if (lj.date === hero.issueDate) {
     // minutes from 14:00 to the US open, from the calendar rather than assumed
@@ -443,7 +445,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     const at = agreeing.has(FAMS[k]) ? THRESHOLD : v;
     el.style.top = `${((1000 - at) / 1000) * 100}%`;
   });
-  const bandLabel = h('span', { class: 'lv__bandlabel label' }, `${C.topDecile} · 90+`);
+  const bandLabel = h('span', { class: 'lv__bandlabel label' }, R.band);
   const pickLabel = h('span', { class: 'lv__picklabel' }, h('b', { class: 'ticker' }, hero.pick.ticker), ' ', h('span', {}, `${agreement}/4`));
 
   const plot = h('div', { class: 'lv__plot flush' }, field.el, over, ...valEls, bandLabel, pickLabel);
@@ -523,7 +525,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     h('h2', {}, C.altTitle),
     h('p', {}, C.alt1(X)),
     h('p', {}, C.alt2(X)),
-    h('table', {}, h('caption', {}, C.altTable), h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, C.altFamily), h('th', { scope: 'col' }, C.altPct), h('th', { scope: 'col' }, C.altTop))), h('tbody', {}, altRows)),
+    h('table', {}, h('caption', {}, C.altTable(X)), h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, C.altFamily), h('th', { scope: 'col' }, C.altPct), h('th', { scope: 'col' }, C.altTop(X)))), h('tbody', {}, altRows)),
     h('p', {}, `${C.altSms} ${hero.sms}`),
     h(
       'p',

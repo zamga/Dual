@@ -1,9 +1,11 @@
-// Home (#/): The Level, the Silence Calendar, how a pick happens, the sealed ledger with in-browser
+// Home (#, empty hash): The Level, the Silence Calendar, how a pick happens, the sealed ledger with in-browser
 // verification and the headline statistics, the scoreboard teaser, the pricing teaser.
 import { h, announce } from '../dom.js';
+import { href } from '../router.js';
 import { createLevel } from '../hero/level.js';
 import { silenceCalendar } from '../charts/silence-calendar.js';
 import { hashChip, timestamp, statStrip, trackRecordLabel, sectionHead, familyName, familyDef } from '../ui.js';
+import { ruleLabels } from '../rule.js';
 
 const T = {
   en: {
@@ -31,7 +33,7 @@ const T = {
         },
         {
           time: '06:00',
-          title: 'Three of four must put it in their top decile.',
+          title: 'Three of four must put it in their {top}.',
           body: 'That is the quorum. Two agreeing families is not enough, however high they rank it. Conviction is only ever shown as 3/4 or 4/4.',
         },
         {
@@ -109,9 +111,9 @@ const T = {
       lede: 'Tiers differ in data breadth, never in pick timing. Every subscriber receives the same text in the same second.',
       honest: 'Expect picks to beat the benchmark 53–58% of the time. A sustained live rate above 60% is treated as a bug until proven otherwise.',
       tiers: [
-        { name: 'Ledger', price: '€0', per: 'always free', items: ['The public ledger and the daily issue', 'Closed picks revealed; open picks sealed', 'Per-model scoreboard and methodology', 'Weekly Sunday email'], cta: 'Open the ledger', href: '#/ledger' },
-        { name: 'Signal', price: '€19', per: 'a month · €190 a year', items: ['Every BUY, CLOSE and RENEW at 14:00 by SMS, push and email', 'Full pick notes: thesis, colonnade chart, sensitivity', 'Full ledger CSV'], cta: 'Join Signal', href: '#/join?tier=signal' },
-        { name: 'Research', price: '€39', per: 'a month · €390 a year', items: ['Everything in Signal', 'The daily full-universe dataset: about 1,300 stocks', 'Screener, decile and IC dashboards, weekly factor report'], cta: 'Join Research', href: '#/join?tier=research', note: 'Launch depends on counsel review.' },
+        { name: 'Ledger', price: '€0', per: 'always free', items: ['The public ledger and the daily issue', 'Closed picks revealed; open picks sealed', 'Per-model scoreboard and methodology', 'Weekly Sunday email'], cta: 'Open the ledger', href: href('ledger') },
+        { name: 'Signal', price: '€19', per: 'a month · €190 a year', items: ['Every BUY, CLOSE and RENEW at 14:00 by SMS, push and email', 'Full pick notes: thesis, colonnade chart, sensitivity', 'Full ledger CSV'], cta: 'Join Signal', href: href('join', 'signal') },
+        { name: 'Research', price: '€39', per: 'a month · €390 a year', items: ['Everything in Signal', 'The daily full-universe dataset: about 1,300 stocks', 'Screener, decile and IC dashboards, weekly factor report'], cta: 'Join Research', href: href('join', 'research'), note: 'Launch depends on counsel review.' },
       ],
       policies: 'No trial · 14-day refund · one-click cancellation · prices include VAT',
       link: 'Pricing and policies',
@@ -136,7 +138,7 @@ const T = {
       lede: 'Vsaka družina rangira vse delnice na podlagi svojih dokazov. Izbira potrebuje soglasje treh, noben veto se ne sme sprožiti, imenovana oseba pa lahko reče samo ne. Nato se zapečati, preden jo kdor koli vidi.',
       steps: [
         { time: '06:00', title: 'Štiri neodvisne družine ocenijo vsako delnico.', body: 'Približno 1.300 likvidnih ameriških delnic: cena nad 5 $, tržna vrednost nad 2 mrd $, dnevni promet nad 25 mio $. Vsaka družina jih rangira od 0 do 100.' },
-        { time: '06:00', title: 'Tri od štirih jo morajo uvrstiti v zgornji decil.', body: 'To je kvorum. Dve družini nista dovolj, ne glede na to, kako visoko jo uvrstita. Prepričanje prikažemo samo kot 3/4 ali 4/4.' },
+        { time: '06:00', title: 'Tri od štirih jo morajo uvrstiti med {top}.', body: 'To je kvorum. Dve družini nista dovolj, ne glede na to, kako visoko jo uvrstita. Prepričanje prikažemo samo kot 3/4 ali 4/4.' },
         { time: '11:30', title: 'Pet vetov jo lahko še ustavi.', body: 'Močno kratko prodana (zgornji decil dni pokritja), nenavadno volatilna sama po sebi (zgornji decil idiosinkratske volatilnosti), rezultati v treh trgovalnih dneh, napovedana združitev ali razdelitev ali pomembna negativna novica v zadnjih 48 urah.' },
         { time: '12:00', title: 'Imenovana odobriteljica lahko izbiro odstrani. Nikoli doda.', body: 'Vsaka odstranitev je zabeležena z razlogom in javno šteta. Brez odobritelja ni izbire.' },
         { time: '13:45', title: 'Zapečateno.', body: 'Zapis je kanoničen JSON, zgoščen s SHA-256 in povezan s prejšnjim zapisom. Oznaka ostane skrita za zgoščeno zavezo, dokler se izbira ne zapre.' },
@@ -188,9 +190,9 @@ const T = {
       lede: 'Paketi se razlikujejo po obsegu podatkov, nikoli po času izbir. Vsak naročnik prejme isti SMS v isti sekundi.',
       honest: 'Pričakujte, da bodo izbire premagale merilo v 53–58 % primerov. Trajen delež nad 60 % obravnavamo kot napako, dokler se ne dokaže drugače.',
       tiers: [
-        { name: 'Ledger', price: '0 €', per: 'vedno brezplačno', items: ['Javna knjiga in dnevna izdaja', 'Zaprte izbire razkrite, odprte zapečatene', 'Preglednica modelov in metodologija', 'Tedenska nedeljska e-pošta'], cta: 'Odpri knjigo', href: '#/ledger' },
-        { name: 'Signal', price: '19 €', per: 'na mesec · 190 € na leto', items: ['Vsak NAKUP, ZAPRTJE in PODALJŠANJE ob 14:00 po SMS, potisnih obvestilih in e-pošti', 'Celotni zapiski izbir: teza, graf stebrov, občutljivost', 'Celotna knjiga v CSV'], cta: 'Naroči Signal', href: '#/join?tier=signal' },
-        { name: 'Research', price: '39 €', per: 'na mesec · 390 € na leto', items: ['Vse iz paketa Signal', 'Dnevni nabor podatkov celotnega univerzuma: približno 1.300 delnic', 'Iskalnik, nadzorne plošče decilov in IC, tedensko poročilo o faktorjih'], cta: 'Naroči Research', href: '#/join?tier=research', note: 'Začetek je odvisen od pravnega pregleda.' },
+        { name: 'Ledger', price: '0 €', per: 'vedno brezplačno', items: ['Javna knjiga in dnevna izdaja', 'Zaprte izbire razkrite, odprte zapečatene', 'Preglednica modelov in metodologija', 'Tedenska nedeljska e-pošta'], cta: 'Odpri knjigo', href: href('ledger') },
+        { name: 'Signal', price: '19 €', per: 'na mesec · 190 € na leto', items: ['Vsak NAKUP, ZAPRTJE in PODALJŠANJE ob 14:00 po SMS, potisnih obvestilih in e-pošti', 'Celotni zapiski izbir: teza, graf stebrov, občutljivost', 'Celotna knjiga v CSV'], cta: 'Naroči Signal', href: href('join', 'signal') },
+        { name: 'Research', price: '39 €', per: 'na mesec · 390 € na leto', items: ['Vse iz paketa Signal', 'Dnevni nabor podatkov celotnega univerzuma: približno 1.300 delnic', 'Iskalnik, nadzorne plošče decilov in IC, tedensko poročilo o faktorjih'], cta: 'Naroči Research', href: href('join', 'research'), note: 'Začetek je odvisen od pravnega pregleda.' },
       ],
       policies: 'Brez preizkusa · vračilo v 14 dneh · odpoved z enim klikom · cene vključujejo DDV',
       link: 'Cene in pravila',
@@ -241,7 +243,7 @@ function calendarSection(ctx, C) {
     h('div', { class: 'c-meta sc-meta' }, legend, h('p', { class: 'label' }, C.readout), readout, h('p', { class: 'small muted' }, C.how)),
     figure,
     caption,
-    h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: '#/ledger' }, C.browse, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
+    h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('ledger') }, C.browse, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
   );
   ctx
     .data('issues')
@@ -274,6 +276,7 @@ function howSection(ctx, C, hero, meta) {
   const pick = hero.pick;
   const row = [0, 1, 2, 3].map((k) => hero.p[pick.index * 4 + k]);
   const agree = new Set(pick.agreeing);
+  const R = ruleLabels(meta, ctx.locale);
 
   const famRow = h(
     'ol',
@@ -289,7 +292,8 @@ function howSection(ctx, C, hero, meta) {
     ),
   );
 
-  // the quorum example: columns at the four rules, the lintel at the 90th percentile
+  // the quorum example: columns at the four rules, the lintel at the rule threshold (meta.rule.topPct)
+  const thr = h('span', { class: 'how-quorum__thr' }, h('span', { class: 'label' }, R.pctileNum != null ? String(R.pctileNum) : ''));
   const colH = (v) => Math.max(0, v) / 10; // 0..100
   const quorumFig = h(
     'figure',
@@ -297,7 +301,7 @@ function howSection(ctx, C, hero, meta) {
     h(
       'div',
       { class: 'how-quorum__plot', 'aria-hidden': 'true' },
-      h('span', { class: 'how-quorum__thr' }, h('span', { class: 'label' }, '90')),
+      thr,
       h('span', { class: 'how-quorum__lintel' }),
       ['A', 'B', 'C', 'D'].map((f, k) => {
         const col = h('span', { class: ['how-col', agree.has(f) ? 'is-agree' : 'is-miss', k === 3 && 'is-last'] }, h('b', {}, String(Math.round(colH(row[k])))));
@@ -306,8 +310,10 @@ function howSection(ctx, C, hero, meta) {
         return col;
       }),
     ),
-    h('figcaption', { class: 'label how-quorum__cap' }, `${C.exampleLabel} · `, h('a', { href: `#/p/${pick.no}` }, `#${pick.no} ${pick.ticker}`), ` · ${pick.agreeing.length}/4`),
+    h('figcaption', { class: 'label how-quorum__cap' }, `${C.exampleLabel} · `, h('a', { href: href('pick', pick.no) }, `#${pick.no} ${pick.ticker}`), ` · ${pick.agreeing.length}/4`),
   );
+
+  if (R.topPct) quorumFig.style.setProperty('--thr', String(R.topPct));
 
   const vetoAside = h('p', { class: 'small muted' });
   const sealAside = h('div', { class: 'how-aside' });
@@ -333,7 +339,7 @@ function howSection(ctx, C, hero, meta) {
         { class: 'how-step grid reveal' },
         h('span', { class: 'how-step__time c-margin' }, h('time', {}, s.time)),
         h('span', { class: 'how-step__tick', 'aria-hidden': 'true' }),
-        h('div', { class: 'how-step__body c-body' }, h('h3', { class: 'how-step__title' }, s.title), h('p', {}, s.body)),
+        h('div', { class: 'how-step__body c-body' }, h('h3', { class: 'how-step__title' }, s.title.replace('{top}', R.top)), h('p', {}, s.body)),
         asides[i] ? h('div', { class: 'how-step__aside c-meta' }, asides[i]) : null,
         i === 0 ? famRow : null,
         i === 1 ? quorumFig : null,
@@ -363,8 +369,8 @@ function howSection(ctx, C, hero, meta) {
     h(
       'p',
       { class: 'c-body how-links' },
-      h('a', { class: 'arrow-link', href: '#/how-it-works' }, C.link, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
-      h('a', { class: 'arrow-link', href: '#/methodology' }, C.linkM, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
+      h('a', { class: 'arrow-link', href: href('how-it-works') }, C.link, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
+      h('a', { class: 'arrow-link', href: href('methodology') }, C.linkM, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
     ),
   );
 }
@@ -420,7 +426,7 @@ function ledgerSection(ctx, C) {
     stats,
     h('p', { class: 'figcaption c-body' }, C.statsNote),
     track,
-    h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: '#/ledger' }, C.open, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
+    h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('ledger') }, C.open, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
   );
 
   Promise.all([ctx.data('ledger'), ctx.data('summary')])
@@ -474,7 +480,7 @@ function scoreSection(ctx, C) {
     h('p', { class: 'lede c-body' }, C.lede),
     plot,
     h('p', { class: 'figcaption c-body' }, C.caption),
-    h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: '#/ledger?s=scoreboard' }, C.link, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
+    h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('ledger', null, 'scoreboard') }, C.link, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
   );
   ctx
     .data('scoreboard')
@@ -543,6 +549,6 @@ function priceSection(ctx, C) {
     h('p', { class: 'c-meta honest' }, C.honest),
     ...tiers,
     h('p', { class: 'c-body small muted' }, C.policies),
-    h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: '#/pricing' }, C.link, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
+    h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('pricing') }, C.link, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
   );
 }

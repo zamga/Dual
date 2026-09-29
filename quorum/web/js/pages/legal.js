@@ -1,6 +1,7 @@
-// #/legal/terms|privacy|sms|imprint|cookies. Every document is a draft for counsel review and
+// #legal-terms|privacy|sms|imprint|cookies. Every document is a draft for counsel review and
 // says so at the top. Texts live in legal-copy.js (SL: first draft, needs native and legal review).
 import { h } from '../dom.js';
+import { href } from '../router.js';
 import { masthead, contentSections, page, toc } from './_content.js';
 import { LEGAL } from './legal-copy.js';
 
@@ -23,7 +24,7 @@ export async function render(ctx) {
       {},
       DOCS.map((d) => {
         const c = LEGAL[d][ctx.locale] ?? LEGAL[d].en;
-        return h('li', {}, h('a', { href: `#/legal/${d}`, 'aria-current': d === doc ? 'page' : null }, c.title));
+        return h('li', {}, h('a', { href: href('legal', d), 'aria-current': d === doc ? 'page' : null }, c.title));
       }),
     ),
   );

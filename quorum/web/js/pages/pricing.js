@@ -1,6 +1,7 @@
-// #/pricing (brief §6): three tiers on three rules, honest expectations, the policies, availability.
+// #pricing (brief §6): three tiers on three rules, honest expectations, the policies, availability.
 // SL: first draft, needs native review.
 import { h, setNumber } from '../dom.js';
+import { href } from '../router.js';
 import { masthead, contentSections, page } from './_content.js';
 
 const COPY = {
@@ -25,7 +26,7 @@ const COPY = {
         lead: 'For anyone who wants to check our work.',
         items: ['The public ledger: every record, hash-chained', 'The daily issue headline at 14:00', 'Open picks sealed (number, time, hash); tickers revealed at close', 'Methodology, backtest page and per-model scoreboard', 'The weekly Sunday email', 'No SMS'],
         cta: 'Open the ledger',
-        href: '#/ledger',
+        href: href('ledger'),
       },
       {
         id: 'signal',
@@ -35,7 +36,7 @@ const COPY = {
         lead: 'For investors who want the picks as they are issued.',
         items: ['Every BUY, CLOSE and RENEW at 14:00: SMS in SI, AT, DE, HR and IT, plus push and email', 'Full pick notes: thesis, colonnade chart, sensitivity, disclosures', 'The full ledger as CSV', 'At most 16 texts a month; most days, none'],
         cta: 'Join Signal',
-        href: '#/join?tier=signal',
+        href: href('join', 'signal'),
       },
       {
         id: 'research',
@@ -45,7 +46,7 @@ const COPY = {
         lead: 'For people who want the data behind the picks.',
         items: ['Everything in Signal', 'The daily full-universe dataset: about 1,300 stocks with family percentiles, quorum status, vetoes and history', 'Screener, decile and IC dashboards, weekly factor report', 'CSV export for personal use (no redistribution)'],
         cta: 'Join Research',
-        href: '#/join?tier=research',
+        href: href('join', 'research'),
         note: 'Launch depends on counsel review. If daily per-stock scores count as recommendations, Research launches with families A–C as descriptive percentiles only.',
       },
     ],
@@ -88,7 +89,7 @@ const COPY = {
         lead: 'Za vse, ki želijo preveriti naše delo.',
         items: ['Javna knjiga: vsak zapis, povezan z zgoščenimi vrednostmi', 'Naslov dnevne izdaje ob 14:00', 'Odprte izbire zapečatene (številka, čas, zgoščena vrednost); oznake razkrite ob zaprtju', 'Metodologija, stran s povratnim testom in preglednica modelov', 'Tedenska nedeljska e-pošta', 'Brez SMS'],
         cta: 'Odpri knjigo',
-        href: '#/ledger',
+        href: href('ledger'),
       },
       {
         id: 'signal',
@@ -98,7 +99,7 @@ const COPY = {
         lead: 'Za vlagatelje, ki želijo izbire ob izidu.',
         items: ['Vsak NAKUP, ZAPRTJE in PODALJŠANJE ob 14:00: SMS v SI, AT, DE, HR in IT ter potisna obvestila in e-pošta', 'Celotni zapiski izbir: teza, graf stebrov, občutljivost, razkritja', 'Celotna knjiga v CSV', 'Največ 16 SMS na mesec; večino dni nobenega'],
         cta: 'Naroči Signal',
-        href: '#/join?tier=signal',
+        href: href('join', 'signal'),
       },
       {
         id: 'research',
@@ -108,7 +109,7 @@ const COPY = {
         lead: 'Za tiste, ki želijo podatke za izbirami.',
         items: ['Vse iz paketa Signal', 'Dnevni nabor podatkov celotnega univerzuma: približno 1.300 delnic s percentili družin, stanjem kvoruma, veti in zgodovino', 'Iskalnik, nadzorne plošče decilov in IC, tedensko poročilo o faktorjih', 'Izvoz CSV za osebno rabo (brez nadaljnje distribucije)'],
         cta: 'Naroči Research',
-        href: '#/join?tier=research',
+        href: href('join', 'research'),
         note: 'Začetek je odvisen od pravnega pregleda. Če dnevne ocene posameznih delnic štejejo za priporočila, Research začne samo z opisnimi percentili družin A–C.',
       },
     ],
@@ -178,7 +179,7 @@ export async function render(ctx) {
         { class: 'small' },
         C.record({ hit: fmt.pct0(summary.hitRate), n: fmt.int(summary.nClosed), lo: fmt.pct0(summary.hitCI[0]), hi: fmt.pct0(summary.hitCI[1]) }),
         ' ',
-        h('a', { href: '#/ledger' }, C.recordLink),
+        h('a', { href: href('ledger') }, C.recordLink),
       )
     : null;
 

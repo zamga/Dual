@@ -5,6 +5,7 @@ import { HttpError, appendHeader, sendJson } from './http.js';
 import { consentSummary, hasGrant } from './consent.js';
 import { entitlementsFor, revokeAll } from './entitlements.js';
 import { iso, addMs } from './util.js';
+import { validTimeZone } from './messaging.js';
 
 const PENDING_CHECKOUT_MS = 2 * 60 * 60 * 1000;
 
@@ -33,6 +34,7 @@ export function meFor(ctx, user) {
       declaredCountry: user.declared_country,
       jurisdiction: user.jurisdiction,
       status: user.status,
+      timeZone: user.timezone ?? null,
     },
     geo: {
       ok: user.status === 'geo_ok',
@@ -118,7 +120,7 @@ export async function deleteAccount(ctx, userId, { ip = null } = {}) {
     db.run("UPDATE notifications SET status = CASE WHEN status = 'queued' THEN 'cancelled' ELSE status END, to_addr = NULL, subject = NULL, body = NULL, updated_at = ? WHERE user_id = ?", now, userId);
     db.run(
       `UPDATE users SET email = NULL, email_verified_at = NULL, declared_country = NULL, ip_country = NULL, jurisdiction = NULL,
-         blocked_reason = NULL, status = 'deleted', deleted_at = ?, updated_at = ? WHERE id = ?`,
+         blocked_reason = NULL, timezone = NULL, status = 'deleted', deleted_at = ?, updated_at = ? WHERE id = ?`,
       now,
       now,
       userId,
@@ -165,6 +167,11 @@ export function registerAccountRoutes(router, ctx) {
       const b = body ?? {};
       for (const k of ['sms', 'push', 'email']) {
         if (b[k] != null && typeof b[k] !== 'boolean') throw new HttpError(400, 'invalid_prefs', `${k} must be true or false`);
+      }
+      // timeZone: the IANA zone for recipient-local quiet hours (null clears it; the phone's country is used then)
+      if (b.timeZone !== undefined) {
+        if (b.timeZone !== null && !validTimeZone(b.timeZone)) throw new HttpError(400, 'invalid_time_zone', 'timeZone must be an IANA time zone such as Europe/Ljubljana');
+        db.run('UPDATE users SET timezone = ?, updated_at = ? WHERE id = ?', b.timeZone, iso(ctx.now()), user.id);
       }
       const now = ctx.now();
       if (b.sms === false) {

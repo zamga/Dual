@@ -1,6 +1,7 @@
 // The long-form page template (DESIGN.md §10): a masthead hanging from rule 1, numbered sections
 // with the heading on rule 1, the text between rules 1 and 3, and notes in the metadata strip.
 import { h, html, raw } from '../dom.js';
+import { href } from '../router.js';
 
 export function masthead({ kicker, title, lede, meta, draft, id = 'page-h', size = 'd1' }) {
   return h(
@@ -35,9 +36,11 @@ export function toNode(x) {
   return html`${raw(x)}`;
 }
 
-// "On this page" links that scroll without re-rendering the route.
+// "On this page" links that scroll without re-rendering the route (#methodology~validation).
 export function toc(ctx, sections, label) {
-  const base = ctx.route.pathname;
+  const { name, params } = ctx.route;
+  const param = params ? Object.values(params)[0] : undefined;
+  const link = (id) => href(name, param, id);
   const nav = h(
     'nav',
     { class: 'toc', 'aria-label': label },
@@ -46,12 +49,16 @@ export function toc(ctx, sections, label) {
       h(
         'a',
         {
-          href: `#${base}?s=${s.id}`,
+          href: link(s.id),
           onclick: (e) => {
             const el = document.getElementById(s.id);
             if (!el) return;
             e.preventDefault();
-            history.replaceState(null, '', `#${base}?s=${s.id}`);
+            try {
+              history.replaceState(history.state, '', `${location.pathname}${location.search}${link(s.id)}`);
+            } catch {
+              /* sandboxed history: the section link still scrolls */
+            }
             el.scrollIntoView({ behavior: ctx.reducedMotion ? 'auto' : 'smooth', block: 'start' });
             const hd = el.querySelector('h2');
             if (hd) {

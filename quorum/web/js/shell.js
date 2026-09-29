@@ -5,11 +5,12 @@ import { h, qs, qsa, focusEl, setNumber } from './dom.js';
 import { t, tp, pickL, formatters } from './i18n.js';
 import { pillState, msToNextMinute, clockMode } from './clock.js';
 import { formatInZone, LJUBLJANA } from './core/calendar.js';
+import { href, routeOfHref } from './router.js';
 
 const GROUPS = [
-  { id: 'how', q: 'nav.q.how', links: [['#/how-it-works', 'nav.howItWorks'], ['#/methodology', 'nav.methodology']] },
-  { id: 'proof', q: 'nav.q.proof', links: [['#/ledger', 'nav.ledger'], ['#/backtest', 'nav.backtest']] },
-  { id: 'get', q: 'nav.q.get', links: [['#/pricing', 'nav.pricing'], ['#/join', 'nav.join']] },
+  { id: 'how', q: 'nav.q.how', links: [[href('how-it-works'), 'nav.howItWorks'], [href('methodology'), 'nav.methodology']] },
+  { id: 'proof', q: 'nav.q.proof', links: [[href('ledger'), 'nav.ledger'], [href('backtest'), 'nav.backtest']] },
+  { id: 'get', q: 'nav.q.get', links: [[href('pricing'), 'nav.pricing'], [href('join'), 'nav.join']] },
 ];
 
 export function markGlyph() {
@@ -26,7 +27,7 @@ export function markGlyph() {
 }
 
 function mark() {
-  return h('a', { class: 'mark', href: '#/', 'aria-label': t('nav.home') }, markGlyph(), h('span', { class: 'mark__word', 'aria-hidden': 'true' }, 'Quorum'));
+  return h('a', { class: 'mark', href: href('home'), 'aria-label': t('nav.home') }, markGlyph(), h('span', { class: 'mark__word', 'aria-hidden': 'true' }, 'Quorum'));
 }
 
 export function createShell(app) {
@@ -69,7 +70,7 @@ export function createShell(app) {
 
   // ---- header ----------------------------------------------------------------------------------------
   function renderHeader() {
-    pillEl = h('a', { class: 'pill', href: '#/ledger', dataset: { state: 'countdown' } });
+    pillEl = h('a', { class: 'pill', href: href('ledger'), dataset: { state: 'countdown' } });
     const menuBtn = h(
       'button',
       { type: 'button', class: 'menu-btn', 'aria-expanded': 'false', 'aria-controls': 'sheet', onclick: () => openSheet(menuBtn) },
@@ -122,7 +123,7 @@ export function createShell(app) {
       state = st.quorum ? 'quorum' : 'none';
       parts = [h('span', { class: 'pill__main' }, st.quorum ? tp('pill.quorum', st.picks) : t('pill.noQuorum'))];
       title = t('pill.title.result', { tz: st.tz });
-      pillEl.href = `#/issue/${st.date}`;
+      pillEl.href = href('issue', st.date);
     } else {
       state = 'countdown';
       parts = [
@@ -136,7 +137,7 @@ export function createShell(app) {
           : mode === 'override'
             ? t('pill.title.override')
             : t('pill.title.live', { tz: st.tz });
-      pillEl.href = last ? `#/issue/${last.date}` : '#/ledger';
+      pillEl.href = last ? href('issue', last.date) : href('ledger');
     }
     const leftEl = qs('.pill__left', pillEl);
     const sameShape = pillEl.dataset.state === state && pillEl.dataset.mode === mode && leftEl && st.kind === 'countdown';
@@ -162,11 +163,11 @@ export function createShell(app) {
       h('span', {}, t('nav.close')),
     );
     const extra = [
-      ['#/help', 'nav.help'],
-      ['#/about', 'nav.about'],
-      ['#/disclosures', 'nav.disclosures'],
-      ['#/methodology/changelog', 'nav.changelog'],
-      ['#/status', 'nav.status'],
+      [href('help'), 'nav.help'],
+      [href('about'), 'nav.about'],
+      [href('disclosures'), 'nav.disclosures'],
+      [href('methodology-changelog'), 'nav.changelog'],
+      [href('status'), 'nav.status'],
     ];
     sheet.replaceChildren(
       h('div', { class: 'sheet__top' }, mark(), closeBtn),
@@ -244,17 +245,17 @@ export function createShell(app) {
       h(
         'nav',
         { class: 'footer-nav', 'aria-label': 'Footer' },
-        col(t('nav.q.how'), [['#/how-it-works', t('nav.howItWorks')], ['#/methodology', t('nav.methodology')], ['#/methodology/changelog', t('nav.changelog')]]),
-        col(t('nav.q.proof'), [['#/ledger', t('nav.ledger')], ['#/backtest', t('nav.backtest')], ['#/disclosures', t('nav.disclosures')], ['#/disclosures', t('footer.all12m')]]),
-        col(t('nav.q.get'), [['#/pricing', t('nav.pricing')], ['#/join', t('nav.join')], ['#/help', t('nav.help')], ['#/status', t('nav.status')]]),
+        col(t('nav.q.how'), [[href('how-it-works'), t('nav.howItWorks')], [href('methodology'), t('nav.methodology')], [href('methodology-changelog'), t('nav.changelog')]]),
+        col(t('nav.q.proof'), [[href('ledger'), t('nav.ledger')], [href('backtest'), t('nav.backtest')], [href('disclosures'), t('nav.disclosures')], [href('disclosures', null, 'list'), t('footer.all12m')]]),
+        col(t('nav.q.get'), [[href('pricing'), t('nav.pricing')], [href('join'), t('nav.join')], [href('help'), t('nav.help')], [href('status'), t('nav.status')]]),
         col(t('footer.legal'), [
-          ['#/legal/terms', t('footer.terms')],
-          ['#/legal/privacy', t('footer.privacy')],
-          ['#/legal/sms', t('footer.sms')],
-          ['#/legal/imprint', t('footer.imprint')],
-          ['#/legal/cookies', t('footer.cookies')],
-          ['#/disclosures', t('footer.conflicts')],
-          ['#/about', t('nav.about')],
+          [href('legal', 'terms'), t('footer.terms')],
+          [href('legal', 'privacy'), t('footer.privacy')],
+          [href('legal', 'sms'), t('footer.sms')],
+          [href('legal', 'imprint'), t('footer.imprint')],
+          [href('legal', 'cookies'), t('footer.cookies')],
+          [href('disclosures', null, 'conflicts'), t('footer.conflicts')],
+          [href('about'), t('nav.about')],
         ]),
       ),
       h(
@@ -283,11 +284,11 @@ export function createShell(app) {
 
   // ---- current route marking --------------------------------------------------------------------------
   function markCurrent() {
-    const path = app.route?.pathname ?? '/';
-    const group = app.route?.group;
-    for (const a of qsa('a[href^="#/"]', header).concat(qsa('a[href^="#/"]', sheet))) {
-      const target = a.getAttribute('href').slice(1);
-      const on = target !== '/' && (path === target || path.startsWith(`${target}/`));
+    const cur = app.route;
+    const group = cur?.group;
+    for (const a of qsa('a[href^="#"]', header).concat(qsa('a[href^="#"]', sheet))) {
+      const target = routeOfHref(a.getAttribute('href'));
+      const on = !!cur && !!target && target.name !== 'home' && !target.section && (target.name === cur.name || target.name === cur.parent);
       if (on) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     }

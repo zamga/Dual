@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
   stripe_customer_id TEXT UNIQUE,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  deleted_at TEXT
+  deleted_at TEXT,
+  timezone TEXT                       -- optional IANA zone the user set; recipient-local quiet hours use it first
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -288,7 +289,14 @@ CREATE TABLE IF NOT EXISTS candidates (
   combined_score REAL,
   status TEXT NOT NULL CHECK (status IN ('candidate', 'issued', 'vetoed_rule', 'vetoed_llm', 'vetoed_human', 'capped', 'no_approver')),
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  kind TEXT,                          -- BUY | RENEW (a RENEW candidate that is removed becomes a CLOSE)
+  prior_no TEXT,                      -- RENEW: the pick it would renew
+  public_no TEXT,                     -- assigned at the 13:45 seal
+  payload_json TEXT,                  -- the engine's candidate: identity, percentiles, drivers, veto checks, prices
+  thesis_status TEXT,                 -- pending | drafted | handoff | approver | disabled
+  veto_scan TEXT,                     -- pending | clear | flagged | unavailable | stand_in
+  status_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS candidates_date ON candidates(date);
 
@@ -332,7 +340,14 @@ CREATE TABLE IF NOT EXISTS explanations (
   prompt_sha256 TEXT,
   output_sha256 TEXT,
   approved_by INTEGER REFERENCES persons(id),
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  candidate_id INTEGER REFERENCES candidates(id),
+  purpose TEXT,                       -- thesis | veto_scan
+  attempt INTEGER,
+  outcome TEXT,                       -- passed | validator_failed | refused | parse_failed | rate_limited | api_error | flagged | clear | approver
+  drafter TEXT,                       -- claude | approver
+  prompt TEXT,                        -- the full prompt (system + user content) whose SHA-256 is prompt_sha256
+  error TEXT
 );
 
 CREATE TABLE IF NOT EXISTS recommendations (          -- INSERT only (append-only)
@@ -427,6 +442,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   sent_at TEXT,
   delivered_at TEXT,
   updated_at TEXT NOT NULL,
+  expires_at TEXT,                    -- pick texts are never sent after this instant (the US open of the issue day)
   UNIQUE (rec_id, user_id, channel)
 );
 CREATE INDEX IF NOT EXISTS notifications_status ON notifications(status, not_before);
@@ -472,7 +488,9 @@ CREATE TABLE IF NOT EXISTS staff_trade_requests (
   decision TEXT,
   decided_by INTEGER REFERENCES persons(id),
   created_at TEXT NOT NULL,
-  decided_at TEXT
+  decided_at TEXT,
+  instrument_type TEXT,               -- fund | etf | stock | other; only funds and ETFs can be cleared (brief §2.9)
+  reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS disclosure_texts (
@@ -484,6 +502,65 @@ CREATE TABLE IF NOT EXISTS disclosure_texts (
   sha256 TEXT NOT NULL,
   created_at TEXT NOT NULL,
   UNIQUE (kind, version, locale)
+);
+
+-- ---------------------------------------------------------------- daily pipeline (part 2)
+CREATE TABLE IF NOT EXISTS issue_runs (               -- one row per US trading day: the engine input and pipeline stage
+  issue_date TEXT PRIMARY KEY,
+  input_json TEXT,                    -- the adapted engine output (pre-release: reads are logged in access_log)
+  items_json TEXT,                    -- what was published and notified (BUY/RENEW/CLOSE items), set at 14:00
+  delivery_json TEXT,                 -- fan-out summary (counts per channel, timings)
+  stage TEXT NOT NULL,                -- candidates | explained | reviewed | sealed | published | marked | anchored
+  candidates_at TEXT,
+  explained_at TEXT,
+  reviewed_at TEXT,
+  sealed_at TEXT,
+  published_at TEXT,
+  late INTEGER NOT NULL DEFAULT 0,    -- published after the slot: no notifications were sent
+  marked_at TEXT,
+  anchored_at TEXT,
+  notes TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pick_reveals (             -- commit-reveal: the salted reveal behind each sealed commit
+  no TEXT PRIMARY KEY,
+  commit_hash TEXT NOT NULL,
+  reveal_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revealed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS approver_signoffs (        -- the named approver's review of one issue's candidates
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  issue_date TEXT NOT NULL,
+  person_id INTEGER NOT NULL REFERENCES persons(id),
+  signed_at TEXT NOT NULL,
+  UNIQUE (issue_date, person_id)
+);
+
+CREATE TABLE IF NOT EXISTS scheduler_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  issue_date TEXT NOT NULL,
+  slot TEXT NOT NULL,
+  due_at TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('running', 'ok', 'failed', 'missed', 'skipped')),
+  detail TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  UNIQUE (issue_date, slot)
+);
+
+CREATE TABLE IF NOT EXISTS ops_alerts (               -- on-call pages and warnings
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  severity TEXT NOT NULL CHECK (severity IN ('info', 'warn', 'page')),
+  message TEXT NOT NULL,
+  detail_json TEXT,
+  dedupe_key TEXT,
+  created_at TEXT NOT NULL,
+  paged_at TEXT,
+  acknowledged_at TEXT
 );
 
 -- ---------------------------------------------------------------- append-only enforcement

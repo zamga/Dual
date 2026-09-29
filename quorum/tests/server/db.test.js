@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openDb, APPEND_ONLY_TABLES } from '../../server/db.js';
+import { openDb, APPEND_ONLY_TABLES, SCHEMA_VERSION, MIGRATIONS } from '../../server/db.js';
 
 // Brief §4.5 tables plus ledger_entries.
 const BRIEF_TABLES = [
@@ -34,7 +34,9 @@ test('schema has every brief §4.5 table and ledger_entries; opening twice is id
   const tables = db.tables();
   for (const t of BRIEF_TABLES) assert.ok(tables.includes(t), `missing table ${t}`);
   const again = openDb(':memory:');
-  assert.equal(again.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, '1');
+  assert.equal(again.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, SCHEMA_VERSION);
+  assert.equal(SCHEMA_VERSION, '2');
+  for (const t of ['issue_runs', 'pick_reveals', 'approver_signoffs', 'scheduler_runs', 'ops_alerts']) assert.ok(tables.includes(t), `missing table ${t}`);
   again.close();
   db.close();
 });
@@ -115,4 +117,37 @@ test('notifications are unique per (rec_id, user_id, channel) and per idempotenc
   assert.throws(() => ins('other-key', 1), /UNIQUE/);
   assert.throws(() => ins('1:usr_1:sms', null), /UNIQUE/);
   db.close();
+});
+
+test('a part 1 database (schema version 1) is migrated to version 2 in place', async () => {
+  const { mkdtempSync, rmSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { DatabaseSync } = await import('node:sqlite');
+  const dir = mkdtempSync(join(tmpdir(), 'quorum-mig-'));
+  try {
+    // The part 1 schema, as committed in stage 1.
+    const v1 = readFileSync(join(import.meta.dirname, 'fixtures', 'schema-v1.sql'), 'utf8');
+    const path = join(dir, 'old.db');
+    const raw = new DatabaseSync(path);
+    raw.exec(v1);
+    raw.exec("INSERT INTO schema_meta (key, value) VALUES ('schema_version', '1')");
+    raw.exec("INSERT INTO users (id, email, created_at, updated_at) VALUES ('usr_old', 'old@example.si', 'x', 'x')");
+    raw.close();
+    const db = openDb(path);
+    assert.equal(db.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, '2');
+    const cols = (t) => db.all(`PRAGMA table_info(${t})`).map((c) => c.name);
+    for (const c of ['kind', 'prior_no', 'public_no', 'payload_json', 'thesis_status', 'veto_scan', 'status_reason']) assert.ok(cols('candidates').includes(c), `candidates.${c}`);
+    for (const c of ['candidate_id', 'purpose', 'attempt', 'outcome', 'drafter', 'prompt', 'error']) assert.ok(cols('explanations').includes(c), `explanations.${c}`);
+    assert.ok(cols('notifications').includes('expires_at'));
+    assert.ok(cols('users').includes('timezone'));
+    assert.equal(db.get("SELECT email FROM users WHERE id = 'usr_old'").email, 'old@example.si', 'data kept');
+    assert.ok(MIGRATIONS.some((m) => m.id === 2));
+    db.close();
+    const again = openDb(path);
+    assert.equal(again.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, '2', 'reopening does not migrate twice');
+    again.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -2,8 +2,9 @@
 // Hollow = an issue published with no quorum. Ultramarine = a quorum (a pick).
 // A small base tick marks days that texted an exit (CLOSE) without a new pick.
 // Desktop: 12 months across rules 1–4, four months per bay; each month is weeks × weekdays.
-// Below 1024 px: one row per month. Cells are links to #/issue/DATE with a roving tabindex.
+// Below 1024 px: one row per month. Cells are links to #issue-DATE with a roving tabindex.
 import { h } from '../dom.js';
+import { href } from '../router.js';
 import { weekday } from '../core/calendar.js';
 
 // Pure layout: month groups with week and day indices (tested in tests/web).
@@ -60,7 +61,7 @@ export function silenceCalendar(issues, { fmt, L, locale, onReadout }) {
       const text = cellText(r, { fmt, L });
       const a = h('a', {
         class: `sc-cell sc-${kind}`,
-        href: `#/issue/${r.date}`,
+        href: href('issue', r.date),
         tabindex: '-1',
         'aria-label': text,
         dataset: { date: r.date },

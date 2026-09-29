@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { simulateMarket } from '../../engine/sim/market.js';
+import { simulateMarket, SIM_DEFAULTS } from '../../engine/sim/market.js';
+import { SMALL_UNIVERSE } from '../../engine/model.js';
 import { REAL_TICKERS, REAL_TICKER_SET } from '../../engine/sim/blocklist.js';
 import { isValidIsin, isinCheckDigit } from '../../engine/sim/names.js';
 import { standInIsNegative } from '../../engine/sim/headlines.js';
@@ -24,6 +25,24 @@ test('the simulation is deterministic from the seed', () => {
   assert.deepEqual(m1.news.headline, m2.news.headline);
   const m3 = simulateMarket({ ...SMALL, seed: 7 });
   assert.notEqual(digest(m1.close), digest(m3.close));
+});
+
+test('no chosen future: the default configuration never switches the random stream', () => {
+  // the sealed record is whatever the simulated world produces after the freeze, not a picked scenario
+  assert.equal(SIM_DEFAULTS.scenarioFrom, null);
+  assert.equal(SMALL_UNIVERSE.sim.scenarioFrom ?? null, null);
+  assert.equal(m1.scenarioSwitch, null);
+  assert.equal(m1.opts.scenarioFrom, null);
+  // passing the option explicitly as off changes nothing
+  const off = simulateMarket({ ...SMALL, scenarioFrom: null });
+  assert.equal(digest(off.open, off.close, off.volume), digest(m1.open, m1.close, m1.volume));
+  // the experiment switch still works when asked for, and only from its date on
+  const x = simulateMarket({ ...SMALL, scenarioFrom: '2018-01-02', scenario: 3 });
+  assert.deepEqual(x.scenarioSwitch, { from: '2018-01-02', scenario: 3 });
+  const k = x.dates.indexOf('2018-01-02');
+  const N = x.N;
+  assert.equal(digest(x.close.subarray(0, k * N)), digest(m1.close.subarray(0, k * N)), 'identical before the switch');
+  assert.notEqual(digest(x.close.subarray(k * N)), digest(m1.close.subarray(k * N)), 'different after it');
 });
 
 test('dates are NYSE trading days and the benchmark is named', () => {
@@ -119,6 +138,7 @@ test('headlines are fictional and the stand-in classifier is deterministic', () 
 
 test('full universe: ~1,900 companies ever listed, 1,250-1,500 eligible every model day', () => {
   const m = simulateMarket({});
+  assert.equal(m.scenarioSwitch, null, 'the full default run continues on its own stream');
   const { N, s0, S } = m;
   const c = m.companies;
   let ever = 0;

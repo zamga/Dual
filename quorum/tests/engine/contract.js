@@ -97,7 +97,7 @@ export const SPECS = {
     simulated: true, liveSince: 'date', label: en_sl, nPicks: 'int', nClosed: 'int', hitRate: 'frac', hitCI: { $tuple: ['frac', 'frac'] },
     medianExcess: 'number', meanExcess: 'number',
     worstPick: { no: 'no4', ticker: nul('string'), excess: 'number' }, bestPick: { no: 'no4', ticker: nul('string'), excess: 'number' },
-    maxDrawdown: 'number', medianAlertGapBps: 'number', cumulative: { follow: 'number', bench: 'number' }, vetoes: vetoCounts,
+    maxDrawdown: 'number', medianAlertGapBps: 'number', alertGapNote: en_sl, cumulative: { follow: 'number', bench: 'number' }, vetoes: vetoCounts,
     equity: [{ $tuple: ['date', 'number', 'number'] }],
   },
   issues: [{
@@ -149,12 +149,23 @@ export const SPECS = {
   backtest: {
     simulated: true, label: { $in: ['HYPOTHETICAL'] }, window: { from: 'date', to: 'date' }, holdout: { from: 'date', to: 'date' },
     variantsTried: 'int', dsr: 'frac', pbo: 'frac', variantSharpes: ['number'],
+    dsrDetail: {
+      raw: { nTrials: 'int', varSRMonthly: 'number', expectedMaxSharpeMonthly: 'number', dsr: 'frac' },
+      clustered: { K: 'int', nTrials: 'int', varSRMonthly: 'number', expectedMaxSharpeMonthly: 'number', dsr: 'frac', sizes: ['int'], labels: ['int'] },
+    },
     gates: [{ id: { $in: ['a', 'b', 'c', 'd', 'e'] }, pass: 'boolean', label: en_sl, detail: en_sl, values: 'object' }],
     equity: [{ $tuple: ['date', 'number', 'number', 'number', 'number', 'number', 'number', 'number'] }],
     equityCols: ['string'],
     annual: [{ year: 'int', quorum: 'number', bench: 'number', n: 'int' }],
     stats: { picksPerMonth: 'number', hitRate: 'frac', medianExcess: 'number', meanExcess: 'number', sharpe: 'number', maxDrawdown: 'number' },
     crashSwitchPeriods: [{ $tuple: ['date', 'date'] }],
+    launch: {
+      status: { $in: ['pre-launch', 'ready'] }, asOf: 'date',
+      holdoutGates: [{ id: { $in: ['a', 'b', 'c', 'd', 'e'] }, pass: 'boolean' }],
+      amendment: { id: { $in: ['A-1'] }, date: 'date', text: en_sl },
+      pooled: { from: 'date', to: 'date', months: 'int', sharpe: 'number', dsr: 'frac', dsrRaw: 'frac', nTrialsRaw: 'int', nTrialsEff: 'int', pass: 'boolean' },
+      remaining: en_sl,
+    },
   },
 };
 

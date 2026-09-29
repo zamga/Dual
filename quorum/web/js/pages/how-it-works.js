@@ -1,6 +1,8 @@
-// #/how-it-works: the families, the quorum rule, vetoes, cadence, why most days are silent.
+// #how-it-works: the families, the quorum rule, vetoes, cadence, why most days are silent.
 // SL copy: first draft, needs native review.
 import { h } from '../dom.js';
+import { href } from '../router.js';
+import { ruleLabels } from '../rule.js';
 import { masthead, contentSections, toc, page, table } from './_content.js';
 import { familyName, familyDef } from '../ui.js';
 
@@ -9,7 +11,7 @@ const COPY = {
     title: 'How it works',
     kicker: 'How does a pick happen?',
     h1: 'Four families. Three must agree.',
-    lede: 'Every US trading day we score about 1,300 liquid US stocks with four independent model families. A pick exists only when at least three of them put the same stock in their top decile and no veto fires. Most days, that does not happen, and we publish that too.',
+    lede: 'Every US trading day we score about 1,300 liquid US stocks with four independent model families. A pick exists only when at least three of them put the same stock {inTop} and no veto fires. Most days, that does not happen, and we publish that too.',
     toc: 'On this page',
     families: {
       title: 'Four independent families',
@@ -27,7 +29,7 @@ const COPY = {
     rule: {
       title: 'The quorum rule',
       short: 'Quorum',
-      body: `<p>A stock becomes a candidate when <strong>at least three of the four families rank it in their top decile</strong> (90th percentile or higher) on the issue date. Conviction is only ever shown as <strong>3/4</strong> or <strong>4/4</strong>. There is no other score and no probability.</p>
+      body: `<p>A stock becomes a candidate when <strong>at least three of the four families rank it {inTop}</strong> ({pctile} or higher) on the issue date. Conviction is only ever shown as <strong>3/4</strong> or <strong>4/4</strong>. There is no other score and no probability.</p>
 <p>Then the caps apply, in this order:</p>
 <ul><li>At most <strong>2 new picks per issue</strong>, ranked by the average percentile across the families.</li><li>At most <strong>8 new picks per calendar month</strong>.</li><li>At most <strong>3 open picks per sector</strong>.</li><li>No re-issue of a stock within <strong>10 trading days</strong> of its close, except as a RENEW.</li></ul>
 <p>When the crash switch suspends the trend family, the rule becomes all three of the remaining three. It is still displayed as 3/4, with the suspension noted on the pick.</p>`,
@@ -83,7 +85,7 @@ const COPY = {
     title: 'Kako deluje',
     kicker: 'Kako nastane izbira?',
     h1: 'Štiri družine. Tri se morajo strinjati.',
-    lede: 'Vsak dan trgovanja v ZDA s štirimi neodvisnimi družinami modelov ocenimo približno 1.300 likvidnih ameriških delnic. Izbira obstaja samo, ko vsaj tri isto delnico uvrstijo v svoj zgornji decil in se ne sproži noben veto. Večino dni se to ne zgodi, in tudi to objavimo.',
+    lede: 'Vsak dan trgovanja v ZDA s štirimi neodvisnimi družinami modelov ocenimo približno 1.300 likvidnih ameriških delnic. Izbira obstaja samo, ko vsaj tri isto delnico uvrstijo {inTop} in se ne sproži noben veto. Večino dni se to ne zgodi, in tudi to objavimo.',
     toc: 'Na tej strani',
     families: {
       title: 'Štiri neodvisne družine',
@@ -101,7 +103,7 @@ const COPY = {
     rule: {
       title: 'Pravilo kvoruma',
       short: 'Kvorum',
-      body: `<p>Delnica postane kandidatka, ko jo <strong>vsaj tri od štirih družin na dan izdaje uvrstijo v zgornji decil</strong> (90. percentil ali več). Prepričanje prikažemo samo kot <strong>3/4</strong> ali <strong>4/4</strong>. Drugih ocen in verjetnosti ni.</p>
+      body: `<p>Delnica postane kandidatka, ko jo <strong>vsaj tri od štirih družin na dan izdaje uvrstijo {inTop}</strong> ({pctile} ali več). Prepričanje prikažemo samo kot <strong>3/4</strong> ali <strong>4/4</strong>. Drugih ocen in verjetnosti ni.</p>
 <p>Nato veljajo omejitve, v tem vrstnem redu:</p>
 <ul><li>Največ <strong>2 novi izbiri na izdajo</strong>, razvrščeni po povprečnem percentilu družin.</li><li>Največ <strong>8 novih izbir na koledarski mesec</strong>.</li><li>Največ <strong>3 odprte izbire na sektor</strong>.</li><li>Iste delnice ne izdamo znova v <strong>10 trgovalnih dneh</strong> po zaprtju, razen kot PODALJŠANJE.</li></ul>
 <p>Ko stikalo za zlom izklopi družino trenda, pravilo zahteva vse tri preostale. Še vedno je prikazano kot 3/4, izklop pa je označen pri izbiri.</p>`,
@@ -159,6 +161,9 @@ export async function render(ctx) {
   const C = COPY[ctx.locale] ?? COPY.en;
   const [meta, issues] = await Promise.all([ctx.data('meta').catch(() => null), ctx.data('issues').catch(() => [])]);
   const q = issues.filter((r) => r.quorum).length;
+  // The rule threshold is data (meta.rule.topPct), never copy.
+  const R = ruleLabels(meta, ctx.locale);
+  const fill = (str) => str.replace(/\{inTop\}/g, R.inTop).replace(/\{pctile\}/g, R.pctile);
   const dist = [4, 3, 2, 1, 0].map((k) => [k, issues.filter((r) => r.closest === k).length]).filter(([, n]) => n > 0);
 
   const famTable = table({
@@ -172,7 +177,7 @@ export async function render(ctx) {
 
   const sections = [
     { id: 'families', title: C.families.title, short: C.families.short, body: [h('p', {}, C.families.intro), famTable], aside: `<p class="small muted">${C.families.aside}</p>` },
-    { id: 'quorum', title: C.rule.title, short: C.rule.short, body: C.rule.body, aside: `<p class="small muted">${C.rule.aside}</p>` },
+    { id: 'quorum', title: C.rule.title, short: C.rule.short, body: fill(C.rule.body), aside: `<p class="small muted">${C.rule.aside}</p>` },
     { id: 'vetoes', title: C.vetoes.title, short: C.vetoes.short, body: C.vetoes.body },
     {
       id: 'cadence',
@@ -199,9 +204,9 @@ export async function render(ctx) {
   ];
 
   const node = page(
-    masthead({ kicker: C.kicker, title: C.h1, lede: C.lede, meta: toc(ctx, sections, C.toc) }),
+    masthead({ kicker: C.kicker, title: C.h1, lede: fill(C.lede), meta: toc(ctx, sections, C.toc) }),
     ...contentSections(sections),
-    h('div', { class: 'grid page-next' }, h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: '#/methodology' }, C.next, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')))),
+    h('div', { class: 'grid page-next' }, h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('methodology') }, C.next, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')))),
   );
   return { title: C.title, node };
 }

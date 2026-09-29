@@ -5,6 +5,8 @@ import { openDb } from '../../server/db.js';
 import { createApp } from '../../server/index.js';
 import { createConsoleSms } from '../../server/vendors/twilio.js';
 import { createConsoleEmail } from '../../server/vendors/email.js';
+import { createConsolePush } from '../../server/vendors/push.js';
+import { createConsolePager } from '../../server/alerts.js';
 import { createStripe } from '../../server/vendors/stripe.js';
 import { createFakeStripe } from '../../server/dev/fake-stripe.js';
 import { consentHash, consentVersion } from '../../core/consent-texts.js';
@@ -18,7 +20,9 @@ export const PRICES = {
   research: { month: 'price_research_m', year: 'price_research_y' },
 };
 
-export async function makeApp({ now = '2026-09-28T10:00:00Z', config = {}, db, webRoot } = {}) {
+// makeApp({ now, config, db, webRoot, anthropic, engineSource, fetch }) -> harness. The clock only
+// moves when a test moves it; sleep() advances it (so paced sends take virtual time, not real time).
+export async function makeApp({ now = '2026-09-28T10:00:00Z', config = {}, db, webRoot, anthropic = null, engineSource = null, fetch } = {}) {
   const clock = { t: new Date(now).getTime() };
   const clockFn = () => new Date(clock.t);
   const log = createLogger({ quiet: true });
@@ -33,6 +37,8 @@ export async function makeApp({ now = '2026-09-28T10:00:00Z', config = {}, db, w
       sessionSecret: 'test-session-secret',
       twilio: { authToken: TWILIO_TOKEN },
       stripe: { secretKey: 'sk_test_fake', webhookSecret: WHSEC, prices: PRICES },
+      // Tests never touch the network: no anchoring calendars unless a test injects a fixture fetch.
+      anchor: { otsCalendars: [], rfc3161Url: '' },
       ...config,
     },
   );
@@ -40,7 +46,24 @@ export async function makeApp({ now = '2026-09-28T10:00:00Z', config = {}, db, w
   const sms = createConsoleSms({ log, authToken: TWILIO_TOKEN, clock: clockFn });
   const email = createConsoleEmail({ log, clock: clockFn });
   const stripe = createStripe({ secretKey: cfg.stripe.secretKey, webhookSecret: WHSEC, fetch: fake.fetch });
-  const app = createApp({ db: db ?? openDb(':memory:'), config: cfg, transports: { sms, email, stripe }, clock: clockFn, log, webRoot });
+  const push = createConsolePush({ log, clock: clockFn });
+  const pager = createConsolePager({ log });
+  const sleep = async (ms) => {
+    clock.t += ms;
+  };
+  const noNetwork = async (url) => {
+    throw new Error(`test tried to reach the network: ${url}`);
+  };
+  const app = createApp({
+    db: db ?? openDb(':memory:'),
+    config: cfg,
+    transports: { sms, email, stripe, push, pager, anthropic, engineSource },
+    clock: clockFn,
+    log,
+    webRoot,
+    sleep,
+    fetch: fetch ?? noNetwork,
+  });
   const url = await app.listen(0, '127.0.0.1');
   return {
     app,
@@ -50,6 +73,8 @@ export async function makeApp({ now = '2026-09-28T10:00:00Z', config = {}, db, w
     fake,
     sms,
     email,
+    push,
+    pager,
     clock,
     advance(ms) {
       clock.t += ms;

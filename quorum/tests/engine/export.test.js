@@ -14,6 +14,8 @@ import { validateSms } from '../../core/sms-templates.js';
 import { validateNumbers } from '../../core/numeric-validator.js';
 import { issueSlot, fmtLong, addTradingDays } from '../../core/calendar.js';
 import { checkContract } from './contract.js';
+import { deflatedSharpe, mean, std, skewness, kurtosis } from '../../core/stats.js';
+import { REASON_CODES } from '../../engine/record.js';
 
 const dirs = [];
 let files; // parsed JSON of run 1
@@ -189,10 +191,14 @@ test('published outcomes recompute from the published prices and the records lin
   assert.equal(files.summary.nClosed, c.closed);
   assert.equal(c.issues, files.issues.length);
   for (const x of files.issues) for (const no of [...x.buys, ...x.renews, ...x.closes]) assert.ok(byNo.has(no));
-  // human vetoes and the unissued day are logged with reasons
+  // human vetoes and the unissued day are logged with reasons; each removal logs a different reason
   const human = files.issues.flatMap((x) => x.humanVetoes);
   assert.equal(human.length, files.summary.vetoes.human);
-  for (const h of human) assert.ok(h.reason.en.length > 20 && h.reason.sl.length > 20);
+  for (const h of human) {
+    assert.ok(h.reason.en.length > 20 && h.reason.sl.length > 20);
+    assert.ok(REASON_CODES.includes(h.code), h.code);
+  }
+  assert.equal(new Set(human.map((h) => h.code)).size, human.length, 'reasons are not one repeated judgement');
   assert.ok(files.issues.filter((x) => x.unissued > 0).every((x) => x.approver === null));
   // monthly SMS count (picks plus exits) stays within the consent text's 16
   const perMonth = {};
@@ -230,4 +236,72 @@ test('the backtest carries computed gates, the variant count and the calibration
   assert.equal(a.pass, a.values.mean > 0 && a.values.median > 0 && a.values.hit >= 0.53);
   const e = b.gates.find((g) => g.id === 'e');
   assert.equal(e.pass, e.values.picksPerMonth >= 3 && e.values.picksPerMonth <= 8);
+  // "dsr" is the clustered (effective-trials) value; the raw figure is published beside it
+  const dd = b.dsrDetail;
+  assert.equal(dd.clustered.dsr, b.dsr);
+  assert.equal(dd.raw.nTrials, b.variantsTried);
+  assert.equal(dd.clustered.labels.length, b.variantsTried);
+  assert.equal(dd.clustered.sizes.reduce((x, y) => x + y, 0), b.variantsTried);
+  assert.equal(dd.clustered.sizes.length, dd.clustered.K);
+  assert.ok(dd.clustered.K >= 2 && dd.clustered.K <= Math.min(40, b.variantsTried - 1));
+  assert.equal(dd.nTrials, dd.clustered.K);
+  assert.equal(d.values.nTrialsEff, dd.clustered.K);
+  assert.equal(d.values.nTrialsRaw, b.variantsTried);
+  assert.equal(d.values.dsrRaw, dd.raw.dsr);
+});
+
+test('launch: amendment A-1, the pooled re-test of gate (d) and a status consistent with the gates', () => {
+  const b = files.backtest;
+  const L = b.launch;
+  const P = L.pooled;
+  const dd = b.dsrDetail;
+  assert.equal(L.asOf, files.meta.asOf);
+  assert.deepEqual(L.holdoutGates, b.gates.map((g) => ({ id: g.id, pass: g.pass })));
+  const others = b.gates.filter((g) => g.id !== 'd').every((g) => g.pass);
+  assert.equal(L.status, others && P.pass ? 'ready' : 'pre-launch');
+  assert.equal(P.pass, P.dsr >= 0.95 && b.pbo < 0.3);
+  assert.equal(L.amendment.id, 'A-1');
+  assert.equal(L.amendment.date, files.meta.engineFrozen);
+  assert.match(L.amendment.text.en, /pooled out-of-sample record/);
+  // the pooled record is the holdout months followed by the sealed months, net of costs
+  const d = b.gates.find((g) => g.id === 'd');
+  assert.equal(P.from, b.holdout.from);
+  assert.equal(P.to, files.meta.asOf);
+  assert.equal(P.holdoutMonths, d.values.months);
+  assert.equal(P.months, P.holdoutMonths + P.sealedMonths);
+  assert.equal(P.monthly.length, P.months);
+  for (let k = 1; k < P.monthly.length; k++) assert.ok(P.monthly[k][0] > P.monthly[k - 1][0], 'months ascend without overlap');
+  assert.equal(P.monthly[P.holdoutMonths][0], files.meta.sealedSince.slice(0, 7));
+  assert.equal(P.nTrialsEff, dd.clustered.K);
+  assert.equal(P.nTrialsRaw, b.variantsTried);
+  // recompute the pooled DSR from the published monthly series and the published deflation
+  const ex = P.monthly.map((m) => m[1]);
+  const st = { sr: mean(ex) / std(ex), T: ex.length, skew: skewness(ex), kurt: kurtosis(ex) };
+  const again = deflatedSharpe({ ...st, nTrials: dd.clustered.K, varSR: dd.clustered.varSRMonthly });
+  const againRaw = deflatedSharpe({ ...st, nTrials: dd.raw.nTrials, varSR: dd.raw.varSRMonthly });
+  assert.ok(Math.abs(again - P.dsr) < 2e-3, `${again} vs ${P.dsr}`);
+  assert.ok(Math.abs(againRaw - P.dsrRaw) < 2e-3, `${againRaw} vs ${P.dsrRaw}`);
+  assert.ok(Math.abs(st.sr * Math.sqrt(12) - P.sharpe) < 1e-3);
+  // re-tested monthly since the freeze; the latest re-test is the published one
+  assert.equal(P.history.length, P.sealedMonths);
+  assert.equal(P.history[P.history.length - 1].dsr, P.dsr);
+  // remaining: one sentence per language, computed
+  for (const loc of ['en', 'sl']) assert.ok(L.remaining[loc].length > 40 && !/NaN|undefined|null/.test(L.remaining[loc]));
+  if (L.status === 'ready') assert.equal(P.monthsToPass, 0);
+  else if (others && Number.isInteger(P.monthsToPass)) assert.ok(L.remaining.en.includes(`${P.monthsToPass} more month`));
+  // the amendment is sealed in the genesis methodology entry
+  assert.match(files.ledger.entries[0].body.summary.en, /amendment A-1/);
+});
+
+test('the alert-gap note explains the gap against the 30 bps trigger with computed numbers', () => {
+  const s = files.summary;
+  const g = s.alertGap;
+  assert.ok(s.alertGapNote.en.includes(`${Math.round(s.medianAlertGapBps)} bps`));
+  assert.ok(s.alertGapNote.sl.includes(`${Math.round(s.medianAlertGapBps)} b.t.`));
+  for (const loc of ['en', 'sl']) assert.ok(!/NaN|undefined|null/.test(s.alertGapNote[loc]));
+  assert.match(s.alertGapNote.en, /no subscribers yet/);
+  assert.equal(g.thresholdBps, 30);
+  assert.equal(g.windows, Math.max(0, s.nPicks - g.window + 1));
+  assert.ok(g.windowsAbove <= g.windows);
+  assert.equal(files.meta.notes.stream.startsWith('EXPERIMENT'), false);
 });

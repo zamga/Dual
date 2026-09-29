@@ -1,7 +1,7 @@
 // Boot: locale, view-as tier, demo clock, data loader, hash router with View Transitions.
 // Page modules live in js/pages/<module>.js and follow the contract in docs/DESIGN.md §9:
 //   export async function render(ctx) -> { title, node, cleanup?, top?, afterMount? }
-import { matchRoute, isRouteHash } from './router.js';
+import { matchRoute, isRouteHash, routeOfHref, href } from './router.js';
 import { setLocale, t, tp, formatters, LOCALES } from './i18n.js';
 import { h, announce, focusEl, store, prefersReducedMotion, qs } from './dom.js';
 import { createClock } from './clock.js';
@@ -68,7 +68,7 @@ const app = {
     store('quorum.locale', locale);
     root.lang = locale;
     shell.renderAll();
-    renderRoute({ transition: false, keepScroll: true, keepFocus: false }).then(() => announce(t('locale.changed')));
+    renderRoute({ transition: false, keepScroll: true, keepFocus: false, force: true }).then(() => announce(t('locale.changed')));
   },
   setTier(tier) {
     if (!TIERS.includes(tier) || tier === app.tier) return;
@@ -76,7 +76,7 @@ const app = {
     store('quorum.tier', tier);
     if (app.mode === 'live') loadData.clear();
     shell.renderAll();
-    renderRoute({ transition: false, keepScroll: true, keepFocus: true }).then(() => announce(t('tier.changed', { tier: t(`tier.${tier}`) })));
+    renderRoute({ transition: false, keepScroll: true, keepFocus: true, force: true }).then(() => announce(t('tier.changed', { tier: t(`tier.${tier}`) })));
   },
 };
 root.lang = app.locale;
@@ -123,7 +123,8 @@ function makeCtx(route, signal) {
       location.hash = hash.startsWith('#') ? hash : `#${hash}`;
     },
     announce,
-    reload: () => renderRoute({ transition: false, keepScroll: true }),
+    reload: () => renderRoute({ transition: false, keepScroll: true, force: true }),
+    href,
     reducedMotion: prefersReducedMotion(),
   };
 }
@@ -150,11 +151,45 @@ async function loadPage(module) {
   }
 }
 
-async function renderRoute({ transition = true, keepScroll = false, keepFocus = false } = {}) {
+// Legacy '#/p/0052' links are rewritten in place to the flat token ('#p-0052'); no extra history entry.
+function normaliseLegacy(route) {
+  if (!route.legacy || route.name === 'not-found') return;
+  try {
+    const hash = route.hash === '#' ? '' : route.hash;
+    history.replaceState(history.state, '', `${location.pathname}${location.search}${hash}`);
+  } catch {
+    /* sandboxed history: the legacy form keeps working */
+  }
+}
+
+// Scroll to a section of the current page (#ledger~scoreboard). Pages that fill in sections after
+// their data arrives get two more chances to have the target in the document.
+function scrollToSection(id, { focus = true } = {}) {
+  const go = () => {
+    const el = id ? document.getElementById(id) : null;
+    if (!el) return false;
+    el.scrollIntoView({ block: 'start' });
+    if (focus) focusEl(el.querySelector('h2, h3') ?? el);
+    return true;
+  };
+  if (go()) return true;
+  setTimeout(() => go() || setTimeout(go, 900), 300);
+  return false;
+}
+
+async function renderRoute({ transition = true, keepScroll = false, keepFocus = false, force = false } = {}) {
   const hash = location.hash;
-  if (!isRouteHash(hash)) return;
+  if (!isRouteHash(hash) && app.started) return;
+  const route = matchRoute(isRouteHash(hash) ? hash : '');
+  normaliseLegacy(route);
+  // Same page, another section: scroll, do not re-render.
+  if (!force && app.started && app.route && current && route.name === app.route.name && route.token === app.route.token && route.section !== app.route.section) {
+    app.route = route;
+    if (route.section) scrollToSection(route.section);
+    else window.scrollTo(0, 0);
+    return;
+  }
   const seq = ++navSeq;
-  const route = matchRoute(hash);
   const controller = new AbortController();
   root.dataset.busy = 'true';
   const mod = await loadPage(route.module);
@@ -173,6 +208,7 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
   }
   const y = window.scrollY;
   const first = !app.started;
+  let sectionFound = false;
   const swap = () => {
     try {
       current?.cleanup?.();
@@ -182,15 +218,14 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
     current?.controller.abort();
     app.route = route;
     view.replaceChildren(result.node);
-    document.title = result.title ? `${result.title} · Quorum` : `Quorum · ${t('site.tagline')}`;
+    document.title = result.title ? `${result.title} · Quorum Research` : 'Quorum Research';
     root.dataset.top = result.top ?? 'karst';
     root.dataset.route = route.module;
     current = { cleanup: result.cleanup, controller };
     if (keepScroll) window.scrollTo(0, y);
     else {
-      const target = route.query.s ? document.getElementById(route.query.s) : null;
-      if (target) target.scrollIntoView();
-      else window.scrollTo(0, 0);
+      window.scrollTo(0, 0);
+      if (route.section) sectionFound = scrollToSection(route.section, { focus: false });
     }
     shell.markCurrent();
     shell.updateSurfaces();
@@ -209,8 +244,8 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
   app.started = true;
   if (seq === navSeq) delete root.dataset.busy;
   if (!first && !keepFocus) {
-    const target = route.query.s ? document.getElementById(route.query.s) : null;
-    focusEl(target ?? qs('h1', view) ?? view);
+    const target = route.section && sectionFound ? document.getElementById(route.section) : null;
+    focusEl(target?.querySelector('h2, h3') ?? target ?? qs('h1', view) ?? view);
     announce(t('announce.page', { title: result.title ?? 'Quorum' }));
   }
   requestAnimationFrame(() => result.afterMount?.());
@@ -228,9 +263,10 @@ qs('.skip-link')?.addEventListener('click', (e) => {
 // Warm the next page module on hover or focus (it is a dynamic import, so it is cached).
 const warmed = new Set();
 function warm(e) {
-  const a = e.target.closest?.('a[href^="#/"]');
+  const a = e.target.closest?.('a[href^="#"]');
   if (!a) return;
-  const m = matchRoute(a.getAttribute('href')).module;
+  const m = routeOfHref(a.getAttribute('href'))?.module;
+  if (!m) return;
   if (warmed.has(m)) return;
   warmed.add(m);
   import(`./pages/${m}.js`).catch(() => {});

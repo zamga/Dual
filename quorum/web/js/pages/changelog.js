@@ -1,6 +1,7 @@
-// #/methodology/changelog: every methodology version from meta.json, newest first, each tied to
+// #methodology-changelog: every methodology version from meta.json, newest first, each tied to
 // its METHODOLOGY record in the ledger. SL: first draft, needs native review.
 import { h } from '../dom.js';
+import { href } from '../router.js';
 import { masthead, page } from './_content.js';
 
 const COPY = {
@@ -61,12 +62,12 @@ export async function render(ctx) {
             { class: 'c-meta dl' },
             h('div', {}, h('dt', {}, C.effective), h('dd', {}, h('time', { datetime: m.effective }, fmt.date(m.effective)))),
             h('div', {}, h('dt', {}, C.model), h('dd', {}, meta.modelVersion)),
-            h('div', {}, h('dt', {}, C.record), h('dd', {}, Number.isInteger(m.seq) ? h('a', { href: `#/ledger?seq=${m.seq}` }, `#${m.seq}`) : '–')),
+            h('div', {}, h('dt', {}, C.record), h('dd', {}, Number.isInteger(m.seq) ? h('a', { href: href('issue', m.effective, `r${m.seq}`) }, `#${m.seq}`) : '–')),
           ),
         ),
       ),
     ),
-    h('div', { class: 'grid page-next' }, h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: '#/methodology' }, `← ${C.back}`))),
+    h('div', { class: 'grid page-next' }, h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('methodology') }, `← ${C.back}`))),
   );
   return { title: C.title, node };
 }

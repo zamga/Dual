@@ -479,6 +479,19 @@ export function createBilling(ctx) {
 }
 
 // Routes: POST /api/checkout, POST /api/webhooks/stripe, POST /api/withdraw, POST /api/billing/portal
+// A Stripe outage (5xx, 429, a network failure) answers 503 with a plain message instead of a 500;
+// Stripe's 4xx answers are our bugs and stay errors.
+async function stripeOrUnavailable(ctx, fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    const status = e instanceof StripeError ? e.status : null;
+    if (status != null && status < 500 && status !== 429) throw e;
+    ctx.log.warn(`[billing] Stripe unavailable: ${e.message}`);
+    throw new HttpError(503, 'billing_unavailable', 'Payments are temporarily unavailable. Nothing was charged; try again in a few minutes.', { retryAfterSec: 60 });
+  }
+}
+
 export function registerBillingRoutes(router, ctx) {
   const { db, config } = ctx;
 
@@ -499,17 +512,19 @@ export function registerBillingRoutes(router, ctx) {
       if (ent.picks.active && live) throw new HttpError(409, 'already_subscribed', 'You already have a subscription. Change it from your account.');
       const priceId = config.stripe.prices[tier]?.[interval];
       if (!priceId || !config.stripe.secretKey) throw new HttpError(503, 'billing_unavailable', 'Payments are not configured on this server.');
-      const session = await ctx.stripe.createCheckoutSession({
-        userId: user.id,
-        email: user.email,
-        customerId: user.stripe_customer_id,
-        priceId,
-        tier,
-        interval,
-        locale: user.locale,
-        successUrl: `${config.publicBaseUrl}/#join`,
-        cancelUrl: `${config.publicBaseUrl}/#pricing`,
-      });
+      const session = await stripeOrUnavailable(ctx, () =>
+        ctx.stripe.createCheckoutSession({
+          userId: user.id,
+          email: user.email,
+          customerId: user.stripe_customer_id,
+          priceId,
+          tier,
+          interval,
+          locale: user.locale,
+          successUrl: `${config.publicBaseUrl}/#join`,
+          cancelUrl: `${config.publicBaseUrl}/#pricing`,
+        }),
+      );
       db.run('INSERT INTO checkout_sessions (id, user_id, tier, interval, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING', session.id, user.id, tier, interval, iso(ctx.now()));
       return { url: session.url, id: session.id };
     },
@@ -551,7 +566,7 @@ export function registerBillingRoutes(router, ctx) {
     '/api/billing/portal',
     async (req, res, { user }) => {
       if (!user.stripe_customer_id) throw new HttpError(409, 'no_customer', 'There is no billing account yet.');
-      const s = await ctx.stripe.createPortalSession({ customerId: user.stripe_customer_id, returnUrl: `${config.publicBaseUrl}/#account`, locale: user.locale });
+      const s = await stripeOrUnavailable(ctx, () => ctx.stripe.createPortalSession({ customerId: user.stripe_customer_id, returnUrl: `${config.publicBaseUrl}/#account`, locale: user.locale }));
       return { url: s.url };
     },
     { auth: true, accepts: ['json'] },
