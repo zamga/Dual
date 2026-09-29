@@ -244,8 +244,17 @@ export function familyDef(id, meta, locale) {
 // handled once for the whole app (app.js, [data-copy]).
 export const CONTACT = { support: 'support@qrm.si', privacy: 'privacy@qrm.si', press: 'press@qrm.si', hello: 'hello@qrm.si' };
 
+// The qrm.si domain is the brief's proposed name and is not registered to us, so in the demo every
+// address says it is a placeholder: nobody should send mail to a domain a third party may own.
+function isLiveMode() {
+  return typeof document !== 'undefined' && !!document.querySelector('meta[name="quorum-mode"][content="live"]');
+}
+
 export function contactHtml(addr, locale = 'en') {
   const label = locale === 'sl' ? 'Kopiraj' : 'Copy';
   const aria = locale === 'sl' ? `Kopiraj naslov ${addr}` : `Copy the address ${addr}`;
-  return `<span class="contact"><span class="mono contact__addr">${addr}</span> <button type="button" class="contact__copy" data-copy="${addr}" aria-label="${aria}">${label}</button></span>`;
+  const note = isLiveMode()
+    ? ''
+    : ` <span class="label contact__note">${locale === 'sl' ? 'demo · naslov ni aktiven' : 'demo · placeholder, not monitored'}</span>`;
+  return `<span class="contact"><span class="mono contact__addr">${addr}</span> <button type="button" class="contact__copy" data-copy="${addr}" aria-label="${aria}">${label}</button>${note}</span>`;
 }
