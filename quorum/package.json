@@ -16,7 +16,15 @@
     "fixture": "node scripts/fixture-data.js",
     "check:sms": "node scripts/check-sms-templates.js",
     "server": "node server/index.js",
-    "demo:day": "node scripts/demo-day.js"
+    "demo:day": "node scripts/demo-day.js",
+    "test:core": "node --test \"tests/core/**/*.test.js\"",
+    "test:engine": "node --test \"tests/engine/**/*.test.js\"",
+    "test:server": "node --test \"tests/server/**/*.test.js\"",
+    "test:web": "node --test \"tests/web/**/*.test.js\"",
+    "test:e2e:member": "node tests/e2e/member-run.js",
+    "engine:report": "node engine/tools/model-report.js",
+    "scheduler:slots": "node server/scheduler.js",
+    "build:artifact": "node scripts/build-artifact.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",

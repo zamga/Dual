@@ -114,7 +114,7 @@ Entry shape: `{ seq, type, issueDate, at, body, prevHash, hash }`.
   - `CLOSE`: `{ no, reveal, entry: {date, open}, exit: {date, open}, net, bench, excess }` (reveals the sealed pick)
   - `ISSUE`: `{ issueNo, nScored, closest, buys: [no], renews: [no], closes: [no], vetoes: {rule, llm, human, capped}, methodology }`
   - `CORRECTION`: `{ refSeq, field, was, now, reason }`
-  - Order within one issue date: BUY/RENEW/CLOSE entries (sealed 13:45, `at` = sealAt), then the ISSUE entry (`at` = publishAt).
+  - Order within one issue date: BUY/RENEW entries (sealed 13:45, `at` = sealAt), then the ISSUE entry (`at` = publishAt, announcing that day's BUYs, RENEWs and CLOSEs), then the CLOSE entries one minute after the US open (`at` = open + 1 min), because the exit price exists only then.
 
 ### core/quorum-rule.js
 - `DEFAULT_RULE = { topPct: 0.9, minAgree: 3, maxPerIssue: 2, maxPerMonth: 8, maxPerSector: 3, cooldownDays: 10, families: ['A','B','C','D'] }`
@@ -258,7 +258,10 @@ All numbers are plain JSON numbers (fractions, not percent: `0.018` = 1.8%). Dat
     "pooled": {"from": "2022-10-03", "to": "2026-09-28", "months": 48, "sharpe": 0.9, "dsr": 0.9, "dsrRaw": 0.3, "nTrialsRaw": 480, "nTrialsEff": 12, "pass": false},
     "remaining": {"en": "…", "sl": "…"} } }
 ```
-Launch gate E needs all five holdout gates. Gate (d) as written cannot pass on a 36-month holdout at the brief's own expected edge (a Sharpe near 1 gives a probabilistic Sharpe of about 0.94 before any deflation), so amendment A-1, dated at the freeze and disclosed on the site, re-tests (d) monthly on the pooled out-of-sample record (holdout + sealed forward record) with the same deflation. The DSR deflates by the **effective** number of independent trials (clustered variants), and the raw-count figure is published beside it. `launch.status` is `ready` only when (a)–(c), (e) passed on the holdout and (d) passes on the pooled record. The rule threshold is `meta.rule.topPct` (0.95 after calibration: "top 5%"); no copy may hard-code "top decile".
+Launch gate E needs all five ship gates. **Amendment A-1** (adopted 2025-09-30, after the holdout was opened; disclosed in full on the site, with the original wording's result published beside it) corrects a misapplication in gate (d) as first written. The Deflated Sharpe Ratio corrects for selection among trials, and that selection happened in the research window, where the variants were run. On the holdout a single pre-committed configuration was tested, so there is nothing to deflate there, and 36 months cannot reach 95% confidence at the brief's own expected edge (a Sharpe near 1 gives a probabilistic Sharpe near 0.93, before any deflation). A-1 splits (d) into:
+- **(d1)** clustered DSR >= 0.95 on the research window, where the variants were tried, and PBO < 0.3 across the variants;
+- **(d2)** probabilistic Sharpe ratio PSR(SR > 0) >= 0.95 on the pooled out-of-sample record (holdout + sealed forward record, monthly net excess returns of the follow-every-pick paper portfolio), re-tested monthly.
+`launch` exports `original {dsr, pass}` (the first wording, on the holdout), `d1 {dsrResearch, pbo, pass}`, `d2 {psr, months, sharpe, pass}` and keeps `pooled` for the deflated pooled figures. `launch.status` is `ready` only when (a), (b), (c), (e) pass on the holdout and d1 and d2 both pass; otherwise `pre-launch`, and `remaining` says in one computed sentence what must still happen. The DSR deflates by the **effective** number of independent trials (clustered variants); the raw-count figure is published beside it. The rule threshold is `meta.rule.topPct` (0.95 after calibration: "top 5%"); no copy may hard-code "top decile".
 
 ## 4. server/
 
