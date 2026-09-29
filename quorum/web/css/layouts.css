@@ -1,0 +1,802 @@
+/* v2 page compositions (DESIGN-V2 §5); the class contract is docs/DESIGN.md §10. */
+
+/* ---- on the bays: four children, one per bay (bay 4 = r4 → edge) ------------------------------- */
+.on-bays {
+  grid-column: full-start / full-end;
+  display: grid;
+  grid-template-columns: subgrid;
+  row-gap: var(--s-6);
+  padding: 0 !important;
+}
+
+.on-bays > * {
+  padding-inline: var(--inset);
+  min-width: 0;
+}
+
+.on-bays > :nth-child(4n + 1) {
+  grid-column: r1 / r2;
+}
+.on-bays > :nth-child(4n + 2) {
+  grid-column: r2 / r3;
+}
+.on-bays > :nth-child(4n + 3) {
+  grid-column: r3 / r4;
+}
+.on-bays > :nth-child(4n) {
+  grid-column: r4 / full-end;
+}
+
+@media (max-width: 1023.98px) {
+  .on-bays {
+    grid-column: r1 / r4;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .on-bays > :nth-child(n) {
+    grid-column: auto;
+  }
+}
+
+/* A verdict line in the voice face, on its own across r1→r4 (the scoreboard answer, "Most days, nothing."). */
+.verdict {
+  grid-column: r1 / full-end;
+  padding-block: var(--s-6);
+}
+
+/* ---- the record wall (#ledger) ------------------------------------------------------------------- */
+.wall {
+  padding-block: clamp(32px, 4vw, 56px) var(--s-8);
+  row-gap: clamp(1.5rem, 0.5rem + 2.6vw, 3.25rem);
+}
+
+.wall__title {
+  grid-column: r1 / full-end;
+}
+
+.wall__figs {
+  grid-column: full-start / full-end;
+  display: grid;
+  grid-template-columns: subgrid;
+  row-gap: var(--s-7);
+  padding: 0 !important;
+}
+
+.wall__fig,
+.wall__aside {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  gap: 10px;
+  padding: 14px var(--inset) 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+
+/* desktop: the five figures in one row on r1→r4, in the brief's order; the sixth cell (the
+   mean, the alert gap, the track-record label) runs under them */
+@media (min-width: 1024px) {
+  .wall__figs {
+    grid-column: r1 / r4;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    /* five stones do not fit three bays: the row is one opaque slab of the wall, so rules 2 and 3 pass
+       behind it and never strike a figure */
+    background: var(--bg);
+  }
+  .wall__aside {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 2fr 2fr;
+    grid-template-rows: auto;
+    column-gap: calc(2 * var(--inset));
+    align-items: start;
+    padding-bottom: var(--s-5);
+  }
+  .wall__aside > .wall__s {
+    max-width: 52ch;
+  }
+}
+
+.wall__fig {
+  container-type: inline-size;
+}
+
+.wall__v {
+  padding-top: 0.12em;
+  font-size: min(var(--t-fig-xl), 21cqi);
+}
+
+.wall__more {
+  display: grid;
+  gap: 6px;
+  font-size: var(--t-small);
+}
+
+.wall__more > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule-inner);
+}
+
+.wall__more dd {
+  font-size: var(--t-fig);
+}
+
+.wall__lede {
+  align-self: end;
+}
+
+.wall__toc {
+  grid-row: span 1;
+}
+
+.wall__v .signed {
+  gap: 0.12em;
+}
+
+.wall__s {
+  font-size: var(--t-xs);
+  line-height: 1.45;
+  color: var(--fg-2);
+  max-width: 34ch;
+}
+
+.wall__vci {
+  display: inline-grid;
+  width: fit-content;
+  row-gap: 8px;
+}
+
+.wall__ci {
+  position: relative;
+  height: 9px;
+  margin-top: 2px;
+  --lo: 0%;
+  --hi: 100%;
+  --pt: 50%;
+}
+
+.wall__ci::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--lo);
+  right: calc(100% - var(--hi));
+  height: 9px;
+  padding-block: 4px;
+  border-inline: 1px solid var(--fg);
+  background: var(--fg) content-box;
+}
+
+.wall__ci::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--pt);
+  width: 3px;
+  height: 9px;
+  margin-left: -1px;
+  background: var(--fg);
+}
+
+@media (max-width: 1023.98px) {
+  .wall__figs {
+    grid-column: r1 / r4;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: var(--s-6);
+  }
+  .wall__fig:nth-child(n),
+  .wall__aside {
+    grid-column: auto;
+  }
+  .wall__v.fig-xl {
+    font-size: min(clamp(1.75rem, 8.4vw, 3.5rem), 19cqi);
+  }
+}
+
+/* A table laid on the rules; a pick row carries a 3 px lintel (.row-lintel, the shared transition element). */
+.row-lintel {
+  display: block;
+  width: 100%;
+  height: 3px;
+  background: var(--quorum);
+}
+
+.lg-lintel {
+  display: inline-grid;
+  gap: 3px;
+  justify-items: stretch;
+}
+
+/* ---- the stage screen: a night first screen (the pick hero) ------------------------------------ */
+.stage-screen {
+  position: relative;
+  min-height: calc(100svh - var(--chrome-h, 92px));
+  align-content: end;
+  row-gap: var(--s-5);
+  padding-block: var(--s-8) var(--s-9);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.stage-screen__kicker {
+  grid-column: r1 / r4;
+}
+
+.stage-screen__title {
+  grid-column: r1 / full-end;
+}
+
+.stage-screen__strip {
+  grid-column: r1 / r4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.stage-screen__strip .t-lintel {
+  font-size: clamp(1.25rem, 0.9rem + 1.4vw, 2.25rem);
+}
+
+@media (max-width: 639.98px) {
+  .stage-screen__title.d-hero {
+    font-size: 30vw;
+  }
+}
+
+/* ---- the note sheet: Paper rises over the stage on scroll (24 px top radius) -------------------- */
+.note-sheet {
+  position: relative;
+  z-index: 2;
+  margin-top: calc(-1 * var(--radius-sheet));
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  background: var(--bg);
+  color: var(--fg);
+  padding-top: var(--s-6);
+  isolation: isolate;
+}
+
+.note-sheet > .grid {
+  padding-block: var(--s-8);
+}
+
+.note-sheet > .grid + .grid {
+  border-top: 1px solid var(--rule-inner);
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    :root:not([data-motion='reduce']) .note-sheet {
+      animation: sheet-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 60%;
+    }
+  }
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translate3d(0, 10vh, 0);
+  }
+}
+
+@media (max-width: 639.98px) {
+  .note-sheet {
+    --radius-sheet: 18px;
+  }
+}
+
+/* ---- scaffold: everything hypothetical (#backtest) ---------------------------------------------- */
+.scaffold :is(path, line, polyline, rect, circle):not(.is-real),
+.is-hypo {
+  stroke-dasharray: 4 3;
+}
+
+.scaffold-banner {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + var(--header-h));
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 8px var(--inset);
+  background: var(--bg);
+  border-block: 1px dashed var(--fg);
+}
+
+.scaffold-banner .label {
+  color: var(--fg);
+}
+
+.scaffold-fig {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+}
+
+@media (max-width: 639.98px) {
+  .scaffold-fig {
+    aspect-ratio: 4 / 5;
+  }
+}
+
+/* A wide table that scrolls sideways within its row, with a sticky first column. */
+.table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.table-scroll :is(th, td):first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg);
+}
+
+/* ---- pricing plinths ------------------------------------------------------------------------------ */
+.pl-row {
+  grid-column: full-start / full-end;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: stretch;
+  padding: 0 !important;
+  row-gap: var(--s-5);
+}
+
+.pl {
+  display: grid;
+  grid-template-rows: auto auto auto auto 1fr auto;
+  gap: 10px;
+  padding: 20px var(--inset) 0;
+  border-top: 1px solid var(--fg);
+  min-width: 0;
+}
+
+.pl:nth-child(1) {
+  grid-column: r1 / r2;
+}
+.pl:nth-child(2) {
+  grid-column: r2 / r3;
+}
+.pl:nth-child(3) {
+  grid-column: r3 / r4;
+}
+
+.pl__name {
+  color: var(--fg);
+}
+
+.pl__price {
+  margin-top: var(--s-4);
+}
+
+.pl__per {
+  font-size: var(--t-small);
+  color: var(--fg-2);
+}
+
+.pl__lead {
+  margin-top: var(--s-4);
+  font-size: 1.0625rem;
+  line-height: 1.35;
+  max-width: 30ch;
+}
+
+.pl__items {
+  display: grid;
+  align-content: start;
+  gap: 0;
+  margin-top: var(--s-3);
+  font-size: var(--t-small);
+}
+
+.pl__items li {
+  padding: 9px 0;
+  border-top: 1px solid var(--rule-inner);
+}
+
+.pl__cta {
+  margin-top: var(--s-5);
+  padding-bottom: var(--s-2);
+}
+
+/* The base of each plinth: a 6 px block the width of its bay. */
+.pl::after {
+  content: '';
+  display: block;
+  height: 6px;
+  margin-inline: calc(-1 * var(--inset));
+  background: var(--line);
+}
+
+/* the launch note: its own row under the plinths at a reading measure (in the 180 px outer margin it
+   wrapped to nine lines) */
+.pl-note {
+  grid-column: r1 / r3;
+  grid-row: 2;
+  align-self: start;
+  padding-top: var(--s-2);
+  font-size: var(--t-small);
+  max-width: 64ch;
+}
+
+@media (max-width: 1023.98px) {
+  .pl-note {
+    grid-column: r1 / r4;
+  }
+}
+
+@media (max-width: 639.98px) {
+  .pl-row {
+    grid-column: r1 / r4;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--s-7);
+  }
+  .pl:nth-child(n),
+  .pl-note {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .pl-row .seg button,
+  .pl-toggle button {
+    min-height: 44px;
+  }
+}
+
+/* ---- join: the steps as a colonnade on rule 1 ---------------------------------------------------- */
+.jc {
+  row-gap: var(--s-6);
+  align-items: start;
+}
+
+.jc__steps {
+  grid-column: r1 / r3;
+  display: grid;
+  padding-left: 0 !important;
+}
+
+.jc__step {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: var(--s-5) 0 var(--s-6) calc(var(--inset) + 22px);
+}
+
+.jc__step::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: calc(var(--s-5) + 0.35em);
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--fg);
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.jc__step::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: calc(var(--s-5) + 0.35em + 3px);
+  width: 0;
+  height: 3px;
+  background: var(--fg);
+  transition: width var(--d-3) var(--e-land);
+}
+
+.jc__step.is-done::after {
+  width: calc(var(--inset) + 14px);
+}
+
+.jc__step.is-done::before {
+  background: var(--fg);
+}
+
+.jc__step.is-current::before {
+  box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--fg);
+}
+
+.jc__step:not(.is-current):not(.is-done) {
+  color: var(--fg-2);
+}
+
+.jc__n {
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: var(--t-label);
+  letter-spacing: var(--track-label);
+  color: var(--fg-2);
+}
+
+.jc__t {
+  font-stretch: var(--wdth-display);
+  font-size: var(--t-d4);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.012em;
+}
+
+.jc__b {
+  max-width: 56ch;
+}
+
+.jc__preview {
+  grid-column: r3 / full-end;
+  position: sticky;
+  top: calc(var(--header-h) + var(--s-5));
+  display: grid;
+  gap: var(--s-4);
+  justify-items: start;
+}
+
+.jc__handle {
+  display: none;
+}
+
+.jc__count {
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: var(--t-fig);
+}
+
+.jc__count mark,
+.jc__nongsm {
+  background: var(--fg);
+  color: var(--bg);
+  padding-inline: 1px;
+}
+
+@media (max-width: 1023.98px) {
+  .jc__steps {
+    grid-column: r1 / r4;
+  }
+  .jc__preview {
+    position: fixed;
+    z-index: 30;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    max-height: 60svh;
+    overflow: hidden;
+    padding: 0 var(--gutter) calc(var(--s-5) + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+    transform: translate3d(0, calc(100% - 48px - env(safe-area-inset-bottom, 0px)), 0);
+    transition: transform var(--d-3) var(--e-io);
+    justify-items: stretch;
+  }
+  .jc__preview.is-open {
+    transform: none;
+    overflow-y: auto;
+  }
+  .jc__handle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-stretch: var(--wdth-mono);
+    font-size: var(--t-label);
+    font-weight: 520;
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+    padding: 0;
+  }
+  .jc__handle::before {
+    content: '';
+    position: absolute;
+    left: calc(50% - 20px);
+    top: 6px;
+    width: 40px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--line);
+  }
+  .jc {
+    padding-bottom: 72px;
+  }
+}
+
+/* ---- the day: a sticky Martian clock in the margin (home §2) -------------------------------------- */
+.day-clock {
+  position: sticky;
+  top: calc(var(--header-h) + 30vh);
+  align-self: start;
+}
+
+.day-clock .fig-xl {
+  font-size: clamp(1.5rem, 0.9rem + 1.6vw, 2.75rem);
+}
+
+@media (min-width: 1024px) {
+  .day-clock {
+    text-align: right;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .day-clock {
+    top: var(--header-h);
+    z-index: 3;
+    padding-block: 8px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--rule-inner);
+  }
+}
+
+/* ---- "Lower the bar" (home §1, #how-it-works; charts/lower-the-bar.js) --------------------------- */
+.ltb {
+  display: grid;
+  gap: var(--s-4);
+  align-content: start;
+  margin: 0;
+}
+
+.ltb__plot {
+  position: relative;
+  height: clamp(240px, 38vh, 380px);
+  touch-action: none;
+  cursor: ns-resize;
+  user-select: none;
+}
+
+.ltb__canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+}
+
+/* the kicker and the caption keep the inset line; the plot is flush so its columns stand on the rules */
+.ltb__kicker,
+.ltb__cap {
+  padding-inline: var(--inset);
+}
+
+.ltb__lintel {
+  position: absolute;
+  height: 3px;
+  margin-top: -1px;
+  background: var(--quorum);
+  pointer-events: none;
+}
+
+.ltb__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  outline: none;
+}
+
+.ltb__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  border-top: 1px dashed var(--fg);
+}
+
+.ltb__thumb {
+  position: absolute;
+  left: calc(100% + var(--ltb-pad, 26px) + 10px);
+  top: 0;
+  transform: translateY(-50%);
+  min-width: 44px;
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--fg);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--t-fig);
+  transition: background-color var(--d-1) var(--e-ui), color var(--d-1) var(--e-ui);
+}
+
+.ltb__bar:hover .ltb__thumb,
+.ltb__bar:focus-visible .ltb__thumb {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.ltb__bar:focus-visible .ltb__line {
+  border-top-style: solid;
+}
+
+.ltb__cap {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  max-width: 64ch;
+}
+
+.ltb__readout {
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+
+.ltb__readout.is-in {
+  animation: q-fade var(--d-1) var(--e-ui) both;
+}
+
+.ltb.is-hypothetical .ltb__tag {
+  border-style: dashed;
+  color: var(--fg);
+}
+
+/* below 1024 there is no room outside r4, so the thumb rides the bar between columns B and C */
+@media (max-width: 1023.98px) {
+  .ltb__thumb {
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (max-width: 639.98px) {
+  .ltb__thumb {
+    min-height: 44px;
+  }
+}
+
+/* ---- research: the universe as four strips on the rules --------------------------------------------- */
+.strips-fig {
+  display: grid;
+  gap: var(--s-4);
+  padding-block: var(--s-6) var(--s-8);
+}
+
+.strips {
+  position: relative;
+  height: clamp(320px, 60svh, 640px);
+}
+
+.strips canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.strips__k {
+  position: absolute;
+  left: var(--gutter);
+  top: 14px;
+  max-width: 11ch;
+}
+
+.strips__k--th {
+  top: calc(var(--th, 12%) + 6px);
+}
+
+@media (max-width: 1023.98px) {
+  .strips__k {
+    display: none;
+  }
+}
+
+.strips__cap {
+  width: min(100% - 2 * var(--gutter), 64ch);
+  margin-inline: auto;
+  text-align: left;
+}
+
+@media (min-width: 1024px) {
+  .strips__cap {
+    margin-left: calc(50% - 1.5 * min(25%, 460px) + var(--inset));
+  }
+}
+

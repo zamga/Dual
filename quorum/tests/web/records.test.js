@@ -61,7 +61,7 @@ test('rule labels come from meta.rule.topPct, in both locales, never "top decile
 
 test('no page copy hard-codes the rule threshold', () => {
   const root = fileURLToPath(new URL('../../web/js/', import.meta.url));
-  const files = ['pages/home.js', 'pages/how-it-works.js', 'pages/help.js', 'pages/methodology.js', 'pages/pricing.js', 'hero/level.js', 'hero/level-data.js', 'pages/pick.js', 'pages/ledger.js', 'pages/issue.js', 'pages/stock.js', 'pages/disclosures.js', 'pages/backtest.js'];
+  const files = ['pages/home.js', 'pages/how-it-works.js', 'pages/help.js', 'pages/methodology.js', 'pages/pricing.js', 'hero/assembly.js', 'hero/level-data.js', 'charts/lower-the-bar.js', 'pages/pick.js', 'pages/ledger.js', 'pages/issue.js', 'pages/stock.js', 'pages/disclosures.js', 'pages/backtest.js'];
   for (const f of files) {
     const src = readFileSync(`${root}${f}`, 'utf8').replace(/^\s*\/\/.*$/gm, '');
     // "top decile" of a veto (days to cover, idiosyncratic volatility) is a different rule and allowed

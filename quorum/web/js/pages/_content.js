@@ -28,6 +28,7 @@ export function contentSections(sections) {
       h('div', { class: 'prose c-body' }, toNode(s.body)),
       s.aside ? h('aside', { class: 'c-meta content-aside' }, toNode(s.aside)) : null,
       s.figure ? h('div', { class: 'content-fig c-full flush' }, s.figure) : null,
+      s.wide ?? null, // a block placed on the section's own grid (e.g. "Lower the bar", r1→r4 on the rules)
     ),
   );
 }

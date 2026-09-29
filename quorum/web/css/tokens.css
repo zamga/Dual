@@ -1,245 +1,234 @@
-/* Quorum design tokens. Colonnade (docs/BRIEF.md §5). The palette is exact; do not add colours.
-   Semantic tokens (--bg, --fg, --rule, --quorum …) switch per surface: Karst (default), Paper, Chamber. */
+/* Quorum design tokens. v2 "Stone and Signal" (docs/DESIGN-V2.md §3, docs/DESIGN.md §2–§6). */
 
-/* ---- metric-matched fallback faces --------------------------------------------------------------
-   If Google Fonts does not load (offline, blocked, slow), the layout must hold: the fallback faces below
-   map Arial-metric (Arial, Liberation Sans, Arimo, Helvetica), Times-metric and Courier-metric system fonts
-   onto the web fonts' widths and vertical metrics, so lines break in the same places and the hero headline
-   does not clip. Archivo has a width axis the fallbacks lack, so it gets one face per stretch band (the
-   element's font-stretch picks it) and per weight band. Numbers measured against the web fonts (DESIGN.md
-   §3): size-adjust = web width / fallback width over sample copy; ascent/descent = the web font's hhea
-   metrics (Archivo 0.878/0.210, Newsreader 0.735/0.265, Martian Mono 1.0/0.2) divided by size-adjust. */
+/* ---- metric-matched fallback faces --------------------------------------------------------------- */
 @font-face {
-  font-family: 'Archivo Fallback'; /* the hero, 62%, regular */
-  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Arimo-Regular'), local('Helvetica');
-  font-style: normal;
+  font-family: 'Mona Sans Fallback'; /* wdth 75: display */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Helvetica');
+  font-weight: 100 900;
+  font-stretch: 50% 87.4%;
+  size-adjust: 70.6%;
+  ascent-override: 154.4%;
+  descent-override: 45.3%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Mona Sans Fallback'; /* wdth 100: text and UI */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Helvetica');
   font-weight: 100 549;
-  font-stretch: 50% 63%;
-  size-adjust: 67.30%;
-  ascent-override: 130.46%;
-  descent-override: 31.20%;
+  font-stretch: 87.5% 106%;
+  size-adjust: 102.4%;
+  ascent-override: 106.4%;
+  descent-override: 31.3%;
   line-gap-override: 0%;
 }
 
 @font-face {
-  font-family: 'Archivo Fallback'; /* the hero, 62%, bold */
-  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
-  font-style: normal;
+  font-family: 'Mona Sans Fallback'; /* wdth 100: strong */
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Helvetica Bold');
   font-weight: 550 900;
-  font-stretch: 50% 63%;
-  size-adjust: 65.50%;
-  ascent-override: 134.05%;
-  descent-override: 32.06%;
+  font-stretch: 87.5% 106%;
+  size-adjust: 98.5%;
+  ascent-override: 110.7%;
+  descent-override: 32.5%;
   line-gap-override: 0%;
 }
 
 @font-face {
-  font-family: 'Archivo Fallback'; /* headlines, 64%, regular */
-  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Arimo-Regular'), local('Helvetica');
-  font-style: normal;
+  font-family: 'Mona Sans Fallback'; /* wdth 112: ledes */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Helvetica');
+  font-weight: 100 900;
+  font-stretch: 106.1% 118%;
+  size-adjust: 104.6%;
+  ascent-override: 104.2%;
+  descent-override: 30.6%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Mona Sans Fallback'; /* wdth 125: lintel statements */
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Helvetica');
+  font-weight: 100 900;
+  font-stretch: 118.1% 150%;
+  size-adjust: 107.6%;
+  ascent-override: 101.3%;
+  descent-override: 29.7%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Mona Sans Fallback N'; /* display only: a condensed system face when one exists (width estimated at 0.82 × Arial) */
+  src: local('Arial Narrow'), local('ArialNarrow'), local('Liberation Sans Narrow'), local('LiberationSansNarrow'), local('Roboto Condensed'), local('RobotoCondensed-Regular'), local('HelveticaNeue-Condensed'), local('Helvetica Neue Condensed');
+  font-weight: 100 900;
+  size-adjust: 86%;
+  ascent-override: 126.7%;
+  descent-override: 37.2%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Mona Sans Fallback ND'; /* display only: DejaVu Sans Condensed (Linux), wider than Arial Narrow (estimated at 0.99 × Arial) */
+  src: local('DejaVu Sans Condensed'), local('DejaVuSansCondensed');
+  font-weight: 100 900;
+  size-adjust: 71.3%;
+  ascent-override: 152.9%;
+  descent-override: 44.9%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Martian Mono Fallback'; /* wdth 75 */
+  src: local('Courier New'), local('CourierNewPSMT'), local('Liberation Mono'), local('LiberationMono'), local('Cousine');
   font-weight: 100 549;
-  font-stretch: 63.01% 72%;
-  size-adjust: 68.50%;
-  ascent-override: 128.18%;
-  descent-override: 30.66%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Archivo Fallback'; /* headlines, 64%, bold */
-  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
-  font-style: normal;
-  font-weight: 550 900;
-  font-stretch: 63.01% 72%;
-  size-adjust: 66.60%;
-  ascent-override: 131.83%;
-  descent-override: 31.53%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Archivo Fallback'; /* sub-heads, 78–81%, regular */
-  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Arimo-Regular'), local('Helvetica');
-  font-style: normal;
-  font-weight: 100 549;
-  font-stretch: 72.01% 90%;
-  size-adjust: 80%;
-  ascent-override: 109.75%;
-  descent-override: 26.25%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Archivo Fallback'; /* sub-heads, 78–81%, bold */
-  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
-  font-style: normal;
-  font-weight: 550 900;
-  font-stretch: 72.01% 90%;
-  size-adjust: 77.60%;
-  ascent-override: 113.14%;
-  descent-override: 27.06%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Archivo Fallback'; /* text and UI, 100%, regular */
-  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Arimo'), local('Arimo-Regular'), local('Helvetica');
-  font-style: normal;
-  font-weight: 100 549;
-  font-stretch: 90.01% 125%;
-  size-adjust: 98%;
-  ascent-override: 89.59%;
-  descent-override: 21.43%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Archivo Fallback'; /* text and UI, 100%, bold */
-  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Helvetica Bold'), local('Helvetica-Bold');
-  font-style: normal;
-  font-weight: 550 900;
-  font-stretch: 90.01% 125%;
-  size-adjust: 94%;
-  ascent-override: 93.40%;
-  descent-override: 22.34%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Newsreader Fallback'; /* normal regular */
-  src: local('Times New Roman'), local('TimesNewRomanPSMT'), local('Liberation Serif'), local('LiberationSerif'), local('Tinos'), local('Tinos-Regular'), local('Times');
-  font-style: normal;
-  font-weight: 200 549;
-  size-adjust: 101.80%;
-  ascent-override: 72.20%;
-  descent-override: 26.03%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Newsreader Fallback'; /* italic regular */
-  src: local('Times New Roman Italic'), local('TimesNewRomanPS-ItalicMT'), local('Liberation Serif Italic'), local('LiberationSerif-Italic'), local('Tinos Italic'), local('Tinos-Italic'), local('Times Italic');
-  font-style: italic;
-  font-weight: 200 549;
-  size-adjust: 93.20%;
-  ascent-override: 78.86%;
-  descent-override: 28.43%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Newsreader Fallback'; /* normal bold */
-  src: local('Times New Roman Bold'), local('TimesNewRomanPS-BoldMT'), local('Liberation Serif Bold'), local('LiberationSerif-Bold'), local('Tinos Bold'), local('Tinos-Bold'), local('Times Bold');
-  font-style: normal;
-  font-weight: 550 800;
-  size-adjust: 99.80%;
-  ascent-override: 73.65%;
-  descent-override: 26.55%;
-  line-gap-override: 0%;
-}
-
-@font-face {
-  font-family: 'Newsreader Fallback'; /* italic bold */
-  src: local('Times New Roman Bold Italic'), local('TimesNewRomanPS-BoldItalicMT'), local('Liberation Serif Bold Italic'), local('LiberationSerif-BoldItalic'), local('Tinos Bold Italic'), local('Tinos-BoldItalic'), local('Times Bold Italic');
-  font-style: italic;
-  font-weight: 550 800;
   size-adjust: 100%;
-  ascent-override: 73.50%;
-  descent-override: 26.50%;
+  ascent-override: 100%;
+  descent-override: 20%;
   line-gap-override: 0%;
 }
 
 @font-face {
-  font-family: 'Martian Mono Fallback'; /* regular */
-  src: local('Courier New'), local('CourierNewPSMT'), local('Liberation Mono'), local('LiberationMono'), local('Cousine'), local('Cousine-Regular');
-  font-style: normal;
-  font-weight: 100 549;
-  size-adjust: 108.32%;
-  ascent-override: 92.32%;
-  descent-override: 18.46%;
+  font-family: 'Martian Mono Fallback';
+  src: local('Courier New Bold'), local('CourierNewPS-BoldMT'), local('Liberation Mono Bold'), local('LiberationMono-Bold'), local('Cousine Bold');
+  font-weight: 550 900;
+  size-adjust: 100%;
+  ascent-override: 100%;
+  descent-override: 20%;
   line-gap-override: 0%;
 }
 
 @font-face {
-  font-family: 'Martian Mono Fallback'; /* bold */
-  src: local('Courier New Bold'), local('CourierNewPS-BoldMT'), local('Liberation Mono Bold'), local('LiberationMono-Bold'), local('Cousine Bold'), local('Cousine-Bold');
-  font-style: normal;
-  font-weight: 550 800;
-  size-adjust: 108.32%;
-  ascent-override: 92.32%;
-  descent-override: 18.46%;
+  font-family: 'Instrument Serif Fallback'; /* Georgia Italic (estimated from the Times ratio) */
+  src: local('Georgia Italic'), local('Georgia-Italic');
+  font-style: italic;
+  size-adjust: 75.5%;
+  ascent-override: 131.1%;
+  descent-override: 41.1%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Instrument Serif Fallback T'; /* Times-metric italic (measured) */
+  src: local('Times New Roman Italic'), local('TimesNewRomanPS-ItalicMT'), local('Liberation Serif Italic'), local('LiberationSerif-Italic'), local('Tinos Italic');
+  font-style: italic;
+  size-adjust: 86.4%;
+  ascent-override: 114.6%;
+  descent-override: 35.9%;
   line-gap-override: 0%;
 }
 
 :root {
-  /* ---- palette (brief §5, exact) ------------------------------------------------------------ */
-  --karst: #e3e6e4;
-  --paper: #f4f5f3;
-  --graphite: #111418;
-  --slate: #545c63;
-  --hairline: #aeb6b9;
-  --chamber: #0d1014;
-  --mist: #c9cfd2;
-  --ultramarine: #1f2ee0; /* ONLY for a quorum: lintel, pick badge, SMS bubble, favicon */
-  --lift: #8c96ff; /* the same role on Chamber */
+  /* ---- palette (DESIGN-V2 §3.2, exact) ---------------------------------------------------------- */
+  --night: #0a0c0f; /* home, pick hero, research, menu */
+  --night-2: #12151a; /* raised on night */
+  --mist: #c9cfd2; /* text on night, 12.6:1 */
+  --mist-2: #8e979d; /* secondary text on night, 6.3:1 */
+  --karst: #e3e6e4; /* reading ground */
+  --paper: #f7f8f6; /* notes, the phone screen */
+  --graphite: #111418; /* text on light */
+  --slate: #545c63; /* secondary text on light */
+  --ultra: #1f2ee0; /* QUORUM ONLY: fills, badge, SMS bubble, lintel core */
+  --lift: #8c96ff; /* quorum text and strokes on night */
   --gain: #0b6e4f;
   --loss: #b3261e;
-  --gain-dark: #4fd1a1;
-  --loss-dark: #ff8a7a;
+  --gain-night: #4fd1a1;
+  --loss-night: #ff8a7a;
+  --white: #ffffff; /* text on an ultramarine fill only */
 
-  /* derived, same hues (documented in DESIGN.md) */
-  --mist-2: #9aa3a8; /* secondary text on Chamber, 7.4:1 */
-  --rule-dark: rgb(201 207 210 / 0.17); /* Mist at low alpha: rules on Chamber */
-  --rule-dark-strong: rgb(201 207 210 / 0.32);
-  --hairline-soft: rgb(174 182 185 / 0.55); /* inner table rules */
+  /* the four rules and hairlines: Graphite / Mist at low alpha */
+  --rule-light: rgb(17 20 24 / 0.11);
+  --rule-night: rgb(201 207 210 / 0.1);
+  --line-light: rgb(17 20 24 / 0.2); /* borders, table rules. Never text. */
+  --line-night: rgb(201 207 210 / 0.2);
+  --line-soft-light: rgb(17 20 24 / 0.1);
+  --line-soft-night: rgb(201 207 210 / 0.1);
+  --rule-lit: 0.5; /* plumb line: a lit rule's alpha */
 
-  /* ---- semantic (Karst surface) ------------------------------------------------------------- */
+  /* v1 names kept as aliases so page blocks written against v1 keep working */
+  --chamber: var(--night);
+  --ultramarine: var(--ultra);
+  --hairline: color-mix(in srgb, var(--graphite) 24%, var(--karst)); /* opaque: v1 blocks mix it */
+  --hairline-soft: var(--line-soft-light);
+  --rule-dark: rgb(201 207 210 / 0.12);
+  --rule-dark-strong: rgb(201 207 210 / 0.26);
+  --gain-dark: var(--gain-night);
+  --loss-dark: var(--loss-night);
+
+  /* ---- semantic (Karst surface) ------------------------------------------------------------------ */
   --bg: var(--karst);
   --surface: var(--paper);
   --fg: var(--graphite);
   --fg-2: var(--slate);
-  --rule: var(--hairline);
-  --rule-inner: var(--hairline-soft);
-  --quorum: var(--ultramarine);
-  --on-quorum: #ffffff;
+  --rule: var(--rule-light);
+  --line: var(--line-light);
+  --rule-inner: var(--line-soft-light);
+  --quorum: var(--ultra);
+  --on-quorum: var(--white);
   --gain-c: var(--gain);
   --loss-c: var(--loss);
   --focus: var(--graphite);
   --select-bg: var(--graphite);
   --select-fg: var(--karst);
+  --grain: 0.025;
 
-  /* ---- type ---------------------------------------------------------------------------------- */
-  --font-sans: 'Archivo', 'Archivo Fallback', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
-  --font-serif: 'Newsreader', 'Newsreader Fallback', ui-serif, Georgia, 'Times New Roman', serif;
+  /* ---- type (DESIGN-V2 §3.1) ---------------------------------------------------------------------- */
+  --font-sans: 'Mona Sans', 'Mona Sans Fallback', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-display: 'Mona Sans', 'Mona Sans Fallback N', 'Mona Sans Fallback ND', 'Mona Sans Fallback', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Martian Mono', 'Martian Mono Fallback', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-voice: 'Instrument Serif', 'Instrument Serif Fallback', 'Instrument Serif Fallback T', Georgia, 'Times New Roman', serif;
+  --font-serif: var(--font-voice); /* v1 name; Newsreader is retired */
 
-  --wdth-display: 64%; /* headlines: tall, like columns (62–70) */
-  --wdth-display-tight: 62%;
-  --wdth-sub: 78%; /* sub-heads */
+  --wdth-display: 75%; /* condensed = column */
+  --wdth-display-tight: 75%;
+  --wdth-sub: 75%;
   --wdth-ui: 100%;
-  --wdth-mono: 87.5%;
+  --wdth-lede: 112%;
+  --wdth-lintel: 125%; /* wide = lintel */
+  --wdth-mono: 75%;
 
-  /* fluid scale: min at 360 px, max at 1920 px */
-  --fs-hero: clamp(4.9rem, 1.2rem + 10.4vw, 11rem);
-  --fs-d1: clamp(3.6rem, 1.6rem + 6.6vw, 8.5rem);
-  --fs-d2: clamp(2.8rem, 1.5rem + 4.4vw, 6rem);
-  --fs-d3: clamp(2rem, 1.3rem + 2.4vw, 3.75rem);
-  --fs-d4: clamp(1.5rem, 1.2rem + 1vw, 2.25rem);
-  --fs-lede: clamp(1.1875rem, 1.05rem + 0.5vw, 1.5rem);
-  --fs-body: clamp(1rem, 0.96rem + 0.18vw, 1.125rem);
-  --fs-small: 0.875rem;
-  --fs-xs: 0.8125rem;
-  --fs-label: 0.6875rem; /* mono labels, uppercase, tracked */
-  --fs-mono: 0.8125rem;
-  --fs-stat: clamp(1.5rem, 1.25rem + 0.8vw, 2rem); /* headline stats: never the largest element */
+  --t-hero: clamp(4.5rem, 1.6rem + 11.2vw, 13rem);
+  --t-d1: clamp(3.25rem, 1.4rem + 7vw, 9rem);
+  --t-d2: clamp(2.5rem, 1.3rem + 4.2vw, 6rem);
+  --t-d3: clamp(1.875rem, 1.3rem + 2.2vw, 3.25rem);
+  --t-d4: clamp(1.375rem, 1.15rem + 0.9vw, 2rem);
+  --t-lintel: clamp(1.6rem, 0.9rem + 2.6vw, 3.6rem);
+  --t-voice: clamp(2rem, 1.1rem + 3.2vw, 4.75rem);
+  --t-lede: clamp(1.2rem, 1rem + 0.8vw, 1.65rem);
+  --t-body: 1.0625rem;
+  --t-small: 0.875rem;
+  --t-xs: 0.8125rem;
+  --t-fig-xl: clamp(2.5rem, 1.4rem + 3.4vw, 5.5rem);
+  --t-fig: 0.8125rem;
+  --t-label: 0.6875rem;
+  --t-stat: clamp(1.5rem, 1.25rem + 0.8vw, 2rem); /* headline stats: never the largest element */
 
-  --lh-display: 0.88;
+  --lh-hero: 0.84;
+  --lh-d1: 0.88;
+  --lh-d2: 0.9;
+  --lh-display: 0.9;
   --lh-tight: 1.1;
   --lh-body: 1.55;
-  --lh-serif: 1.5;
-  --track-label: 0.09em;
+  --tr-hero: -0.035em;
+  --tr-d1: -0.03em;
+  --tr-d2: -0.025em;
+  --track-label: 0.08em;
+  --ws-condensed: 0.02em; /* word space at wdth 75 */
 
-  /* ---- space (4 px base) --------------------------------------------------------------------- */
+  /* v1 names */
+  --fs-hero: var(--t-hero);
+  --fs-d1: var(--t-d1);
+  --fs-d2: var(--t-d2);
+  --fs-d3: var(--t-d3);
+  --fs-d4: var(--t-d4);
+  --fs-lede: var(--t-lede);
+  --fs-body: var(--t-body);
+  --fs-small: var(--t-small);
+  --fs-xs: var(--t-xs);
+  --fs-label: var(--t-label);
+  --fs-mono: var(--t-fig);
+  --fs-stat: var(--t-stat);
+  --lh-serif: 1.45;
+
+  /* ---- space (4 px base) --------------------------------------------------------------------------- */
   --s-1: 0.25rem;
   --s-2: 0.5rem;
   --s-3: 0.75rem;
@@ -250,57 +239,83 @@
   --s-8: 4rem;
   --s-9: 6rem;
   --s-10: 8rem;
-  --section: clamp(5rem, 3rem + 7vw, 11rem); /* vertical rhythm between sections */
+  --section: clamp(5rem, 3rem + 7vw, 11rem);
 
-  /* ---- motion -------------------------------------------------------------------------------- */
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --t-fast: 150ms;
-  --t-mid: 250ms;
-  --t-slow: 400ms;
+  /* ---- motion (DESIGN-V2 §3.5) -------------------------------------------------------------------- */
+  --e-out: cubic-bezier(0.16, 1, 0.3, 1); /* reveals */
+  --e-io: cubic-bezier(0.7, 0, 0.2, 1); /* wipes, camera */
+  --e-ui: cubic-bezier(0.2, 0, 0, 1); /* controls */
+  --e-land: cubic-bezier(0.2, 0.9, 0.25, 1); /* the lintel */
+  --e-exit: cubic-bezier(0.7, 0, 0.84, 0); /* route out */
+  --d-1: 150ms;
+  --d-2: 260ms;
+  --d-3: 420ms;
+  --d-4: 700ms;
+  /* v1 names */
+  --ease: var(--e-ui);
+  --t-fast: var(--d-1);
+  --t-mid: var(--d-2);
+  --t-slow: var(--d-3);
 
-  /* ---- grid: four column rules (see base.css) ------------------------------------------------ */
-  --gutter: 16px; /* phone outer gutter */
-  --inset: 12px; /* distance from a rule to the text that sits beside it */
-  --header-h: 72px;
-  --demo-h: 36px;
-  --radius: 2px; /* architecture, not pills: almost square */
+  /* ---- grid and chrome ---------------------------------------------------------------------------- */
+  --gutter: 16px;
+  --inset: 12px;
+  --header-h: 64px;
+  --demo-h: 28px;
+  --radius: 2px;
+  --radius-sheet: 24px;
   --radius-pill: 999px;
 
   color-scheme: light;
 }
 
-/* Chamber (dark data surfaces): hero, ledger chain, research. */
+/* Night: home, the pick hero, research, the chain, the menu. */
+.night,
 .chamber,
-[data-surface='chamber'] {
-  --bg: var(--chamber);
-  --surface: #151a1f;
+[data-surface='chamber'],
+[data-surface='night'] {
+  --bg: var(--night);
+  --surface: var(--night-2);
   --fg: var(--mist);
   --fg-2: var(--mist-2);
-  --rule: var(--rule-dark);
-  --rule-inner: rgb(201 207 210 / 0.12);
+  --rule: var(--rule-night);
+  --line: var(--line-night);
+  --rule-inner: var(--line-soft-night);
   --quorum: var(--lift);
-  --on-quorum: var(--chamber);
-  --gain-c: var(--gain-dark);
-  --loss-c: var(--loss-dark);
+  --on-quorum: var(--night);
+  --gain-c: var(--gain-night);
+  --loss-c: var(--loss-night);
   --focus: var(--mist);
   --select-bg: var(--mist);
-  --select-fg: var(--chamber);
+  --select-fg: var(--night);
+  --grain: 0.035;
   color-scheme: dark;
 }
 
-/* Paper sheets inside Chamber return to light semantics. */
-.paper {
+/* Paper sheets (notes, the phone screen) return to light semantics, also inside night. */
+.paper,
+.karst {
   --bg: var(--paper);
+  --surface: var(--karst);
   --fg: var(--graphite);
   --fg-2: var(--slate);
-  --rule: var(--hairline);
-  --rule-inner: var(--hairline-soft);
-  --quorum: var(--ultramarine);
-  --on-quorum: #ffffff;
+  --rule: var(--rule-light);
+  --line: var(--line-light);
+  --rule-inner: var(--line-soft-light);
+  --quorum: var(--ultra);
+  --on-quorum: var(--white);
   --gain-c: var(--gain);
   --loss-c: var(--loss);
   --focus: var(--graphite);
+  --select-bg: var(--graphite);
+  --select-fg: var(--karst);
+  --grain: 0.025;
   color-scheme: light;
+}
+
+.karst {
+  --bg: var(--karst);
+  --surface: var(--paper);
 }
 
 @media (min-width: 640px) {
@@ -312,16 +327,22 @@
 @media (min-width: 1200px) {
   :root {
     --inset: 16px;
-    --header-h: 76px;
+  }
+}
+
+@media (max-width: 639.98px) {
+  :root {
+    --t-body: 1rem;
   }
 }
 
 @media (prefers-contrast: more) {
   :root {
-    --hairline: #7d878c;
-    --hairline-soft: #7d878c;
+    --rule-light: rgb(17 20 24 / 0.3);
+    --rule-night: rgb(201 207 210 / 0.3);
+    --line-light: rgb(17 20 24 / 0.5);
+    --line-night: rgb(201 207 210 / 0.45);
     --slate: #3a4147;
-    --rule-dark: rgb(201 207 210 / 0.4);
-    --mist-2: #c0c7cb;
+    --mist-2: #b4bcc0;
   }
 }

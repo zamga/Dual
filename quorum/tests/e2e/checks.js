@@ -11,7 +11,7 @@ export function overflow() {
   if (sw > W + 1) {
     const culprits = [];
     for (const el of document.querySelectorAll('#view *, .site-header *, .site-footer *, .demo-bar *')) {
-      if (el.closest('.visually-hidden, .lv__stage')) continue;
+      if (el.closest('.visually-hidden, .asm__view')) continue;
       const r = el.getBoundingClientRect();
       if (r.width && r.right > W + 1) culprits.push(`${el.tagName.toLowerCase()}.${String(el.className?.baseVal ?? el.className).trim().split(/\s+/).join('.')}`);
       if (culprits.length >= 3) break;
@@ -143,29 +143,31 @@ export function ruleStrike() {
   return out;
 }
 
-// Running text must never be struck by a rule (DESIGN.md §4): the colonnade passes behind ledes, prose,
-// notes, captions, labels and definition text, and stays visible only in open space. For every line of
-// text in the view (headlines, tables, charts and the hero excepted: those have their own rules), find a
-// rule x inside the line's glyph box; the rule is visible there unless an ancestor inside the view paints
-// an opaque background over that point (its background-clip counts: a content-box ground leaves the
-// inset clear, so rules 1 and 4 beside the text stay). A `.ruled` surface redraws the rules above its own
-// background, so reaching one first means the rule shows.
-export function proseStrike() {
-  const xs = [...document.querySelectorAll('.rules > i')].map((r) => r.getBoundingClientRect().left).filter((x) => x > 0.5);
+// Running text passes over the rules (DESIGN-V2 §3.3): the four rules are continuous and faint, so where a
+// rule crosses a line of text it must be faint there: its alpha at most .12 (Graphite 11% on light, Mist
+// 10% on night). For every line of text in the view, find a rule x inside the line's glyph box; unless an
+// opaque ground inside the view covers that point (a .display masks the rules with its own ground), read
+// the alpha of the rule actually painted there: a `.ruled` surface redraws the rules with its own --rule
+// (its ::before border), otherwise it is the fixed `.rules` hairline. Tables and charts (their columns sit
+// on the rules; digits are ruleStrike's business) and the hero are skipped.
+export function ruleContrast() {
+  const rules = [...document.querySelectorAll('.rules > i')];
+  const xs = rules.map((r) => r.getBoundingClientRect().left).filter((x) => x > 0.5);
   if (!xs.length) return [];
   const view = document.querySelector('#view');
-  const opaque = (c) => {
+  const alpha = (c) => {
     c = String(c);
     const f = c.match(/^color\([a-z0-9-]+\s+[^/)]+(?:\/\s*([\d.]+))?\)/);
-    if (f) return f[1] === undefined || Number(f[1]) >= 0.99;
+    if (f) return f[1] === undefined ? 1 : Number(f[1]);
     const m = c.match(/rgba?\(([^)]+)\)/);
-    if (!m) return false;
+    if (!m) return 0;
     const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
-    return p.length < 4 || p[3] >= 0.99;
+    return p.length < 4 ? 1 : p[3];
   };
+  const fixedAlpha = alpha(getComputedStyle(rules[0]).borderLeftColor);
   const ground = (e) => {
     const cs = getComputedStyle(e);
-    if (!opaque(cs.backgroundColor)) return null;
+    if (alpha(cs.backgroundColor) < 0.99) return null;
     const r = e.getBoundingClientRect();
     const px = (k) => parseFloat(cs[k]) || 0;
     const clip = cs.backgroundClip;
@@ -174,15 +176,16 @@ export function proseStrike() {
     const k = clip === 'border-box' ? 0 : 1;
     return { left: r.left + k * b.l + p.l, right: r.right - k * b.r - p.r, top: r.top + k * b.t + p.t, bottom: r.bottom - k * b.bo - p.bo };
   };
-  const covered = (el, x, y) => {
+  // the alpha of the rule painted under (x, y), or 0 when a ground covers it
+  const ruleAlphaAt = (el, x, y) => {
     for (let e = el; e && e !== view; e = e.parentElement) {
-      if (e.classList.contains('ruled')) return false;
+      if (e.classList.contains('ruled')) return alpha(getComputedStyle(e, '::before').borderLeftColor);
       const g = ground(e);
-      if (g && x >= g.left && x <= g.right && y >= g.top && y <= g.bottom) return true;
+      if (g && x >= g.left && x <= g.right && y >= g.top && y <= g.bottom) return 0;
     }
-    return false;
+    return fixedAlpha;
   };
-  const SKIP = '.visually-hidden, [aria-hidden="true"], .lv, svg, .display, .content-sec > h2, table, .rules, [hidden]';
+  const SKIP = '.visually-hidden, [aria-hidden="true"], .lv, .asm, svg, table, canvas, .rules, [hidden]';
   const out = [];
   const seen = new Set();
   const w = document.createTreeWalker(view, NodeFilter.SHOW_TEXT);
@@ -199,9 +202,11 @@ export function proseStrike() {
     for (const r of range.getClientRects()) {
       if (r.width < 2 || r.height < 2 || r.bottom < 0) continue;
       const x = xs.find((v) => v > r.left + 1.5 && v < r.right - 1.5);
-      if (x === undefined || covered(host, x, r.top + r.height / 2)) continue;
+      if (x === undefined) continue;
+      const a = ruleAlphaAt(host, x, r.top + r.height / 2);
+      if (a <= 0.125) continue;
       seen.add(host);
-      out.push(`rule at x=${Math.round(x)} strikes text "${text.slice(0, 40)}" (${host.tagName.toLowerCase()}.${String(host.className).split(/\s+/)[0]})`);
+      out.push(`rule at x=${Math.round(x)} (alpha ${a.toFixed(2)}) strikes text "${text.slice(0, 40)}" (${host.tagName.toLowerCase()}.${String(host.className).split(/\s+/)[0]})`);
       break;
     }
     if (out.length >= 12) break;

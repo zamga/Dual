@@ -1,4 +1,4 @@
-/* Reset, type, the grid of four column rules, focus, motion preferences, utilities. */
+/* Reset, type, the grid of four column rules, focus, grain, reveals, motion preferences, View Transitions. */
 
 *,
 *::before,
@@ -13,6 +13,7 @@ html {
   color: var(--graphite);
   font-family: var(--font-sans);
   font-stretch: var(--wdth-ui);
+  font-weight: 420;
   font-variant-numeric: tabular-nums;
   font-kerning: normal;
   font-synthesis: none;
@@ -27,7 +28,7 @@ body {
   min-height: 100vh;
   min-height: 100svh;
   background: var(--karst);
-  font-size: var(--fs-body);
+  font-size: var(--t-body);
   line-height: var(--lh-body);
   overflow-x: clip;
 }
@@ -58,7 +59,7 @@ h1,
 h2,
 h3,
 h4 {
-  font-weight: 560;
+  font-weight: 500;
   line-height: var(--lh-tight);
   text-wrap: balance;
 }
@@ -108,17 +109,21 @@ a {
   color: inherit;
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
-  text-underline-offset: 0.22em;
-  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
-  transition: text-decoration-color var(--t-fast) var(--ease), text-decoration-thickness var(--t-fast) var(--ease);
+  text-underline-offset: 0.24em;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  transition: text-decoration-color var(--d-1) var(--e-ui);
 }
 
 a:hover {
   text-decoration-color: currentColor;
-  text-decoration-thickness: 2px;
 }
 
-/* ---- focus: 2 px Graphite (Mist on Chamber), 2 px offset ------------------------------------- */
+strong,
+b {
+  font-weight: 520;
+}
+
+/* ---- focus: 2 px Graphite (Mist on night), 2 px offset --------------------------------------- */
 :focus {
   outline: none;
 }
@@ -133,10 +138,7 @@ a:hover {
   outline: none;
 }
 
-/* ---- the grid: four column rules ---------------------------------------------------------------
-   Phones: 16 px outer gutters, rules 1 and 4 on the gutters, three equal bays (a 4-column grid).
-   Tablet: 40 px gutters. Desktop: bays of min(25%, 460px), centred; margins take the rest.
-   Every full-width element uses the same template, so its lines coincide with the fixed rules. */
+/* ---- the grid: four column rules --------------------------------------------------------------- */
 :root {
   --cols: [full-start] var(--gutter) [r1] minmax(0, 1fr) [r2] minmax(0, 1fr) [r3] minmax(0, 1fr) [r4] var(--gutter) [full-end];
 }
@@ -169,20 +171,21 @@ a:hover {
   padding-inline: 0;
 }
 
-/* placement */
 .c-full {
   grid-column: full-start / full-end;
 }
 .c-head {
   grid-column: r1 / full-end;
 }
-.c-wide {
+.c-wide,
+.c-lintel {
   grid-column: r1 / r4;
 }
 .c-body {
   grid-column: r1 / r3;
 }
-.c-meta {
+.c-meta,
+.c-b3 {
   grid-column: r3 / r4;
 }
 .c-b1 {
@@ -191,13 +194,17 @@ a:hover {
 .c-b2 {
   grid-column: r2 / r3;
 }
-.c-b3 {
-  grid-column: r3 / r4;
+.c-b12 {
+  grid-column: r1 / r3;
 }
 .c-b23 {
   grid-column: r2 / r4;
 }
-.c-r4 {
+.c-b34 {
+  grid-column: r3 / full-end;
+}
+.c-r4,
+.c-b4 {
   grid-column: r4 / full-end;
 }
 .c-margin {
@@ -205,7 +212,9 @@ a:hover {
 }
 
 @media (max-width: 1023.98px) {
-  .c-margin {
+  .c-margin,
+  .c-b4,
+  .c-b34 {
     grid-column: r1 / r4;
   }
 }
@@ -216,15 +225,14 @@ a:hover {
   .c-b1,
   .c-b2,
   .c-b3,
-  .c-b23 {
-    grid-column: r1 / r4;
-  }
+  .c-b12,
+  .c-b23,
   .c-r4 {
     grid-column: r1 / r4;
   }
 }
 
-/* The fixed rules. They are painted once by index.html and never re-render. */
+/* The fixed rules: painted once by index.html, continuous and faint (Graphite 11%), behind everything. */
 .rules {
   position: fixed;
   inset: 0;
@@ -232,12 +240,39 @@ a:hover {
   display: grid;
   grid-template-columns: var(--cols);
   pointer-events: none;
+  color: var(--graphite);
+}
+
+.rules[data-surface='chamber'],
+.rules[data-surface='night'],
+.rules[data-surface='hero'] {
+  color: var(--mist);
 }
 
 .rules > i {
+  position: relative;
   grid-row: 1;
-  border-left: 1px solid var(--hairline);
-  transition: border-color var(--t-mid) var(--ease);
+  border-left: 1px solid var(--rule-light);
+  transform-origin: 50% 100%;
+}
+
+.rules > i::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 1px;
+  background: currentColor;
+  opacity: 0;
+  -webkit-mask-image: linear-gradient(to bottom, transparent calc(var(--py, 50vh) - 90px), black var(--py, 50vh), transparent calc(var(--py, 50vh) + 90px));
+  mask-image: linear-gradient(to bottom, transparent calc(var(--py, 50vh) - 90px), black var(--py, 50vh), transparent calc(var(--py, 50vh) + 90px));
+  transition: opacity var(--d-2) var(--e-ui);
+}
+
+.rules > i.is-lit::after {
+  opacity: var(--rule-lit);
+  transition-duration: var(--d-1);
 }
 
 .rules > i:nth-child(1) {
@@ -253,11 +288,7 @@ a:hover {
   grid-column: r4 / full-end;
 }
 
-.rules > i.is-lit {
-  border-left-color: var(--graphite);
-}
-
-/* Opaque full-width surfaces continue the rules themselves (Mist at low alpha on Chamber). */
+/* Opaque full-width surfaces continue the rules themselves (their own --rule). */
 .ruled {
   position: relative;
   isolation: isolate;
@@ -286,7 +317,7 @@ a:hover {
 
 .ruled.is-lit-rules::before,
 .ruled.is-lit-rules::after {
-  border-color: var(--rule-dark-strong);
+  border-color: var(--line);
 }
 
 #view,
@@ -297,75 +328,129 @@ a:hover {
   z-index: 1;
 }
 
-/* Reserve the first viewport so nothing below the view moves when the first page arrives (CLS). */
 #view {
   min-height: 100vh;
   min-height: 100svh;
 }
 
-/* ---- type ------------------------------------------------------------------------------------- */
+/* Static luminance grain (no WebGL, or the GL composite is not running): an feTurbulence tile, never animated; html[data-grain=gl] hides it. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  opacity: var(--grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 220px;
+}
+
+html[data-top='chamber'],
+html[data-top='night'] {
+  --grain: 0.035;
+}
+
+html[data-grain='gl'] body::before,
+html[data-grain='off'] body::before {
+  display: none;
+}
+
+/* ---- type (DESIGN-V2 §3.1) ------------------------------------------------------------------------ */
 .display {
-  font-family: var(--font-sans);
+  font-family: var(--font-display);
   font-stretch: var(--wdth-display);
-  font-weight: 580;
+  font-weight: 480;
   line-height: var(--lh-display);
-  letter-spacing: -0.012em;
+  letter-spacing: var(--tr-d2);
+  word-spacing: var(--ws-condensed);
   text-wrap: balance;
-  margin-left: -0.04em; /* optical: stems sit on the inset line, not the side bearing */
-  overflow-wrap: break-word; /* a single word wider than a 360 px phone (fallback font) wraps, never scrolls */
+  overflow-wrap: break-word;
+  margin-left: -0.03em;
+  width: fit-content;
+  max-width: 100%;
+  padding-block: 0.12em;
+  margin-block: -0.12em;
+  background-color: var(--bg);
+  background-clip: content-box;
+}
+
+.display--open,
+.lv .display {
+  background-color: transparent;
 }
 
 .d-hero {
-  font-size: var(--fs-hero);
-  font-stretch: var(--wdth-display-tight);
-  font-weight: 600;
-  letter-spacing: -0.018em;
+  font-size: var(--t-hero);
+  font-weight: 460;
+  line-height: var(--lh-hero);
+  letter-spacing: var(--tr-hero);
 }
 .d1 {
-  font-size: var(--fs-d1);
+  font-size: var(--t-d1);
+  line-height: var(--lh-d1);
+  letter-spacing: var(--tr-d1);
 }
 .d2 {
-  font-size: var(--fs-d2);
+  font-size: var(--t-d2);
+  font-weight: 500;
+  line-height: var(--lh-d2);
 }
 .d3 {
-  font-size: var(--fs-d3);
+  font-size: var(--t-d3);
+  font-weight: 500;
   line-height: 0.95;
+  letter-spacing: -0.02em;
 }
 .d4 {
-  font-size: var(--fs-d4);
-  font-stretch: var(--wdth-sub);
-  line-height: 1.05;
-  font-weight: 560;
-  letter-spacing: -0.005em;
+  font-size: var(--t-d4);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.012em;
+}
+
+/* One horizontal statement across r1→r4: wide and light, like a lintel. */
+.t-lintel {
+  font-family: var(--font-sans);
+  font-size: var(--t-lintel);
+  font-stretch: var(--wdth-lintel);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+/* The voice: the verdict line, once per page ("Most days, nothing.", "Whatever happened."). */
+.voice {
+  font-family: var(--font-voice);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--t-voice);
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
 .lede {
-  font-size: var(--fs-lede);
-  line-height: 1.38;
-  font-weight: 400;
-  letter-spacing: -0.004em;
-  max-width: 44ch;
+  font-size: var(--t-lede);
+  font-stretch: var(--wdth-lede);
+  font-weight: 360;
+  line-height: 1.3;
+  max-width: 40ch;
 }
 
 .serif,
 .prose--serif {
-  font-family: var(--font-serif);
-  font-optical-sizing: auto;
-}
-
-.lede.serif {
-  font-size: calc(var(--fs-lede) * 1.08);
-  line-height: 1.34;
+  font-family: var(--font-sans);
 }
 
 .label {
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
-  font-size: var(--fs-label);
-  font-weight: 450;
+  font-size: var(--t-label);
+  font-weight: 520;
   letter-spacing: var(--track-label);
   text-transform: uppercase;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--fg-2);
 }
 
@@ -373,9 +458,23 @@ a:hover {
 .num {
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
-  font-size: var(--fs-mono);
+  font-size: var(--t-fig);
+  font-weight: 420;
+  line-height: 1.35;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* A record figure: the ledger wall, the pricing plinths. */
+.fig-xl {
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: var(--t-fig-xl);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums slashed-zero;
+  white-space: nowrap;
 }
 
 .muted {
@@ -383,48 +482,13 @@ a:hover {
 }
 
 .small {
-  font-size: var(--fs-small);
+  font-size: var(--t-small);
   line-height: 1.5;
 }
 
+/* Measure: r1→r3, 64ch. Running text passes over the faint rules (no grounds). */
 .prose {
-  max-width: 68ch;
-}
-
-/* Running text is never struck by a rule (DESIGN.md §4). The colonnade passes BEHIND every block of
-   text, like columns behind a lintel: ledes, paragraphs, list items, notes, captions, labels, definition
-   terms and values, sub-heads and summaries stand on an opaque ground of their surface (--bg), clipped to
-   the content box so the inset stays clear and a rule beside the text (rule 1 or 4) stays visible. A
-   group of text (.prose, a text-only .c-body column) is one ground, gaps included, so no stub of a rule
-   shows between its paragraphs; the rules resume in the open space between blocks. Headlines (.display,
-   and the content sections' h2, set like one) are architecture, not running text: the rules may pass
-   behind their glyphs. A row laid out on the page grid (a .grid list item) is not one block: its
-   columns sit on the rules, and the text inside it is grounded piece by piece. Zero specificity: a component that paints its
-   own ground (a button, a badge, the SMS bubble) keeps it; a container that paints another colour than
-   --bg must redefine --bg (tests/e2e/checks.js groundMismatch). Charts and the hero keep their own
-   rules (§8, §11). */
-:where(#view)
-  :where(p, li, dt, dd, figcaption, blockquote, summary, caption, address, legend, h2, h3, h4, h5, h6, time, .label, .small, .muted, .mono, .num, .ts, .toc a, .arrow-link, .prose, div.c-body:not(:has(.display, svg, canvas))):where(:not(.display, .grid, .content-sec > h2, .lv *, svg *, .sms *, .btn:not(.btn--ghost) *, .badge-quorum *)) {
-  background-color: var(--bg);
-  background-clip: content-box;
-}
-
-/* A one-line kicker, label heading or section index is as wide as its words, so its ground does not cut
-   the rules across the page where there is no text. */
-:where(#view) :where(.sec-head, .masthead, .grid) > .label {
-  justify-self: start;
-}
-
-@media (max-width: 1023.98px) {
-  :where(#view) .grid > .sec-index {
-    justify-self: start;
-  }
-}
-
-/* Controls and tags in the view stand on the same ground: an idle segmented control, a ghost button,
-   a tag. (Filled buttons are opaque already; on hover they invert to the ground, never to glass.) */
-:where(#view) :is(.seg, .tag, .btn--ghost) {
-  background-color: var(--bg);
+  max-width: 64ch;
 }
 
 .prose > * + * {
@@ -437,14 +501,17 @@ a:hover {
 }
 
 .prose h2 {
-  font-size: var(--fs-d4);
+  font-size: var(--t-d4);
   font-stretch: var(--wdth-sub);
-  line-height: 1.05;
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.012em;
+  word-spacing: var(--ws-condensed);
 }
 
 .prose h3 {
   font-size: 1.125rem;
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .prose ul,
@@ -477,20 +544,21 @@ a:hover {
   content: counter(li, decimal-leading-zero);
   position: absolute;
   left: 0;
-  top: 0.25em;
+  top: 0.3em;
   font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
   font-size: 0.72em;
   color: var(--fg-2);
 }
 
 .prose--serif {
-  font-size: calc(var(--fs-body) * 1.1);
+  font-size: calc(var(--t-body) * 1.12);
   line-height: var(--lh-serif);
+  font-weight: 380;
 }
 
-strong,
-b {
-  font-weight: 620;
+:where(#view) :where(.sec-head, .masthead, .grid) > .label {
+  justify-self: start;
 }
 
 /* ---- utilities -------------------------------------------------------------------------------- */
@@ -514,15 +582,11 @@ b {
   display: none !important;
 }
 
-/* ---- motion ----------------------------------------------------------------------------------- */
+/* ---- reveals (DESIGN-V2 §4.7) ------------------------------------------------------------------ */
 @keyframes q-reveal {
   from {
     opacity: 0;
-    transform: translate3d(0, 28px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+    transform: translate3d(0, 12px, 0);
   }
 }
 
@@ -530,27 +594,96 @@ b {
   from {
     transform: scaleX(0);
   }
-  to {
-    transform: scaleX(1);
-  }
 }
 
 @keyframes q-fade {
   from {
     opacity: 0;
   }
-  to {
-    opacity: 1;
+}
+
+@keyframes ml-in {
+  from {
+    transform: translate3d(0, 102%, 0);
   }
 }
 
-/* Section reveals ride the scroll with CSS scroll-driven animations. No support: no animation. */
+@keyframes ml-out {
+  to {
+    transform: translate3d(0, -102%, 0);
+  }
+}
+
+@keyframes dg-in {
+  from {
+    transform: translate3d(0, -100%, 0);
+  }
+}
+
+.ml {
+  display: block;
+  overflow: clip;
+  padding-block: 0.14em;
+  margin-block: -0.14em;
+}
+
+.ml__i {
+  display: block;
+  /* a little deeper than the line box, so a line waiting below its mask leaves no ascender stubs */
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+
+.is-in .ml__i,
+.ml.is-in .ml__i {
+  animation: ml-in var(--d-4) var(--e-out) calc(var(--i, 0) * 60ms) both;
+}
+
+.is-out .ml__i {
+  animation: ml-out 450ms var(--e-io) calc(var(--i, 0) * 25ms) both;
+}
+
+.dg {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.dg__vis {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.dg__c {
+  display: inline-block;
+  overflow-x: visible;
+  overflow-y: clip;
+}
+
+.dg__c > i {
+  display: block;
+  font-style: normal;
+}
+
+/* a monospace point takes a whole cell; pull its neighbours in so "2.3%" does not read "2 . 3 %" */
+.dg__c.is-p {
+  margin-inline: -0.17em;
+}
+
+.dg.is-in .dg__sign {
+  animation: q-fade var(--d-1) var(--e-ui) both;
+}
+
+.dg.is-in .dg__c > i {
+  animation: dg-in 520ms var(--e-out) calc(var(--d-1) + var(--r, 0) * 35ms) both;
+}
+
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     :root:not([data-motion='reduce']) .reveal {
       animation: q-reveal linear both;
       animation-timeline: view();
-      animation-range: entry 0% entry 55%;
+      animation-range: entry 5% cover 25%;
     }
     :root:not([data-motion='reduce']) .draw {
       transform-origin: left center;
@@ -558,17 +691,105 @@ b {
       animation-timeline: view();
       animation-range: entry 20% cover 40%;
     }
+    :root:not([data-motion='reduce']) [data-reveal='scroll'] {
+      view-timeline: --ml block;
+    }
+    :root:not([data-motion='reduce']) [data-reveal='scroll'] .ml__i {
+      animation: ml-in linear both;
+      animation-timeline: --ml;
+      animation-range: entry calc(5% + var(--i, 0) * 4%) cover calc(25% + var(--i, 0) * 4%);
+    }
   }
 }
 
+/* ---- the 14:00 boot (DESIGN-V2 §4.2): html.is-boot, set by app.js on a first visit only ---------- */
+.boot {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  grid-template-columns: var(--cols);
+  align-content: center;
+  background: var(--night);
+  color: var(--mist);
+  pointer-events: none;
+  animation: q-fade 200ms linear 1200ms reverse both;
+}
+
+.boot__lines {
+  position: relative;
+  grid-column: r1 / r3;
+  padding-inline: var(--inset);
+  display: grid;
+  gap: 6px;
+  animation: q-fade 200ms linear 900ms reverse both;
+}
+
+.boot__line {
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: var(--t-fig);
+  white-space: nowrap;
+  clip-path: inset(0 100% 0 0);
+  animation: boot-type 180ms steps(12, end) calc(200ms + var(--i, 0) * 120ms) forwards;
+}
+
+@keyframes boot-type {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes boot-rise {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+/* the boot's own four rules (the page's rules are never touched): they rise from the base, A to D */
+.boot__rules {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: var(--cols);
+}
+
+.boot__rules i {
+  grid-row: 1;
+  border-left: 1px solid var(--line-night);
+  transform-origin: 50% 100%;
+  animation: boot-rise 600ms var(--e-io) 80ms both;
+}
+
+.boot__rules i:nth-child(1) {
+  grid-column: r1;
+}
+.boot__rules i:nth-child(2) {
+  grid-column: r2;
+  animation-delay: 140ms;
+}
+.boot__rules i:nth-child(3) {
+  grid-column: r3;
+  animation-delay: 200ms;
+}
+.boot__rules i:nth-child(4) {
+  grid-column: r4;
+  animation-delay: 260ms;
+}
+
+/* ---- motion preferences ------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  .boot {
+    display: none;
   }
 }
 
@@ -576,12 +797,15 @@ b {
 :root[data-motion='reduce'] *::before,
 :root[data-motion='reduce'] *::after {
   animation-duration: 0.01ms !important;
+  animation-delay: 0ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
 }
 
-/* View Transitions. The root snapshot is viewport-sized (cheap); the rules, the plinths and the
-   header are their own groups and do not animate, so only the content moves between the rules. */
+/* ---- View Transitions: the lintel sweep (DESIGN-V2 §4.4) ---------------------------------------- */
+#view {
+  view-transition-name: main;
+}
 .rules {
   view-transition-name: rules;
 }
@@ -591,41 +815,117 @@ b {
 .site-header {
   view-transition-name: chrome;
 }
-
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(root) {
-    animation: q-vt-out 160ms var(--ease) both;
-  }
-  ::view-transition-new(root) {
-    animation: q-vt-in 300ms var(--ease) 40ms both;
-  }
+#stage {
+  view-transition-name: stage;
+}
+.sheet {
+  view-transition-name: sheet;
+}
+.vt-pick {
+  view-transition-class: pick;
 }
 
-::view-transition-group(rules),
-::view-transition-group(plinths),
-::view-transition-group(chrome),
-::view-transition-new(rules),
-::view-transition-new(plinths),
-::view-transition-new(chrome) {
+::view-transition-old(root),
+::view-transition-new(root) {
   animation: none;
 }
 
+/* during a route change the header (its own layer, `chrome`) never fades or tints: it holds still and
+   switches its theme at the swap */
+:root.is-vt .site-header,
+:root.is-vt .site-header * {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion='reduce'])::view-transition-old(main) {
+    animation: vt-out 180ms var(--e-exit) both;
+  }
+  :root:not([data-motion='reduce'])::view-transition-new(main) {
+    animation: vt-wipe var(--d-3) var(--e-io) both;
+  }
+  :root:not([data-motion='reduce'])::view-transition-group(*.pick) {
+    animation-duration: 520ms;
+    animation-timing-function: var(--e-io);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(main),
+  ::view-transition-new(main) {
+    animation: q-fade var(--d-1) linear both;
+  }
+  ::view-transition-old(main) {
+    animation-direction: reverse;
+  }
+}
+
+::view-transition-group(sweep),
+::view-transition-new(sweep),
+::view-transition-group(sheet),
+::view-transition-new(sheet),
+::view-transition-group(rules),
+::view-transition-group(plinths),
+::view-transition-group(chrome),
+::view-transition-group(stage),
+::view-transition-new(rules),
+::view-transition-new(plinths),
+::view-transition-new(chrome),
+::view-transition-new(stage) {
+  animation: none;
+}
+
+::view-transition-old(sweep),
+::view-transition-old(sheet),
 ::view-transition-old(rules),
 ::view-transition-old(plinths),
-::view-transition-old(chrome) {
+::view-transition-old(chrome),
+::view-transition-old(stage) {
   display: none;
 }
 
-@keyframes q-vt-out {
+@keyframes vt-out {
   to {
     opacity: 0;
-    transform: translate3d(0, -10px, 0);
+    transform: translate3d(0, -16px, 0);
   }
 }
 
-@keyframes q-vt-in {
+@keyframes vt-wipe {
   from {
-    opacity: 0;
-    transform: translate3d(0, 14px, 0);
+    clip-path: inset(0 0 100% 0);
   }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.sweep {
+  position: fixed;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: grid;
+  grid-template-columns: var(--cols);
+  pointer-events: none;
+}
+
+.sweep::before {
+  content: '';
+  grid-column: r1 / r4;
+  height: 1px;
+  background: var(--graphite);
+  transform-origin: left center;
+  animation: q-draw var(--d-1) var(--e-out) both;
+}
+
+html[data-top='chamber'] .sweep::before,
+html[data-top='night'] .sweep::before {
+  background: var(--mist);
+}
+
+/* Body text arriving after a route change: fades up 12 px over 420 ms after 200 ms (.vt-in on #view). */
+.vt-in .reveal-in {
+  animation: q-reveal var(--d-3) var(--e-out) 200ms both;
 }

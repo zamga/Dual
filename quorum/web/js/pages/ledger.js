@@ -5,10 +5,10 @@
 // the MAR lists. Nothing here animates a number.
 //
 // SL: first draft, needs native review.
-import { h, announce, copyText } from '../dom.js';
+import { h, announce, copyText, digits } from '../dom.js';
 import { href } from '../router.js';
-import { statStrip, trackRecordLabel, sectionHead, signed, hashChip, familyName, recordCounts } from '../ui.js';
-import { masthead, toc } from './_content.js';
+import { trackRecordLabel, sectionHead, signed, hashChip, familyName, recordCounts } from '../ui.js';
+import { toc } from './_content.js';
 import { ruleLabels } from '../rule.js';
 import { recordRows, recordsCsv, sortRows, filterRows, indexPicks, isRevealed, issueBlocks, tamperTarget, tamperCopy } from './_records.js';
 import { verifyLedger, verifyInSlices, verifyReveals, rehashAt } from './_verify.js';
@@ -46,15 +46,7 @@ export async function render(ctx) {
     { id: 'lists', title: L('MAR lists', 'Seznami MAR') },
   ];
   const nOpen = picks.filter((p) => p.status === 'open').length;
-  const head = masthead({
-    kicker: L('Did it work? · the sealed record', 'Je delovalo? · zapečaten zapis'),
-    title: L('The ledger.', 'Knjiga.'),
-    lede: L(
-      `Every pick since ${fmt.date(summary.liveSince)}: sealed before anyone saw it, scored from the next US open, kept whatever happened. ${fmt.int(picks.length)} records, ${fmt.int(nOpen)} still open. Anyone can recompute every hash.`,
-      `Vsaka izbira od ${fmt.date(summary.liveSince)}: zapečatena, preden jo je kdor koli videl, merjena od naslednjega odprtja ameriškega trga, ohranjena ne glede na izid. ${fmt.int(picks.length)} zapisov, ${fmt.int(nOpen)} še odprtih. Vsako zgoščeno vrednost lahko kdor koli ponovno izračuna.`,
-    ),
-    meta: toc(ctx, sections, L('On this page', 'Na tej strani')),
-  });
+  const head = recordWall(ctx, summary, meta, picks, nOpen, toc(ctx, sections, L('On this page', 'Na tej strani')));
 
   const node = h(
     'div',
@@ -69,6 +61,79 @@ export async function render(ctx) {
     listsSection(ctx),
   );
   return { title: L('Ledger', 'Knjiga'), node };
+}
+
+// ---- the record wall (DESIGN-V2 §5): "The ledger." and five record figures, one per bay, in the brief's
+// order (recommendations, hit rate with its 95% CI, median excess, the worst pick, the drawdown); the mean and
+// the alert gap follow in the sixth cell, so all seven stay in order. The figures are the headline here, and
+// they arrive as a digit reveal (no intermediate values).
+function recordWall(ctx, summary, meta, picks, nOpen, tocNode) {
+  const { L, fmt, locale } = ctx;
+  const rc = recordCounts(summary, meta?.counts);
+  const sgn = (x) => {
+    const s = fmt.signed(x);
+    const m = /^([+−-])(.*)$/.exec(s.text);
+    return h('span', { class: ['signed', s.cls] }, h('span', { class: 'signed__arrow', 'aria-hidden': 'true' }, s.arrow), m ? digits(m[2], { sign: m[1] }) : digits(s.text));
+  };
+  const pctOf = (v) => `${Math.max(0, Math.min(100, v * 100)).toFixed(1)}%`;
+  const ci = h('span', { class: 'wall__ci', 'aria-hidden': 'true' });
+  if (summary.hitCI) {
+    ci.style.setProperty('--lo', pctOf(summary.hitCI[0]));
+    ci.style.setProperty('--hi', pctOf(summary.hitCI[1]));
+  }
+  ci.style.setProperty('--pt', pctOf(summary.hitRate));
+  const worst = summary.worstPick;
+  const split = Number.isFinite(rc.picks) ? L(`${fmt.int(rc.picks)} new picks, ${fmt.int(rc.renews)} renewals · `, `${fmt.int(rc.picks)} novih izbir, ${fmt.int(rc.renews)} podaljšanj · `) : '';
+  // the CI bar sits under its figure, as wide as the figure (0–100% of the number's width)
+  const fig = (k, v, s, extra) =>
+    h(
+      'div',
+      { class: 'wall__fig' },
+      h('span', { class: 'label wall__k' }, k),
+      extra ? h('span', { class: 'wall__vci' }, h('span', { class: 'fig-xl wall__v' }, v), extra) : h('span', { class: 'fig-xl wall__v' }, v),
+      h('span', { class: 'wall__s' }, s),
+    );
+  const hitCi = summary.hitCI ? `${ctx.t('common.ci')} ${fmt.pct0(summary.hitCI[0])}–${fmt.pct0(summary.hitCI[1])}` : '';
+  return h(
+    'header',
+    { class: 'wall grid' },
+    h('p', { class: 'label c-wide' }, L('Did it work? · the sealed record', 'Je delovalo? · zapečaten zapis'), ' · ', summary.label?.[locale] ?? summary.label?.en ?? ''),
+    h('h1', { class: 'display d1 wall__title', id: 'page-h' }, L('The ledger.', 'Knjiga.')),
+    h(
+      'p',
+      { class: 'lede c-body wall__lede' },
+      L(
+        `Every pick since ${fmt.date(summary.liveSince)}: sealed before anyone saw it, scored from the next US open, kept whatever happened. ${fmt.int(picks.length)} records, ${fmt.int(nOpen)} still open. Anyone can recompute every hash.`,
+        `Vsaka izbira od ${fmt.date(summary.liveSince)}: zapečatena, preden jo je kdor koli videl, merjena od naslednjega odprtja ameriškega trga, ohranjena ne glede na izid. ${fmt.int(picks.length)} zapisov, ${fmt.int(nOpen)} še odprtih. Vsako zgoščeno vrednost lahko kdor koli ponovno izračuna.`,
+      ),
+    ),
+    h(
+      'div',
+      { class: 'wall__figs', role: 'group', 'aria-label': L('Headline statistics, in the fixed order', 'Ključni podatki v stalnem vrstnem redu') },
+      fig(L('Recommendations', 'Priporočila'), digits(fmt.int(rc.records)), `${L('since', 'od')} ${fmt.date(summary.liveSince)} · ${split}${L(`${fmt.int(summary.nClosed)} closed`, `${fmt.int(summary.nClosed)} zaprtih`)}`),
+      fig(L('Hit rate vs benchmark', 'Delež uspešnih proti merilu'), digits(fmt.pct0(summary.hitRate)), `${hitCi} · ${L('the bar is 0–100%, the tick the rate', 'črta je 0–100 %, oznaka delež')}`, ci),
+      fig(L('Median excess return', 'Mediana presežnega donosa'), sgn(summary.medianExcess), L('per pick, 21 trading days, net of costs', 'na izbiro, 21 trgovalnih dni, po stroških')),
+      fig(
+        L('Worst pick', 'Najslabša izbira'),
+        worst ? sgn(worst.excess) : '–',
+        worst ? h('span', {}, `#${worst.no} · `, h('a', { href: href('pick', worst.no) }, worst.ticker), L(' · shown always', ' · vedno prikazana')) : '',
+      ),
+      fig(L('Max drawdown', 'Največji padec'), digits(fmt.pct(summary.maxDrawdown).replace(/^[-−]/, ''), { sign: '−' }), L('follow every pick, paper portfolio, net', 'vse izbire, papirni portfelj, neto')),
+      h(
+        'div',
+        { class: 'wall__aside' },
+        h('span', { class: 'label wall__k' }, L('Then, in order', 'Nato, po vrsti')),
+        h(
+          'dl',
+          { class: 'wall__more' },
+          h('div', {}, h('dt', {}, L('Mean excess return', 'Povprečni presežni donos')), h('dd', { class: 'mono' }, signed(summary.meanExcess, { fmt, digits: 2 }))),
+          h('div', {}, h('dt', {}, L('Median alert gap', 'Mediana razlike ob obvestilu')), h('dd', { class: 'mono' }, fmt.bps(summary.medianAlertGapBps))),
+        ),
+        h('span', { class: 'wall__s' }, trackRecordLabel(locale)),
+      ),
+    ),
+    h('div', { class: 'wall__toc' }, tocNode),
+  );
 }
 
 // ---- 01 headline statistics (fixed order, never animated, never the largest element) ---------------------
@@ -109,14 +174,12 @@ function statsSection(ctx, summary, meta) {
   return h(
     'section',
     { class: 'section grid rec-sec lg-stats', id: 'statistics', 'aria-labelledby': 'lg-st-h' },
-    ...sectionHead({ index: '01', kicker: summary.label?.[locale] ?? summary.label?.en ?? '', title: L('Headline statistics.', 'Ključni podatki.'), id: 'lg-st-h', size: 'd3' }),
+    ...sectionHead({ index: '01', kicker: summary.label?.[locale] ?? summary.label?.en ?? '', title: L('Follow every pick.', 'Sledite vsaki izbiri.'), id: 'lg-st-h', size: 'd3' }),
     h(
       'p',
       { class: 'c-meta small muted lg-stats__order' },
-      L('Always in this order: recommendations, hit rate, median before mean, the worst pick, the drawdown, the alert gap.', 'Vedno v tem vrstnem redu: priporočila, delež uspešnih, mediana pred povprečjem, najslabša izbira, padec, razlika ob obvestilu.'),
+      L('The figures above are always in this order: recommendations, hit rate, median before mean, the worst pick, the drawdown, the alert gap.', 'Številke zgoraj so vedno v tem vrstnem redu: priporočila, delež uspešnih, mediana pred povprečjem, najslabša izbira, padec, razlika ob obvestilu.'),
     ),
-    h('div', { class: 'c-wide lg-stats__strip' }, statStrip(summary, { t: ctx.t, fmt, locale, counts: meta?.counts })),
-    h('p', { class: 'c-body rec-note' }, trackRecordLabel(locale)),
     cum
       ? h(
           'p',
@@ -184,7 +247,8 @@ function recordSection(ctx, picks, ledger, meta) {
             : h('span', { class: 'lg-stock' }, h('a', { class: 'ticker', href: href('stock', r.ticker) }, r.ticker), h('span', { class: 'lg-name small muted' }, r.name)),
         );
       case 'agreement':
-        return td(h('span', { class: 'badge-quorum lg-q' }, `${r.agreement}/4`));
+        // the pick's lintel over its badge: the shared element of the sweep (pick-<no>)
+        return td(h('span', { class: 'lg-lintel', dataset: { vtPick: r.no } }, h('span', { class: 'row-lintel', 'aria-hidden': 'true' }), h('span', { class: 'badge-quorum lg-q' }, `${r.agreement}/4`)));
       case 'entryOpen':
         return td(r.entryOpen == null ? '–' : fmtUsd(r.entryOpen, { locale }));
       case 'exitDate':

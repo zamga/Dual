@@ -191,3 +191,113 @@ export function onVisible(el, cb, options = { rootMargin: '200px' }) {
   io.observe(el);
   return () => io.disconnect();
 }
+
+// ---- reveals (DESIGN-V2 §4.7): masked lines, digit drops, the lintel sweep -----------------------
+// Everything here starts from, and ends at, the text as written: a split headline is restored once its
+// lines have played in, and nothing runs under reduced motion.
+
+const split = new WeakMap();
+
+// Split a plain-text headline into its rendered lines (Range.getClientRects after fonts are ready), each
+// wrapped as span.ml > span.ml__i. Returns the inner spans, or null when the element holds markup other than
+// text (it is then left alone). The words keep their spaces, so textContent is unchanged.
+export function splitLines(el) {
+  if (!el || split.has(el)) return split.get(el)?.lines ?? null;
+  if ([...el.childNodes].some((n) => n.nodeType === 1 && n.tagName !== 'BR')) return null;
+  const text = el.textContent.replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const was = [...el.childNodes];
+  const tn = document.createTextNode(text);
+  el.replaceChildren(tn);
+  const range = document.createRange();
+  const groups = [];
+  let top = null;
+  for (const m of text.matchAll(/\S+/g)) {
+    range.setStart(tn, m.index);
+    range.setEnd(tn, m.index + m[0].length);
+    const r = range.getClientRects()[0];
+    if (!r) continue;
+    if (top === null || Math.abs(r.top - top) > r.height * 0.5) {
+      groups.push([]);
+      top = r.top;
+    }
+    groups[groups.length - 1].push(m[0]);
+  }
+  if (groups.length < 1) {
+    el.replaceChildren(...was);
+    return null;
+  }
+  const lines = groups.map((words, i) => {
+    const inner = h('span', { class: 'ml__i' }, words.join(' ') + (i < groups.length - 1 ? ' ' : ''));
+    inner.style.setProperty('--i', String(i));
+    return inner;
+  });
+  el.replaceChildren(...lines.map((l) => h('span', { class: 'ml' }, l)));
+  split.set(el, { was, lines });
+  return lines;
+}
+
+export function unsplitLines(el) {
+  const s = split.get(el);
+  if (!s) return;
+  split.delete(el);
+  el.classList.remove('is-in', 'is-out');
+  el.replaceChildren(...s.was);
+}
+
+// Mask a headline in: lines rise from below their own clip, 60 ms apart, after `delay` ms. The split is
+// undone when the last line lands, so the headline reflows normally afterwards.
+export function reveal(el, { delay = 0 } = {}) {
+  if (!el || prefersReducedMotion() || !el.isConnected) return;
+  const lines = splitLines(el);
+  if (!lines) return;
+  lines.forEach((l, i) => (l.style.animationDelay = `${delay + i * 60}ms`));
+  el.classList.add('is-in');
+  const last = lines[lines.length - 1];
+  const done = () => unsplitLines(el);
+  last.addEventListener('animationend', done, { once: true });
+  setTimeout(() => split.has(el) && done(), delay + lines.length * 60 + 1200);
+}
+
+// A figure as a digit reveal: the sign and arrow fade in, then each digit drops from blank to its value,
+// right to left. The whole value is in the accessible text; the cells are decoration. `play(el)` starts it.
+export function digits(value, { className = '', sign = '' } = {}) {
+  const text = String(value);
+  const cells = [...text].map((ch, i, all) => {
+    const c = h('span', { class: ['dg__c', /[.,]/.test(ch) && 'is-p'] }, h('i', {}, ch));
+    c.style.setProperty('--r', String(all.length - 1 - i));
+    return c;
+  });
+  return h(
+    'span',
+    { class: ['dg', className] },
+    h('span', { class: 'visually-hidden' }, `${sign}${text}`),
+    h('span', { 'aria-hidden': 'true', class: 'dg__vis' }, sign ? h('span', { class: 'dg__sign' }, sign) : null, cells),
+  );
+}
+
+export function playDigits(root) {
+  if (!root || prefersReducedMotion()) return;
+  for (const d of root.matches?.('.dg') ? [root] : root.querySelectorAll('.dg')) {
+    d.classList.remove('is-in');
+    void d.offsetWidth;
+    d.classList.add('is-in');
+  }
+}
+
+// The lintel sweep (DESIGN-V2 §4.4): a 1 px line on r1→r4 that travels from `from` to `to` (viewport px)
+// on --e-io. Returns the element (div.sweep) and a promise for the end of its travel.
+export function sweepLine(from) {
+  const el = h('div', { class: 'sweep', 'aria-hidden': 'true' });
+  el.style.transform = `translate3d(0, ${Math.round(from)}px, 0)`;
+  return el;
+}
+
+export const EASE_IO = 'cubic-bezier(.7,0,.2,1)';
+
+export function sweep(el, from, to, { duration = 420, pseudo } = {}) {
+  const frames = [{ transform: `translate3d(0, ${Math.round(from)}px, 0)` }, { transform: `translate3d(0, ${Math.round(to)}px, 0)` }];
+  const opts = { duration, easing: EASE_IO, fill: 'both' };
+  const anim = pseudo ? document.documentElement.animate(frames, { ...opts, pseudoElement: pseudo }) : el.animate(frames, opts);
+  return anim.finished.catch(() => {});
+}

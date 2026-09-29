@@ -8,6 +8,7 @@ import { masthead, contentSections, toc, page, table } from './_content.js';
 import { familyName, familyDef } from '../ui.js';
 import { quorumExample } from '../charts/quorum-example.js';
 import { issueCounts } from './_records.js';
+import { lowerTheBar } from '../charts/lower-the-bar.js';
 
 const COPY = {
   en: {
@@ -172,6 +173,10 @@ export async function render(ctx) {
   const fill = (str) => str.replace(/\{inTop\}/g, R.inTop).replace(/\{pctile\}/g, R.pctile);
   const dist = [4, 3, 2, 1, 0].map((k) => [k, issues.filter((r) => r.closest === k).length]).filter(([, n]) => n > 0);
 
+  // "Lower the bar" (DESIGN-V2 §4.8): the silence explained by letting the reader break it
+  const ltb = hero?.p ? lowerTheBar(hero, { meta, locale: ctx.locale, fmt }) : null;
+  if (ltb) ltb.el.classList.add('how-ltb');
+
   const famTable = table({
     head: C.families.head,
     rows: ['A', 'B', 'C', 'D'].map((f) => [
@@ -207,6 +212,7 @@ export async function render(ctx) {
       aside: dist.length
         ? table({ head: C.silence.head, rows: dist.map(([k, n]) => [h('span', { class: 'mono' }, `${k}/4`), fmt.int(n)]), numCols: [1], className: 'table--compact' })
         : null,
+      wide: ltb?.el ?? null,
     },
     { id: 'measurement', title: C.measure.title, short: C.measure.short, body: C.measure.body, aside: `<p class="small muted">${C.measure.aside}</p>` },
     {
@@ -222,7 +228,7 @@ export async function render(ctx) {
     ...contentSections(sections),
     h('div', { class: 'grid page-next' }, h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('methodology') }, C.next, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')))),
   );
-  return { title: C.title, node };
+  return { title: C.title, node, afterMount: ltb ? () => ltb.mount() : undefined, cleanup: ltb ? () => ltb.destroy() : undefined };
 }
 
 // The daily cadence as a timetable on rule 1 (the home page's how-step rows): times in the margin, a tick

@@ -1,9 +1,9 @@
 // #pricing (brief §6): three tiers on three rules, honest expectations, the policies, availability, and the
 // launch note (ui.js launchNote): before launch no paid tier is on sale, whatever the engine gate says.
 // SL: first draft, needs native review.
-import { h, setNumber } from '../dom.js';
+import { h, setNumber, digits } from '../dom.js';
 import { href } from '../router.js';
-import { masthead, contentSections, page } from './_content.js';
+import { contentSections, page } from './_content.js';
 import { trackRecordLabel, launchNote } from '../ui.js';
 
 const COPY = {
@@ -11,7 +11,8 @@ const COPY = {
     title: 'Pricing',
     kicker: 'What do I get?',
     h1: 'One price for everyone.',
-    lede: 'Every paid tier gets the same issue at the same second; the paid tiers differ in how much data you get, never in when you get a pick. On the free Ledger tier an open pick stays sealed (number, time, hash) until it closes; its ticker is then revealed to everyone. Prices are in euros and include VAT.',
+    lede: 'Every paid tier gets the same issue at the same second; the paid tiers differ in how much data you get, never in when you get a pick.',
+    ledeMore: 'On the free Ledger tier an open pick stays sealed (number, time, hash) until it closes; its ticker is then revealed to everyone. Prices are in euros and include VAT.',
     billing: 'Billing',
     monthly: 'Monthly',
     annual: 'Annual',
@@ -74,7 +75,8 @@ const COPY = {
     title: 'Cene',
     kicker: 'Kaj dobim?',
     h1: 'Ena cena za vse.',
-    lede: 'Vsak plačljivi paket dobi isto izdajo v isti sekundi; plačljiva paketa se razlikujeta po količini podatkov, nikoli po tem, kdaj dobite izbiro. V brezplačnem paketu Ledger ostane odprta izbira zapečatena (številka, čas, zgoščena vrednost), dokler se ne zapre; takrat se njena oznaka razkrije vsem. Cene so v evrih in vključujejo DDV.',
+    lede: 'Vsak plačljivi paket dobi isto izdajo v isti sekundi; plačljiva paketa se razlikujeta po količini podatkov, nikoli po tem, kdaj dobite izbiro.',
+    ledeMore: 'V brezplačnem paketu Ledger ostane odprta izbira zapečatena (številka, čas, zgoščena vrednost), dokler se ne zapre; takrat se njena oznaka razkrije vsem. Cene so v evrih in vključujejo DDV.',
     billing: 'Obračun',
     monthly: 'Mesečno',
     annual: 'Letno',
@@ -157,23 +159,31 @@ export async function render(ctx) {
     });
   }
 
+  // Three equal plinths on bays 1–3 (DESIGN-V2 §5): no tier highlighted, no ultramarine; prices in
+  // Martian at record size, arriving as a digit reveal; the launch note stands in bay 4.
   const tiers = C.tiers.map((tier, i) => {
-    const amount = h('span', { class: 'tier__amount' }, price(tier.m));
-    const per = h('span', { class: 'tier__per small muted' }, tier.m === 0 ? C.free : C.perMonth);
+    const amount = h('span', { class: 'pl__amount' }, digits(price(tier.m)));
+    const per = h('p', { class: 'pl__per' }, tier.m === 0 ? C.free : C.perMonth);
     amountEls.push(amount);
     perEls.push(per);
     return h(
       'article',
-      { class: `tier c-b${i + 1}`, 'aria-labelledby': `pt-${tier.id}` },
-      h('h2', { class: 'tier__name label', id: `pt-${tier.id}` }, tier.name),
-      h('p', { class: 'tier__price' }, amount, per),
-      h('div', { class: 'tier__body' }, h('p', { class: 'tier__lead' }, tier.lead), h('ul', { class: 'tier__items' }, tier.items.map((it) => h('li', {}, it)))),
-      h('p', { class: 'small muted tier__note' }, tier.note ?? ''),
-      h('a', { class: ['btn', i === 0 && 'btn--ghost', 'tier__cta'], href: tier.href }, tier.cta, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
+      { class: 'pl', 'aria-labelledby': `pt-${tier.id}` },
+      h('h2', { class: 'label pl__name', id: `pt-${tier.id}` }, tier.name),
+      h('p', { class: 'fig-xl pl__price' }, amount),
+      per,
+      h('p', { class: 'pl__lead' }, tier.lead),
+      h('ul', { class: 'pl__items' }, tier.items.map((it) => h('li', {}, it))),
+      h(
+        'div',
+        { class: 'pl__cta' },
+        tier.note ? h('p', { class: 'small muted pl__note' }, tier.note) : null,
+        h('a', { class: ['btn', i === 0 && 'btn--ghost'], href: tier.href }, tier.cta, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
+      ),
     );
   });
 
-  const toggle = h('div', { class: 'billing' }, h('p', { class: 'label', id: 'billing-l' }, C.billing), h('div', { class: 'seg seg--light', role: 'group', 'aria-labelledby': 'billing-l' }, toggleBtns));
+  const toggle = h('div', { class: 'billing pl-toggle' }, h('p', { class: 'label', id: 'billing-l' }, C.billing), h('div', { class: 'seg seg--light', role: 'group', 'aria-labelledby': 'billing-l' }, toggleBtns));
 
   const record = summary
     ? h(
@@ -188,8 +198,19 @@ export async function render(ctx) {
   const recordLabel = summary ? h('p', { class: 'small muted pricing-track' }, trackRecordLabel(ctx.locale)) : null;
 
   const node = page(
-    masthead({ kicker: C.kicker, title: C.h1, lede: C.lede, meta: h('div', { class: 'pricing-meta' }, toggle, launchNote(launch, ctx.locale)) }),
-    h('section', { class: 'grid pricing-tiers', 'aria-label': C.title }, ...tiers),
+    h(
+      'header',
+      { class: 'grid pl-head' },
+      h('p', { class: 'label c-head' }, C.kicker),
+      h('h1', { class: 'display d1 c-head', id: 'page-h' }, C.h1),
+      h('p', { class: 'lede c-body pl-head__lede' }, C.lede),
+      h('div', { class: 'c-meta pl-head__bar' }, h('p', { class: 'small muted pl-head__more' }, C.ledeMore), toggle),
+    ),
+    h(
+      'section',
+      { class: 'grid pl-sec', 'aria-label': C.title },
+      h('div', { class: 'pl-row' }, ...tiers, h('div', { class: 'pl-note' }, launchNote(launch, ctx.locale))),
+    ),
     h(
       'section',
       { class: 'grid honest-block', 'aria-labelledby': 'honest-h' },

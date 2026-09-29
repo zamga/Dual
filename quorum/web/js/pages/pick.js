@@ -12,6 +12,7 @@ import { ruleLabels } from '../rule.js';
 import { indexPicks, isSealedFor, chainOf, resultOf, isRevealed, venueL } from './_records.js';
 import { colonnadeChart, sensitivityModel } from '../charts/colonnade.js';
 import { pathChart } from '../charts/path.js';
+import { createAssembly } from '../hero/assembly.js';
 import { canonicalize } from '../core/canonical-json.js';
 import { analyze } from '../core/gsm7.js';
 import { formatInZone, LJUBLJANA, NEW_YORK } from '../core/calendar.js';
@@ -46,7 +47,7 @@ function person(meta, id) {
 export async function render(ctx) {
   const { L, fmt, locale } = ctx;
   const no = ctx.params.no;
-  const [picks, meta, ledger, launch] = await Promise.all([ctx.data('picks'), ctx.data('meta').catch(() => null), ctx.data('ledger').catch(() => null), ctx.launch()]);
+  const [picks, meta, ledger, launch, hero] = await Promise.all([ctx.data('picks'), ctx.data('meta').catch(() => null), ctx.data('ledger').catch(() => null), ctx.launch(), ctx.data('hero').catch(() => null)]);
   const pre = launch.prelaunch;
   const byNo = indexPicks(picks);
   const pick = byNo.get(no);
@@ -66,38 +67,38 @@ export async function render(ctx) {
   const chain = chainOf(pick, byNo);
   const statusText = pick.status === 'open' ? L('Open', 'Odprta') : pick.status === 'renewed' ? L('Renewed', 'Podaljšana') : L('Closed', 'Zaprta');
 
-  // ---- header ----------------------------------------------------------------------------------------
+  // ---- the stage (DESIGN-V2 §5): night, the ticker in --t-hero, the strip under it. When hero.json holds
+  // this pick's issue the stage is the Assembly frozen at the quorum; otherwise a plain colonnade of the
+  // four family percentiles with the lintel over the columns that agreed. The note rises over it.
+  const inHero = hero?.pick?.no === pick.no && hero?.issueDate === pick.issueDate;
+  const kicker = h('p', { class: 'label stage-screen__kicker' }, L(`Research note · #${pick.no} · issue #${pick.issueNo}`, `Raziskovalni zapis · #${pick.no} · izdaja #${pick.issueNo}`));
+  const asm = inHero ? createAssembly(ctx, hero, { meta, prelaunch: pre, freeze: 'quorum', clearOf: () => kicker }) : null;
+  if (asm) {
+    // the frozen scene keeps its caption for assistive tech, but the page has one h1: the ticker
+    const hh = asm.node.querySelector('h1');
+    if (hh) hh.replaceWith(h('p', { class: hh.className, id: hh.id }, ...hh.childNodes));
+  }
+  const badge = h('span', { class: 'badge-quorum pk-badge', dataset: { vtPick: pick.no } }, `${kindWord} · ${pick.agreement}/4`);
   const head = h(
     'header',
-    { class: 'grid masthead pk-head' },
-    h(
-      'p',
-      { class: 'label c-head pk-kicker' },
-      L(`Research note · #${pick.no} · issue #${pick.issueNo}`, `Raziskovalni zapis · #${pick.no} · izdaja #${pick.issueNo}`),
-    ),
-    h('h1', { class: 'display d1 c-head pk-h1' }, h('span', { class: 'pk-h1__t' }, pick.ticker), h('span', { class: 'visually-hidden' }, `, ${pick.name}`)),
+    { class: ['grid stage-screen night ruled pk-stage', asm && 'has-scene'] },
+    asm ? h('div', { class: 'pk-scene flush' }, asm.node) : stageColumns(pick, { meta, R, locale }),
+    kicker,
+    h('h1', { class: 'display d-hero stage-screen__title display--open pk-h1' }, h('span', { class: 'pk-h1__t' }, pick.ticker), h('span', { class: 'visually-hidden' }, `, ${pick.name}`)),
     h(
       'div',
-      { class: 'c-body pk-id' },
-      h('p', { class: 'lede pk-name' }, pick.name, ' ', h('span', { class: 'tag' }, ctx.t('common.fictional'))),
-      h('p', { class: 'pk-idline mono' }, `${locale === 'sl' ? (pick.sectorSl ?? pick.sector) : pick.sector} · ${venueL(pick.venue, locale)} · ${pick.isin}`),
-    ),
-    h(
-      'div',
-      { class: 'c-meta pk-state' },
+      { class: 'stage-screen__strip' },
+      h('span', { class: 't-lintel pk-name' }, pick.name),
+      h('span', { class: 'tag' }, ctx.t('common.fictional')),
+      badge,
+      h('span', { class: ['tag', `is-${pick.status}`] }, statusText),
       h(
-        'p',
-        { class: 'pk-badges' },
-        h('span', { class: 'badge-quorum pk-badge' }, `${kindWord} · ${pick.agreement}/4`),
-        h('span', { class: ['tag', `is-${pick.status}`] }, statusText),
-      ),
-      h(
-        'p',
-        { class: 'small muted' },
-        `${fmt.date(pick.issueDate)} · ${dis.time} ${dis.tz}`,
-        ' · ',
+        'span',
+        { class: 'small pk-when' },
+        `${fmt.date(pick.issueDate)} · ${dis.time} ${dis.tz} · `,
         h('a', { href: href('issue', pick.issueDate) }, L(`Issue #${pick.issueNo}`, `Izdaja #${pick.issueNo}`)),
       ),
+      h('span', { class: 'pk-idline mono' }, `${locale === 'sl' ? (pick.sectorSl ?? pick.sector) : pick.sector} · ${venueL(pick.venue, locale)} · ${pick.isin}`),
     ),
   );
 
@@ -483,7 +484,10 @@ export async function render(ctx) {
     'article',
     { class: 'pk', 'aria-labelledby': 'pk-h1' },
     head,
-    summary,
+    h(
+      'div',
+      { class: 'note-sheet paper' },
+      summary,
     colSec,
     thesisSec,
     pathSec,
@@ -496,9 +500,44 @@ export async function render(ctx) {
       { class: 'grid pk-nav', 'aria-label': L('Neighbouring picks', 'Sosednje izbire') },
       h('p', { class: 'c-body pk-nav__links' }, ...neighbours(ctx, pick, picks, byNo)),
     ),
+    ),
   );
   node.querySelector('h1').id = 'pk-h1';
-  return { title: L(`#${pick.no} ${pick.ticker}`, `#${pick.no} ${pick.ticker}`), node };
+  return {
+    title: L(`#${pick.no} ${pick.ticker}`, `#${pick.no} ${pick.ticker}`),
+    node,
+    top: 'chamber',
+    afterMount: asm ? () => asm.mount() : undefined,
+    cleanup: asm ? () => asm.destroy() : undefined,
+  };
+}
+
+// The plain stage for a pick the hero data does not hold: the four family percentiles as columns on the
+// rules (0–100 over the stage's upper band), the rule threshold as a faint band, and the lintel of quorum
+// light across the columns that agreed. Decoration only: the numbers are in the note's colonnade (01).
+function stageColumns(pick, { meta, R, locale }) {
+  const th = R.topPct ?? 0.91;
+  const agree = new Set(pick.agreeing ?? []);
+  const ks = ['A', 'B', 'C', 'D'];
+  const on = ks.map((f, k) => (agree.has(f) ? k : -1)).filter((k) => k >= 0);
+  const cols = ks.map((f) => {
+    const pct = pick.families?.[f]?.pct;
+    const el = h(
+      'span',
+      { class: ['pk-pillar', agree.has(f) && 'is-agree'] },
+      h('span', { class: 'pk-pillar__k mono' }, `${f} · ${Number.isFinite(pct) ? Math.floor(pct * 100) : '–'}${agree.has(f) ? '' : locale === 'sl' ? ' · brez glasu' : ' · no vote'}`),
+    );
+    el.style.setProperty('--h', String(Number.isFinite(pct) ? Math.max(0.02, pct) : 0));
+    return el;
+  });
+  const lintel = on.length >= 2 ? h('span', { class: 'pk-cols__lintel' }) : null;
+  if (lintel) {
+    lintel.style.gridColumn = `r${on[0] + 1} / r${on[on.length - 1] + 1}`;
+    lintel.style.setProperty('--t', String(th));
+  }
+  const node = h('div', { class: 'pk-cols', 'aria-hidden': 'true' }, cols, lintel);
+  node.style.setProperty('--t', String(th));
+  return node;
 }
 
 function resultStripWrap(strip) {
@@ -791,13 +830,13 @@ function sealedNote(ctx, pick, { byNo, pre = true }) {
     { class: 'pk pk--sealed' },
     h(
       'header',
-      { class: 'grid masthead pk-head' },
+      { class: 'grid stage-screen night ruled pk-stage pk-stage--sealed' },
       h(
         'p',
-        { class: 'label c-head pk-kicker' },
+        { class: 'label stage-screen__kicker' },
         L(`Research note · #${pick.no} · issue #${pick.issueNo}`, `Raziskovalni zapis · #${pick.no} · izdaja #${pick.issueNo}`),
       ),
-      h('h1', { class: 'display d1 c-head pk-h1' }, L(`#${pick.no} is sealed.`, `#${pick.no} je zapečatena.`)),
+      h('h1', { class: 'display d1 stage-screen__title pk-h1' }, L(`#${pick.no} is sealed.`, `#${pick.no} je zapečatena.`)),
       h(
         'p',
         { class: 'lede c-body' },
@@ -808,13 +847,13 @@ function sealedNote(ctx, pick, { byNo, pre = true }) {
       ),
       h(
         'div',
-        { class: 'c-meta pk-state' },
+        { class: 'stage-screen__strip' },
         h('p', { class: 'pk-badges' }, quorumBadge(pick.agreement, { t: ctx.t }), h('span', { class: 'tag' }, ctx.t('common.sealed'))),
       ),
     ),
     h(
       'section',
-      { class: 'section grid chamber ruled pk-sec pk-sealed', 'aria-labelledby': 'pk-sl-h' },
+      { class: 'section grid paper ruled note-sheet pk-sec pk-sealed', 'aria-labelledby': 'pk-sl-h' },
       ...sectionHead({
         index: '01',
         kicker: L('What the public chain shows', 'Kaj kaže javna veriga'),
@@ -877,7 +916,7 @@ function sealedNote(ctx, pick, { byNo, pre = true }) {
       ),
     ),
   );
-  return { title: L(`#${pick.no} · sealed`, `#${pick.no} · zapečateno`), node };
+  return { title: L(`#${pick.no} · sealed`, `#${pick.no} · zapečateno`), node, top: 'chamber' };
 }
 
 function missing(ctx, no) {

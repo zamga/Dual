@@ -9,7 +9,7 @@
 import { h } from '../dom.js';
 import { href } from '../router.js';
 import { sectionHead, signed, simulationNote } from '../ui.js';
-import { masthead, toc } from './_content.js';
+import { toc } from './_content.js';
 import { ruleLabels } from '../rule.js';
 import { lineChart, hatchLayer } from '../charts/equity.js';
 import { variantHistogram } from '../charts/variants.js';
@@ -38,16 +38,29 @@ export async function render(ctx) {
     { id: 'overfitting', title: L('DSR and PBO', 'DSR in PBO') },
     { id: 'crash', title: L('Crash switch', 'Stikalo za zlom') },
   ];
-  const head = masthead({
-    kicker: L('Did it work? · the backtest', 'Je delovalo? · povratni test'),
-    title: L('Hypothetical.', 'Hipotetično.'),
-    lede: L(
-      `How the frozen rules would have done on history, before any of it was sealed. Kept on this page only: never on the home page, in an ad or in a text. The live proof is the ledger.`,
-      `Kako bi se zamrznjena pravila odrezala na zgodovini, preden je bilo kar koli zapečateno. Samo na tej strani: nikoli na naslovnici, v oglasu ali v SMS. Dokaz v živo je knjiga.`,
+  // Stone versus scaffold (DESIGN-V2 §5): everything on this page is hypothetical, so it is drawn as scaffold
+  // (dashed strokes over the hatch), under a sticky HYPOTHETICAL banner, and the H1 is the page's voice.
+  const head = h(
+    'header',
+    { class: 'grid masthead page-masthead bt-head' },
+    h('p', { class: 'label c-head' }, L('Did it work? · the backtest', 'Je delovalo? · povratni test')),
+    h('h1', { class: 'voice bt-h1 c-head', id: 'page-h' }, L('Hypothetical.', 'Hipotetično.')),
+    h(
+      'p',
+      { class: 'lede c-body masthead__lede' },
+      L(
+        `How the frozen rules would have done on history, before any of it was sealed. Kept on this page only: never on the home page, in an ad or in a text. The live proof is the ledger.`,
+        `Kako bi se zamrznjena pravila odrezala na zgodovini, preden je bilo kar koli zapečateno. Samo na tej strani: nikoli na naslovnici, v oglasu ali v SMS. Dokaz v živo je knjiga.`,
+      ),
     ),
-    meta: toc(ctx, sections, L('On this page', 'Na tej strani')),
-  });
-  const flag = h('div', { class: 'bt-flag', role: 'note' }, h('p', { class: 'label' }, L('Hypothetical backtest · not live results', 'Hipotetični povratni test · ni rezultatov v živo')));
+    h('div', { class: 'c-meta masthead__meta' }, toc(ctx, sections, L('On this page', 'Na tej strani'))),
+  );
+  const flag = h(
+    'div',
+    { class: 'scaffold-banner bt-flag', role: 'note' },
+    h('span', { class: 'label' }, L('Hypothetical', 'Hipotetično')),
+    h('span', { class: 'small' }, L('A backtest on history · not live results · drawn as scaffold', 'Povratni test na zgodovini · ni rezultatov v živo · narisano kot oder')),
+  );
   // the brief's exact banner wording; its first sentence set as the heading of the box
   const cut = banner.indexOf('. ') + 1;
   const bannerEl = h('div', { class: 'grid bt-banner-row' }, h('p', { class: 'c-wide bt-banner', role: 'note' }, h('span', { class: 'bt-banner__k' }, banner.slice(0, cut)), h('span', {}, banner.slice(cut + 1))));
@@ -121,7 +134,7 @@ function equitySection(ctx, bt, R) {
         valueLabel: (v) => xFmt(v, fmt),
         altCaption: L('Hypothetical growth of 1 at each year end, by series', 'Hipotetična rast 1 ob koncu vsakega leta, po serijah'),
         dateLabel: L('Month', 'Mesec'),
-        className: 'eq--bt',
+        className: 'eq--bt scaffold',
       })
     : null;
   const st = bt.stats ?? {};

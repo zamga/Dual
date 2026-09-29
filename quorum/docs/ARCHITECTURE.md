@@ -290,7 +290,7 @@ API (JSON; POSTs require `Content-Type: application/json` and the session cookie
 ## 5. web/
 
 A static single-page site with hash routing. It must work opened from any static host (the Artifact publisher serves `web/` as the root; `index.html` is the page and every other file is a relative supporting file). No external JS. Fonts from Google Fonts only:
-`https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=Martian+Mono:wdth,wght@75..112.5,100..800&display=swap` (verified: the `wdth` axes and Latin Extended for č, š, ž are served).
+`https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,200..900&family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Instrument+Serif:ital@1&display=swap` (v2, docs/DESIGN-V2.md §3.1; verified: the `wdth` axes and Latin Extended for č, š, ž are served). The live server still self-hosts the v1 files (server/fonts.js); the metric fallbacks hold until it is updated.
 
 Modes: **demo** (default; reads `data/*.json`; the join flow runs as a preview that never sends anything and never stores a phone number) and **live** (when `<meta name="quorum-mode" content="live">` is present; calls `/api`).
 
@@ -317,7 +317,7 @@ web/assets/favicon.svg    the lintel mark
 - **No `alert`/`confirm`/`prompt`/`window.print`/`window.open`:** confirmations are built into the page. `mailto:` and `tel:` links are unreliable: show the address as selectable text with a copy button.
 - **Complete at rest:** everything meant to be read is visible on load without scrolling to trigger it. Reveal animations start from a visible state (never `opacity: 0` waiting for an observer). The hero's first frame (before any scroll) must already read as a finished composition: headline, issue line and the settled chart.
 - **Safe areas:** a fixed top or bottom bar adds `env(safe-area-inset-top|bottom, 0px)` to its own padding; a sticky header uses `top: env(safe-area-inset-top, 0px)`.
-- **Single theme by design:** Colonnade is a deliberate light-limestone world with dark Chamber sections. Set `color-scheme: light` on `:root`, give `body` an explicit Karst background, and set every color from tokens (no inherited defaults).
+- **Single theme by design:** Stone and Signal (v2) is a fixed world of night and limestone surfaces chosen per page, not per viewer preference. Set `color-scheme: light` on `:root` (`dark` on night surfaces), give `body` an explicit Karst background, and set every color from tokens (no inherited defaults).
 - **Title:** the static `<title>` is `Quorum Research` (the Artifact gallery reads it); routes may update `document.title` as `<Page> · Quorum Research`.
 - At publish time the lead strips the outer `<!doctype>`/`<html>`/`<head>`/`<body>` wrappers into a published copy; `web/index.html` stays a complete document for the Node server.
 

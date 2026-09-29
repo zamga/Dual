@@ -38,6 +38,7 @@ export function createShell(app) {
   const sheet = qs('#sheet');
   const plinths = qs('#plinths');
   const tip = qs('#rule-tip');
+  const rulesEl = qs('.rules');
   const rules = qsa('.rules > i');
   let pillEl = null;
   let pillTimer = 0;
@@ -169,6 +170,9 @@ export function createShell(app) {
   }
 
   // ---- menu sheet ----------------------------------------------------------------------------------------
+  // The menu sheet (night, DESIGN-V2 §5): three questions in d2 across bays 1–3, links as 48 px rows that
+  // mask in 40 ms apart; hovering a question lights its rule. The bottom strip carries the day's status,
+  // the other links and the locale.
   function renderSheet() {
     const closeBtn = h(
       'button',
@@ -182,24 +186,52 @@ export function createShell(app) {
       [href('disclosures'), 'nav.disclosures'],
       [href('methodology-changelog'), 'nav.changelog'],
       [href('status'), 'nav.status'],
+      [href('legal', 'terms'), 'footer.terms'],
+      [href('legal', 'privacy'), 'footer.privacy'],
+      [href('legal', 'imprint'), 'footer.imprint'],
     ];
+    const lit = h('div', { class: 'sheet__lit', 'aria-hidden': 'true' }, h('i'), h('i'), h('i'), h('i'));
+    const light = (k) => [...lit.children].forEach((el, j) => el.classList.toggle('is-lit', j === k));
+    let k = 0;
     sheet.replaceChildren(
+      lit,
       h('div', { class: 'sheet__top' }, mark(), closeBtn),
       h(
         'nav',
         { class: 'sheet__body', 'aria-label': t('nav.label') },
-        GROUPS.map((g) =>
-          h('div', { class: 'sheet__q' }, h('h2', { id: `sq-${g.id}` }, t(g.q)), h('ul', { 'aria-labelledby': `sq-${g.id}` }, g.links.map(([href, key]) => h('li', {}, h('a', { href }, t(key)))))),
+        GROUPS.map((g, gi) =>
+          h(
+            'div',
+            { class: 'sheet__q', onpointerenter: () => light(gi), onpointerleave: () => light(-1), onfocusin: () => light(gi), onfocusout: () => light(-1) },
+            h('h2', { id: `sq-${g.id}` }, t(g.q)),
+            h(
+              'ul',
+              { 'aria-labelledby': `sq-${g.id}` },
+              g.links.map(([href, key]) => {
+                const a = h('a', { href }, t(key));
+                a.style.setProperty('--i', String(k++));
+                return h('li', {}, a);
+              }),
+            ),
+          ),
         ),
       ),
       h(
         'div',
         { class: 'sheet__foot' },
+        h('p', { class: 'label sheet__status' }, h('span', { class: 'pill__dot', 'aria-hidden': 'true' }), statusLine()),
         h('ul', { class: 'sheet__links' }, extra.map(([href, key]) => h('li', {}, h('a', { href }, t(key))))),
         localeButton(),
       ),
     );
+    sheet.dataset.state = pillEl?.dataset.state ?? 'countdown';
     sheet.setAttribute('aria-label', t('nav.sheet'));
+  }
+
+  // The day's status in one line: the pill's own words (countdown, or the latest issue's result).
+  function statusLine() {
+    const txt = pillEl ? [...pillEl.querySelectorAll('.pill__top, .pill__main')].map((e) => e.textContent.trim()).join(' ') : '';
+    return txt || t('pill.next');
   }
 
   function openSheet(btn) {
@@ -288,11 +320,30 @@ export function createShell(app) {
         // the demo line; when the export explains its simulated market (meta.notes.simulation), a short link to it
         h('p', { class: 'small muted footer-demo' }, t('footer.demo'), simulationText(meta, app.locale) ? [' ', h('a', { href: href('methodology', null, 'simulation') }, t('footer.simLink'))] : null),
       ),
+      footerMark(),
+    );
+  }
+
+  // The footer lintel (DESIGN-V2 §4.9): "QUORUM" across r1→r4 over a 6 px lintel of quorum light when the
+  // latest issue in the data had a quorum, else a hairline that says which kind of quiet day it was.
+  function footerMark() {
+    const last = app.issues?.length ? app.issues[app.issues.length - 1] : null;
+    const fmt = formatters(app.locale);
+    const n = (last?.buys?.length ?? 0) + (last?.renews?.length ?? 0);
+    const met = (last?.closest ?? 0) >= (app.meta?.rule?.minAgree ?? 3) && (last?.reached ?? 0) > 0;
+    const state = last?.quorum && n > 0 ? 'quorum' : 'none';
+    const word = !last ? '' : state === 'quorum' ? tp('pill.quorum', n) : met ? t('pill.noPick') : t('pill.noQuorum');
+    const where = last ? `${app.locale === 'sl' ? 'Izdaja' : 'Issue'} #${last.issueNo} · ${fmt.date(last.date)}` : '';
+    return h(
+      'div',
+      { class: 'footer-mark' },
+      h('p', { class: 'd-foot', 'aria-hidden': 'true' }, 'Quorum'),
+      h('div', { class: 'foot-lintel', dataset: { state }, 'aria-hidden': 'true' }),
       h(
-        'div',
-        { class: 'footer-mark' },
-        h('p', { class: 'd-foot', 'aria-hidden': 'true' }, 'Quorum'),
-        h('p', { class: 'label' }, app.locale === 'sl' ? 'Brez kvoruma ni SMS.' : 'No quorum, no text.'),
+        'p',
+        { class: 'label' },
+        last ? h('a', { href: href('issue', last.date), class: 'foot-lintel__k' }, word, h('span', { class: 'foot-lintel__at' }, ` · ${where}`)) : h('span', {}, ''),
+        h('span', {}, app.locale === 'sl' ? 'Brez kvoruma ni SMS.' : 'No quorum, no text.'),
       ),
     );
   }
@@ -310,7 +361,7 @@ export function createShell(app) {
     header.dataset.group = group ?? '';
   }
 
-  // ---- rule labels: hover a rule (after a short dwell), or focus a plinth ------------------------
+  // ---- rule labels: the plumb line on hover, or focus a plinth ------------------------
   function ruleInfo(i) {
     const id = 'ABCD'[i];
     return { id, name: familyLabel(id, 'name'), def: familyLabel(id, 'def') };
@@ -338,28 +389,42 @@ export function createShell(app) {
   }
 
   let tipFor = -1;
-  function showTip(i, pointerY, plinth) {
+  function showTip(i, pointerY, plinth, pointerX) {
     const r = rules[i].getBoundingClientRect();
     const info = ruleInfo(i);
-    tip.replaceChildren(
-      h('span', { class: 'rule-tip__id' }, t('rules.label', { id: info.id })),
-      h('span', { class: 'rule-tip__name' }, info.name),
-      h('span', { class: 'rule-tip__def' }, info.def),
-    );
+    const plumb = !plinth;
+    if (tipFor !== i || tip.dataset.mode !== (plumb ? 'plumb' : 'plinth')) {
+      tip.replaceChildren(...[h('span', { class: 'rule-tip__id' }, info.id), h('span', { class: 'rule-tip__name' }, info.name), plumb ? null : h('span', { class: 'rule-tip__def' }, info.def)].filter(Boolean));
+      tip.dataset.mode = plumb ? 'plumb' : 'plinth';
+    }
     tip.hidden = false;
     const w = tip.offsetWidth;
     const hgt = tip.offsetHeight;
-    let x = r.left + 10;
-    if (x + w > window.innerWidth - 12) x = r.left - w - 10;
-    let y = pointerY != null ? pointerY + 14 : plinth.getBoundingClientRect().top - hgt - 10;
+    let x = r.left + 12;
+    if (x + w > window.innerWidth - 12) x = r.left - w - 12;
+    let y = pointerY != null ? pointerY - hgt / 2 : plinth.getBoundingClientRect().top - hgt - 10;
     y = Math.max(12, Math.min(window.innerHeight - hgt - 12, y));
+    // the label never lands on display type (its opaque ground would clip a headline's descenders): it
+    // steps above or below the headline's box, whichever is nearer the pointer
+    for (const d of qsa('#view .display, #view .asm__h, #view .asm__d2')) {
+      const b = d.getBoundingClientRect();
+      if (!b.height || b.right < x || b.left > x + w || b.bottom < y - 4 || b.top > y + hgt + 4) continue;
+      const py = pointerY ?? y + hgt / 2;
+      y = py - b.top < b.bottom - py ? b.top - hgt - 8 : b.bottom + 8;
+    }
     tip.style.setProperty('--x', `${Math.round(x)}px`);
     tip.style.setProperty('--y', `${Math.round(y)}px`);
-    tip.dataset.surface = plinths.dataset.surface ?? 'karst';
+    const surf = pointerY != null ? surfaceAt(pointerX ?? r.left, pointerY, [header, sheet, plinths, tip]) : plinths.dataset.surface ?? 'karst';
+    const night = surf === 'chamber' || surf === 'hero';
+    tip.dataset.surface = night ? 'night' : 'karst';
+    rulesEl.dataset.surface = night ? 'night' : 'karst';
+    rules.forEach((el, k) => {
+      el.classList.toggle('is-lit', k === i);
+      if (k === i) el.style.setProperty('--py', `${Math.round(pointerY ?? window.innerHeight - 40)}px`);
+    });
     tip.classList.add('is-on');
-    rules.forEach((el, k) => el.classList.toggle('is-lit', k === i));
-    qsa('.plinth', plinths).forEach((el, k) => el.classList.toggle('is-lit', k === i));
-    plinths.classList.add('is-lit');
+    qsa('.plinth', plinths).forEach((el, k) => el.classList.toggle('is-lit', k === i && !plumb));
+    plinths.classList.toggle('is-lit', !plumb);
     tipFor = i;
   }
 
@@ -371,19 +436,24 @@ export function createShell(app) {
     tipFor = -1;
   }
 
+  // The plumb line (DESIGN-V2 §4.5, pointer: fine): within 24 px of a rule, the rule lights to alpha .5 over
+  // a 180 px window centred on the pointer (a mask falloff, CSS) and its Martian label fades in beside it
+  // (120 ms in, 200 ms out). The plinth buttons keep the same labels for keyboard users.
   let ruleXs = [];
   const measureRules = () => {
     ruleXs = rules.map((el) => el.getBoundingClientRect().left);
   };
-  let dwell = 0;
-  let near = -1;
+  const fine = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
   let raf = 0;
   let lastEv = null;
-  document.documentElement.addEventListener('pointerleave', () => plinths.classList.remove('is-near'));
+  document.documentElement.addEventListener('pointerleave', () => {
+    plinths.classList.remove('is-near');
+    if (tipFor !== -1 && !plinths.contains(document.activeElement)) hideTip();
+  });
   document.addEventListener(
     'pointermove',
     (e) => {
-      if (e.pointerType !== 'mouse') return;
+      if (e.pointerType !== 'mouse' || !fine) return;
       lastEv = e;
       if (raf) return;
       raf = requestAnimationFrame(() => {
@@ -392,22 +462,21 @@ export function createShell(app) {
         // the plinths show only while the pointer is near the bottom edge, where they stand
         plinths.classList.toggle('is-near', ev.clientY >= window.innerHeight - 48);
         if (!ruleXs.length) measureRules();
-        const i = ruleXs.findIndex((x) => Math.abs(ev.clientX - x) <= 5);
-        const onUi = ev.target.closest?.('a, button, input, select, textarea, summary, .ts, .hash, canvas, .no-rule-tip');
+        let i = -1;
+        let best = 25;
+        ruleXs.forEach((x, k) => {
+          const d = Math.abs(ev.clientX - x);
+          if (d < best) {
+            best = d;
+            i = k;
+          }
+        });
+        const onUi = ev.target.closest?.('a, button, input, select, textarea, summary, label, .ts, .hash, canvas, .lv, .sheet, .no-rule-tip');
         if (i === -1 || onUi) {
-          clearTimeout(dwell);
-          near = -1;
           if (tipFor !== -1 && !qs('.plinth:hover, .plinth:focus', plinths)) hideTip();
           return;
         }
-        if (i !== near) {
-          near = i;
-          clearTimeout(dwell);
-          const y = ev.clientY;
-          dwell = setTimeout(() => showTip(i, y), 220);
-        } else if (tipFor === i) {
-          showTip(i, ev.clientY);
-        }
+        showTip(i, ev.clientY, null, ev.clientX);
       });
     },
     { passive: true },
@@ -443,8 +512,9 @@ export function createShell(app) {
     for (const el of els) {
       if (exclude.some((ex) => ex.contains(el))) continue;
       if (el.closest('.lv')) return 'hero';
-      if (el.closest('.chamber')) return 'chamber';
-      if (el.closest('#view, .site-footer, .demo-bar')) return 'karst';
+      if (el.closest('.paper, .karst')) return 'karst';
+      if (el.closest('.chamber, .night, .site-footer')) return 'chamber';
+      if (el.closest('#view, .demo-bar')) return 'karst';
     }
     return 'karst';
   }
@@ -467,8 +537,6 @@ export function createShell(app) {
     'scroll',
     () => {
       if (tipFor !== -1 && !plinths.contains(document.activeElement)) hideTip();
-      clearTimeout(dwell);
-      near = -1;
     },
     { passive: true },
   );
@@ -502,5 +570,6 @@ export function createShell(app) {
     markCurrent,
     closeSheet,
     updateSurfaces: () => requestAnimationFrame(updateSurfaces),
+    updateSurfacesNow: updateSurfaces, // inside a View Transition's swap: the header takes its new theme in the new snapshot
   };
 }

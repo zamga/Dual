@@ -3,7 +3,7 @@
 //   export async function render(ctx) -> { title, node, cleanup?, top?, afterMount? }
 import { matchRoute, isRouteHash, routeOfHref, href } from './router.js';
 import { setLocale, t, tp, formatters, LOCALES } from './i18n.js';
-import { h, announce, focusEl, store, prefersReducedMotion, qs, copyText } from './dom.js';
+import { h, announce, focusEl, store, prefersReducedMotion, qs, qsa, copyText, reveal, playDigits, sweepLine, sweep } from './dom.js';
 import { createClock } from './clock.js';
 import { createShell } from './shell.js';
 import { launchInfo } from './launch.js';
@@ -148,6 +148,72 @@ root.lang = app.locale;
 const shell = createShell(app);
 shell.renderAll();
 
+// ---- the 14:00 boot (DESIGN-V2 §4.2) -------------------------------------------------------------------
+// First visit per session only, never under reduced motion, skipped by any key, click, wheel or touch, and
+// never longer than 1.4 s. It is added by script, so the page is complete without it. On night: the four
+// rules rise, the day of the latest issue types itself in bay 1 (06:00 data in … 14:00 published), the
+// readout fades, the cover lifts and the headline masks in. It hides the wait for the display face.
+const boot = (() => {
+  const t0 = performance.now();
+  let seen = true;
+  try {
+    seen = sessionStorage.getItem('quorum.boot') === '1';
+    sessionStorage.setItem('quorum.boot', '1');
+  } catch {
+    seen = true; // no storage: no way to show it once, so never show it
+  }
+  if (seen || prefersReducedMotion() || flags.boot === '0') return { active: false, fill: NOOP, headlineDelay: () => 120 };
+  const lines = h('div', { class: 'boot__lines' });
+  const el = h('div', { class: 'boot', 'aria-hidden': 'true' }, h('div', { class: 'boot__rules' }, h('i'), h('i'), h('i'), h('i')), lines);
+  root.classList.add('is-boot');
+  document.body.append(el);
+  let ended = false;
+  const EVENTS = ['keydown', 'pointerdown', 'wheel', 'touchstart'];
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    EVENTS.forEach((e) => removeEventListener(e, skip, true));
+    root.classList.remove('is-boot');
+    el.remove();
+  };
+  function skip() {
+    if (ended) return;
+    EVENTS.forEach((e) => removeEventListener(e, skip, true));
+    const a = el.animate?.([{ opacity: getComputedStyle(el).opacity }, { opacity: 0 }], { duration: 150, fill: 'forwards' });
+    if (a) a.finished.then(end, end);
+    else end();
+  }
+  EVENTS.forEach((e) => addEventListener(e, skip, { capture: true, passive: true }));
+  setTimeout(end, 1400);
+  return {
+    active: true,
+    // the four lines, from the real latest issue (issues.json), typed 120 ms apart from 200 ms
+    fill(issues) {
+      const last = Array.isArray(issues) ? issues[issues.length - 1] : null;
+      const elapsed = performance.now() - t0;
+      if (ended || !last || elapsed > 760) return;
+      const fmt = formatters(app.locale);
+      const sl = app.locale === 'sl';
+      const v = last.vetoes ?? {};
+      const met = (last.closest ?? 0) >= (last.required ?? 3) && (last.reached ?? 0) > 0;
+      const n = (last.buys?.length ?? 0) + (last.renews?.length ?? 0);
+      const outcome = last.quorum ? tp('pill.quorum', n).toLowerCase() : met ? (sl ? 'brez nove izbire' : 'no new pick') : sl ? 'brez kvoruma' : 'no quorum';
+      const at = String(last.publishAt ?? '').slice(11, 16) || '14:00';
+      const text = sl
+        ? [`06:00 podatki · ${fmt.int(last.nScored)} delnic`, `11:30 veti · ${fmt.int(v.rule ?? 0)} pravila · ${fmt.int(v.llm ?? 0)} novice`, `13:45 zapečateno · sha256 ${String(last.hash).slice(0, 8)}`, `${at} objavljeno · izdaja #${last.issueNo} · ${outcome}`]
+        : [`06:00 data in · ${fmt.int(last.nScored)} stocks`, `11:30 vetoes · ${fmt.int(v.rule ?? 0)} rule · ${fmt.int(v.llm ?? 0)} news`, `13:45 sealed · sha256 ${String(last.hash).slice(0, 8)}`, `${at} published · issue #${last.issueNo} · ${outcome}`];
+      lines.replaceChildren(
+        ...text.map((s, i) => {
+          const p = h('p', { class: 'boot__line' }, s);
+          p.style.animationDelay = `${Math.max(0, 200 + i * 120 - elapsed)}ms`;
+          return p;
+        }),
+      );
+    },
+    headlineDelay: () => Math.max(120, 1000 - (performance.now() - t0)),
+  };
+})();
+
 // Kick off shared data early; the home page's hero data too, so its SVG paints fast.
 const metaP = loadData('meta').catch(() => null);
 const issuesP = loadData('issues').catch(() => null);
@@ -159,6 +225,7 @@ if (matchRoute(location.hash).module === 'home') {
 Promise.all([metaP, issuesP]).then(([meta, issues]) => {
   app.meta = meta;
   app.issues = Array.isArray(issues) ? issues : null;
+  boot.fill(app.issues);
   if (meta?.asOf) app.clock = createClock({ asOf: meta.asOf, flagsNow: flags.now });
   shell.renderFooter();
   shell.updatePill();
@@ -283,7 +350,15 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
   }
   const y = window.scrollY;
   const first = !app.started;
+  const prevRoute = app.route;
   let sectionFound = false;
+  // The shared element (DESIGN-V2 §4.4): a pick's lintel or badge carries view-transition-name pick-<no>
+  // on both sides of the change, so it morphs. Named only for this one transition, and only when both the
+  // old and the new page hold it (a name on one side only would fade, not morph).
+  const pickNo = route.name === 'pick' ? route.params?.no : prevRoute?.name === 'pick' ? prevRoute.params?.no : null;
+  const oldPick = pickNo ? qs(`[data-vt-pick="${pickNo}"]`, view) : null;
+  const newPick = pickNo ? qs(`[data-vt-pick="${pickNo}"]`, result.node) : null;
+  const morph = oldPick && newPick && !reduced();
   const swap = () => {
     try {
       current?.cleanup?.();
@@ -302,19 +377,51 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
       window.scrollTo(0, 0);
       if (route.section) sectionFound = scrollToSection(route.section, { focus: false });
     }
+    if (oldPick) oldPick.style.viewTransitionName = '';
+    if (morph) {
+      newPick.style.viewTransitionName = `pick-${pickNo}`;
+      newPick.classList.add('vt-pick');
+    }
     shell.markCurrent();
-    shell.updateSurfaces();
+    // the header switches its theme at the swap, not a frame later: the new snapshot never shows it mid-way
+    if (shell.updateSurfacesNow) shell.updateSurfacesNow();
+    else shell.updateSurfaces();
   };
-  const canVT = !first && transition && typeof document.startViewTransition === 'function' && !prefersReducedMotion();
+  const moving = !first && transition;
+  const canVT = moving && typeof document.startViewTransition === 'function';
+  const line = pending.line;
+  pending.line = null;
   if (canVT) {
-    const vt = document.startViewTransition(swap);
+    if (morph) {
+      oldPick.style.viewTransitionName = `pick-${pickNo}`;
+      oldPick.classList.add('vt-pick');
+    }
+    let vt;
+    root.classList.add('is-vt');
     try {
-      await vt.updateCallbackDone;
+      vt = document.startViewTransition(swap);
     } catch (e) {
       console.warn(e);
+      swap();
+    }
+    if (!vt) root.classList.remove('is-vt');
+    if (vt) {
+      vt.ready.then(() => playSweep(line, true), () => line?.remove());
+      vt.finished.finally(() => {
+        root.classList.remove('is-vt');
+        line?.remove();
+        if (newPick?.isConnected) newPick.style.viewTransitionName = '';
+      });
+      try {
+        await vt.updateCallbackDone;
+      } catch (e) {
+        console.warn(e);
+      }
     }
   } else {
     swap();
+    if (moving) playSweep(line, false);
+    else line?.remove();
   }
   app.started = true;
   if (seq === navSeq) delete root.dataset.busy;
@@ -323,10 +430,78 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
     focusEl(target?.querySelector('h2, h3') ?? target ?? qs('h1', view) ?? view);
     announce(t('announce.page', { title: result.title ?? 'Quorum' }));
   }
+  if (moving || first) arrive(first ? boot.headlineDelay() : 120);
   requestAnimationFrame(() => result.afterMount?.());
 }
 
-window.addEventListener('hashchange', () => renderRoute());
+const reduced = () => prefersReducedMotion();
+
+// ---- the lintel sweep (DESIGN-V2 §4.4) ------------------------------------------------------------------
+// A route change shows its first change at once: a 1 px line draws itself along the header's bottom edge
+// (r1→r4) while the page loads. When the new page is in, the line travels to the bottom of the viewport on
+// --e-io and the new main is wiped in behind it on the same curve; the old main has already lifted 16 px
+// and faded (180 ms, CSS). The rules, the header and the stage never move.
+const pending = { line: null };
+function headerEdge() {
+  const hb = qs('#site-header').getBoundingClientRect();
+  return Math.max(0, hb.bottom);
+}
+function startLine() {
+  if (reduced() || !app.started) return;
+  pending.line?.remove();
+  const line = sweepLine(headerEdge());
+  line.style.viewTransitionName = 'sweep';
+  document.body.append(line);
+  pending.line = line;
+}
+function playSweep(line, vt) {
+  if (!line) return;
+  if (reduced()) return line.remove();
+  const from = headerEdge();
+  const to = window.innerHeight;
+  if (vt) {
+    // the new main is revealed from the header edge down to the line, in px, so the two stay together
+    const r = view.getBoundingClientRect();
+    const hgt = Math.max(1, r.height);
+    const cut = (yy) => `inset(0 0 ${Math.max(0, Math.round(hgt - (yy - r.top)))}px 0)`;
+    try {
+      document.documentElement.animate({ clipPath: [cut(from), cut(to)] }, { duration: 420, easing: 'cubic-bezier(.7,0,.2,1)', fill: 'both', pseudoElement: '::view-transition-new(main)' });
+    } catch {
+      /* the CSS wipe stays */
+    }
+    sweep(line, from, to, { pseudo: '::view-transition-group(sweep)' }).then(() => line.remove());
+  } else {
+    sweep(line, from, to).then(() => line.remove());
+  }
+}
+
+// Arrival: display lines mask in (the page headline at once, 120 ms into the sweep), body text marked
+// .reveal-in fades up after 200 ms, and the figures in the first screen drop their digits.
+function arrive(delay) {
+  if (reduced()) return;
+  view.classList.remove('vt-in');
+  void view.offsetWidth;
+  view.classList.add('vt-in');
+  const go = () => {
+    const h1 = qs('h1.display', view);
+    if (h1 && !h1.closest('.asm, .lv')) reveal(h1, { delay: Math.max(0, delay) });
+    // the home hero's headline lines (their own masks, .asm__ln) rise the same way, once, on arrival
+    qsa('.asm__beat.is-on h1 .asm__li', view).forEach((li, i) =>
+      li.animate?.([{ transform: 'translate3d(0, 140%, 0)' }, { transform: 'none' }], { duration: 700, delay: Math.max(0, delay) + i * 60, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }),
+    );
+    for (const d of qsa('.dg', view)) if (d.getBoundingClientRect().top < window.innerHeight) playDigits(d);
+    // body text in the first screen fades up 12 px after the headline has started (CSS: .vt-in .reveal-in)
+    for (const el of qsa('.lede, .stage-screen__strip, .wall__figs, .masthead__meta', view)) if (!el.closest('.asm') && el.getBoundingClientRect().top < window.innerHeight) el.classList.add('reveal-in');
+  };
+  if (document.fonts?.status === 'loaded') go();
+  else fontWait.then(go);
+}
+
+window.addEventListener('hashchange', () => {
+  startLine();
+  renderRoute();
+});
+
 
 // Copy buttons rendered from copy strings (contact addresses: ui.js contactHtml): one delegated handler.
 document.addEventListener('click', async (e) => {
@@ -367,13 +542,15 @@ function warm(e) {
 document.addEventListener('pointerover', warm, { passive: true });
 document.addEventListener('focusin', warm);
 
-// First render waits briefly for the display face so headlines do not reflow (no layout shift).
-const fontsReady = document.fonts?.load
+// The first render waits briefly for the display face so headlines do not reflow (no layout shift); the
+// boot (below) hides that wait on a first visit.
+const fontWait = document.fonts?.load
   ? Promise.race([
-      Promise.all([document.fonts.load('600 16px Archivo'), document.fonts.load('400 12px "Martian Mono"')]).catch(() => null),
-      new Promise((r) => setTimeout(r, 700)),
+      Promise.all([document.fonts.load('460 1em "Mona Sans"'), document.fonts.load('420 12px "Martian Mono"')]).catch(() => null),
+      new Promise((r) => setTimeout(r, 1200)),
     ])
   : Promise.resolve();
+const fontsReady = boot.active ? fontWait : Promise.race([fontWait, new Promise((r) => setTimeout(r, 700))]);
 
 // Live mode renders the first page only once the server has said who is viewing.
 const viewerReady = app.mode === 'live' ? app.refreshViewer().catch(() => false) : Promise.resolve();

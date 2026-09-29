@@ -14,6 +14,7 @@ import { masthead } from './_content.js';
 import { signed, familyName } from '../ui.js';
 import { ruleLabels } from '../rule.js';
 import { staircase, icSparklines } from '../charts/deciles.js';
+import { strips } from '../charts/strips.js';
 import { loadMe, tierOf, modeNote, copyPanel } from './_member.js';
 import { price } from './_join.js';
 import {
@@ -79,10 +80,35 @@ export async function render(ctx) {
   });
 
   head.classList.add('ruled');
+  // The first screen after the head: the universe as four strips on the rules (DESIGN-V2 §5). Research
+  // viewers see the latest issue's universe; everyone else sees the public issue the home page's
+  // Assembly shows (hero.json, dated as such): dots only, no tickers, no rows.
+  const hero = gated ? await ctx.data('hero').catch(() => null) : null;
+  const stripRows = gated
+    ? hero?.p
+      ? Array.from({ length: Math.floor(hero.p.length / 4) }, (_, i) => [0, 1, 2, 3].map((f) => hero.p[i * 4 + f] / 1000))
+      : []
+    : rows.map((r) => FAMILIES.map((f) => r[f]));
+  const stripDate = gated ? hero?.issueDate : date;
+  const strip = stripRows.length
+    ? strips(stripRows, {
+        topPct,
+        decile: L('Top decile', 'Zgornji decil'),
+        threshold: R.pctileNum ? L(`The rule · ${R.pctile}`, `Pravilo · ${R.pctile}`) : '',
+        label: L(
+          `${fmt.int(stripRows.length)} stocks on four family columns (A to D, left to right), each at its percentile. At or above the ${R.pctile}: ${['A', 'B', 'C', 'D'].map((f, k) => `${f} ${fmt.int(stripRows.filter((r) => r[k] >= topPct).length)}`).join(', ')}.`,
+          `${fmt.int(stripRows.length)} delnic na štirih stebrih družin (A do D, od leve proti desni), vsaka na svojem percentilu. Na ${R.pctile} ali višje: ${['A', 'B', 'C', 'D'].map((f, k) => `${f} ${fmt.int(stripRows.filter((r) => r[k] >= topPct).length)}`).join(', ')}.`,
+        ),
+        caption: gated
+          ? L(`The issue of ${fmt.date(stripDate)} (the one the home page shows), ${fmt.int(stripRows.length)} stocks, dots only. Each dot is one stock on one family’s column, at its percentile; the band is the top decile, the dashed line the rule.`, `Izdaja ${fmt.date(stripDate)} (ta, ki jo kaže naslovnica), ${fmt.int(stripRows.length)} delnic, samo pike. Vsaka pika je ena delnica na stebru ene družine, na svojem percentilu; pas je zgornji decil, črtkana črta pravilo.`)
+          : L(`The ${fmt.date(stripDate)} universe, ${fmt.int(stripRows.length)} stocks. Each dot is one stock on one family’s column, at its percentile; the band is the top decile, the dashed line the rule. The table below holds every row.`, `Univerzum ${fmt.date(stripDate)}, ${fmt.int(stripRows.length)} delnic. Vsaka pika je ena delnica na stebru ene družine, na svojem percentilu; pas je zgornji decil, črtkana črta pravilo. Tabela spodaj ima vse vrstice.`),
+      })
+    : null;
+  const stripSec = strip ? h('section', { class: 'grid night ruled rx-strips', 'aria-label': L('The universe, four columns', 'Univerzum, štirje stebri') }, strip.el) : null;
   const widgets = decileSection(ctx, deciles, scoreboard, meta, gated ? '02' : '03', name);
   if (gated) {
-    const node = h('div', { class: 'page rx chamber' }, head, gateSection(ctx, { tier, R, name, nScored, issue: issues?.at(-1) }), widgets);
-    return { title: L('Research', 'Research'), node, top: 'chamber' };
+    const node = h('div', { class: 'page rx chamber' }, head, stripSec, gateSection(ctx, { tier, R, name, nScored, issue: issues?.at(-1) }), widgets);
+    return { title: L('Research', 'Research'), node, top: 'chamber', afterMount: () => strip?.mount(), cleanup: () => strip?.destroy() };
   }
 
   // ---- the explorer -----------------------------------------------------------------------------------------
@@ -541,19 +567,21 @@ export async function render(ctx) {
     if (raf) cancelAnimationFrame(raf);
   });
 
-  const node = h('div', { class: 'page rx chamber' }, head, explorer, copySec, widgets);
+  const node = h('div', { class: 'page rx chamber' }, head, stripSec, explorer, copySec, widgets);
   view = sortUniverse(filterUniverse(rows, state.filters), state.sort, state.dir);
   return {
     title: L('Research', 'Research'),
     node,
     top: 'chamber',
     afterMount() {
+      strip?.mount();
       placeRanges();
       const sbw = scroller.offsetWidth - scroller.clientWidth;
       gridwrap.style.setProperty('--sbw', `${Math.max(0, sbw)}px`);
       apply();
     },
     cleanup() {
+      strip?.destroy();
       for (const f of cleanups) f();
     },
   };

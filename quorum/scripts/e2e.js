@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Playwright end-to-end check of web/ (ARCHITECTURE.md §6): every route at the five design sizes (DESIGN.md
 // §14); fails on console errors, horizontal overflow, axe-like basics, text contrast, a rule through a
-// number or through running text, a text ground that does not match its surface, and copy contracts.
+// number, a rule that is not faint where it passes behind running text (ruleContrast), a text ground that does not match its surface, and copy contracts.
 // The launch states: key pages again with backtest.json patched to "ready" and to back-in-research, and
 // meta.notes.simulation present (web/js/launch.js; nothing may say a text was sent). Also checks
 // the keyboard path, the hero's engines (?gl=webgl|canvas|0) and the reduced-motion path, the flat-token
@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { startServer } from '../tests/e2e/server.js';
 import { sampleRoutes, sampleData } from '../tests/e2e/routes.js';
-import { overflow, basics, contrast, ruleStrike, proseStrike, groundMismatch, copyChecks } from '../tests/e2e/checks.js';
+import { overflow, basics, contrast, ruleStrike, ruleContrast, groundMismatch, copyChecks } from '../tests/e2e/checks.js';
 import { liveChecks } from '../tests/e2e/live.js';
 
 const require = createRequire(import.meta.url);
@@ -75,7 +75,7 @@ for (const [w, h] of SIZES) {
     fail(where, await page.evaluate(basics));
     fail(where, await page.evaluate(contrast));
     fail(where, await page.evaluate(ruleStrike));
-    fail(where, await page.evaluate(proseStrike));
+    fail(where, await page.evaluate(ruleContrast));
     fail(where, await page.evaluate(groundMismatch));
     fail(where, await page.evaluate(copyChecks));
   }
@@ -125,7 +125,7 @@ for (const [w, h] of SIZES) {
         const where = `launch ${state} ${r} @${w}`;
         fail(where, await page.evaluate(copyChecks));
         fail(where, await page.evaluate(overflow));
-        fail(where, await page.evaluate(proseStrike));
+        fail(where, await page.evaluate(ruleContrast));
         const text = await page.evaluate(() => document.querySelector('#view').innerText);
         if (want[state][r] && !want[state][r].test(text)) failures.push(`${where}: the ${state} copy is missing (${want[state][r]})`);
         if (/Paid SMS is open|Launched\b|Zagnano\b/.test(text)) failures.push(`${where}: says SMS has launched`);
@@ -184,15 +184,39 @@ for (const [w, h] of SIZES) {
   await page.close();
 }
 
-// The hero's engines and the reduced-motion path.
-for (const [flag, want] of [['?gl=webgl', 'webgl'], ['?gl=canvas', 'canvas'], ['?gl=0', 'svg']]) {
+// The hero's engines (the Assembly, DESIGN-V2 §4.1) and the reduced-motion path. Every engine walks the
+// six states; none may render a frame while the hero is off-screen (section.asmStats counts them).
+for (const [flag, want, api] of [['?gl=webgl', 'webgl', 'webgl2'], ['?gl=webgl1', 'webgl', 'webgl1'], ['?gl=canvas', 'canvas', '2d'], ['?gl=0', 'svg', 'svg']]) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
+  page.on('console', (m) => m.type() === 'error' && !ignorable(m.text()) && errs.push(m.text()));
   await page.goto(`${BASE}${flag}#`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1200);
-  const engine = await page.evaluate(() => document.querySelector('.lv')?.dataset.engine);
-  if (engine !== want) failures.push(`hero ${flag}: engine ${engine}, expected ${want}`);
+  const r = await page.evaluate(() => ({ engine: document.querySelector('.lv')?.dataset.engine, api: document.querySelector('.asm')?.asmStats?.api }));
+  if (r.engine !== want || r.api !== api) failures.push(`hero ${flag}: engine ${r.engine}/${r.api}, expected ${want}/${api}`);
+  const steps = [];
+  for (const [i, p] of [0.03, 0.27, 0.48, 0.62, 0.8, 0.99].entries()) {
+    await page.evaluate((p) => {
+      const s = document.querySelector('.asm');
+      scrollTo(0, s.offsetTop + (s.offsetHeight - innerHeight) * p);
+    }, p);
+    // a loaded software renderer may take a few frames to catch up: wait for the state, then read it
+    await page.waitForFunction((i) => document.querySelector('.asm')?.dataset.step === String(i), i, { timeout: 4000 }).catch(() => {});
+    steps.push(await page.evaluate(() => document.querySelector('.asm')?.dataset.step));
+  }
+  if (steps.join('') !== '012345') failures.push(`hero ${flag}: states ${steps.join('')}, expected 012345`);
+  // off-screen: scroll past the hero, idle, and count frames
+  await page.evaluate(() => scrollTo(0, document.querySelector('.asm').offsetHeight + innerHeight * 2));
+  await page.waitForFunction(() => document.querySelector('.asm').asmStats.visible === false, null, { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const f0 = await page.evaluate(() => document.querySelector('.asm').asmStats.frames);
+  await page.mouse.move(200, 200);
+  await page.mouse.move(900, 500);
+  await page.evaluate(() => scrollBy(0, 40));
+  await page.waitForTimeout(800);
+  const st = await page.evaluate(() => document.querySelector('.asm').asmStats);
+  if (st.frames !== f0 || st.offscreen !== 0) failures.push(`hero ${flag}: ${st.frames - f0} frames rendered off-screen (counter ${st.offscreen})`);
   fail(`hero ${flag}`, errs);
   await page.close();
 }

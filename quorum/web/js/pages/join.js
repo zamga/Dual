@@ -135,9 +135,55 @@ export async function render(ctx) {
     meta: h('div', { class: 'jn-meta' }, launchBox(ctx, backtest), modeNote(ctx, live ? null : L('Demo: nothing is sent, nothing is stored, no number is collected.', 'Demo: nič se ne pošlje, nič se ne shrani, nobena številka se ne zbira.'))),
   });
 
-  const stepsWrap = h('div', { class: 'jn-steps', role: 'list', 'aria-label': L('Steps', 'Koraki') });
+  // The join colonnade (DESIGN-V2 §5): the seven steps stand on rule 1, a finished step draws a short
+  // lintel (Graphite: not a quorum); the live SMS preview stays in view beside them (a bottom sheet on
+  // phones and tablets, opened by its 48 px handle).
+  const stepsWrap = h('ol', { class: 'jc__steps jn-steps', 'aria-label': L('Steps', 'Koraki') });
   const finalWrap = h('div', { class: 'jn-final-wrap' });
-  const node = h('div', { class: 'page jn' }, head, stepsWrap, finalWrap);
+
+  const meter = h('p', { class: 'jn-meter jc__count mono' });
+  const bar = h('span', { class: 'jn-meter__bar', 'aria-hidden': 'true' }, h('i'));
+  const phoneWrap = h('div', { class: 'jn-preview__phone' });
+  const cap = h('p', { class: 'figcaption' });
+  const handleCount = h('span', { class: 'jc__handle-n' });
+  const handle = h(
+    'button',
+    { type: 'button', class: 'jc__handle', 'aria-expanded': 'false', 'aria-controls': 'jn-preview' },
+    h('span', {}, L('The text you would get', 'SMS, ki bi ga prejeli')),
+    handleCount,
+  );
+  const preview = h(
+    'aside',
+    { class: 'jc__preview jn-preview figure', id: 'jn-preview', 'aria-label': L('Preview of a pick text', 'Predogled SMS z izbiro') },
+    handle,
+    h('p', { class: 'label jc__plabel' }, L('What arrives on a pick day', 'Kaj prispe na dan izbire')),
+    phoneWrap,
+    h('div', { class: 'jn-meter-wrap' }, bar, meter),
+    cap,
+  );
+  handle.addEventListener('click', () => {
+    const open = !preview.classList.contains('is-open');
+    preview.classList.toggle('is-open', open);
+    handle.setAttribute('aria-expanded', String(open));
+  });
+  // the preview: the exact BUY text in the chosen language, its septet count, one segment
+  const drawPreview = () => {
+    const m = pick ? buySms(pick, flow.smsLocale, flow.token) : smsModel('OPT_IN', flow.smsLocale, { token: flow.token });
+    const t = phoneThread({ messages: [{ text: m.text, at: pick ? pick.disseminatedAt : null }], locale: flow.smsLocale, label: L('Preview of a pick text', 'Predogled SMS z izbiro') });
+    phoneWrap.replaceChildren(t.node);
+    meter.replaceChildren(h('b', {}, m.label), h('span', { class: 'muted' }, ` · ${m.segments} ${m.segments === 1 ? L('text', 'SMS') : L('texts', 'SMS')} · ${L('no č, š, ž, no emoji, no prices', 'brez č, š, ž, emojijev in cen')}`));
+    handleCount.textContent = m.label;
+    bar.style.setProperty('--fill', `${Math.min(100, (m.used / m.max) * 100)}%`);
+    bar.setAttribute('title', m.label);
+    cap.replaceChildren(
+      pick
+        ? L(`The exact text of pick #${pick.no} as written for ${fmt.date(pick.issueDate)} (before launch nothing is sent), rendered here with your own stop link (qrm.si/u/${flow.token}). Every pick text has this shape.`, `Natančno besedilo izbire #${pick.no}, kot je pripravljeno za ${fmt.date(pick.issueDate)} (pred zagonom se nič ne pošlje), tu z vašo povezavo za odjavo (qrm.si/u/${flow.token}). Vsak SMS z izbiro ima to obliko.`)
+        : L('The confirmation text, rendered with your own stop link.', 'Potrditveni SMS z vašo povezavo za odjavo.'),
+    );
+  };
+  drawPreview();
+  const colonnade = h('section', { class: 'jc grid', 'aria-label': L('Join, step by step', 'Pridružitev, korak za korakom') }, stepsWrap, preview);
+  const node = h('div', { class: 'page jn' }, head, colonnade, finalWrap);
 
   const TITLES = {
     tier: L('Tier', 'Paket'),
@@ -207,18 +253,18 @@ export async function render(ctx) {
       'h2',
       { class: ['jn-step__title', state === 'current' ? 'display d3' : 'd4'], id: hid, tabindex: '-1' },
       h('span', { class: 'visually-hidden' }, L(`Step ${i + 1} of ${STEPS.length}: `, `Korak ${i + 1} od ${STEPS.length}: `)),
-      h('span', { class: 'jn-idx-inline', 'aria-hidden': 'true' }, n),
       TITLES[id],
       state === 'done' ? h('span', { class: 'visually-hidden' }, L(', done', ', opravljeno')) : null,
       state === 'skipped' ? h('span', { class: 'visually-hidden' }, L(', not needed', ', ni potrebno')) : null,
     );
-    const sec = h('section', { class: ['grid', 'jn-step', `is-${state}`, `jn-step--${id}`], 'aria-labelledby': hid, role: 'listitem', dataset: { step: id } });
-    sec.append(h('p', { class: 'jn-idx c-margin', 'aria-hidden': 'true' }, n, h('span', { class: 'jn-idx__state' }, state === 'done' ? '✓' : state === 'current' ? '' : '')));
+    const sec = h('li', { class: ['jc__step', 'jn-step', `is-${state}`, `jn-step--${id}`], 'aria-labelledby': hid, dataset: { step: id } });
+    title.classList.add('jc__t');
+    sec.append(h('span', { class: 'jc__n', 'aria-hidden': 'true' }, n, state === 'done' ? ' ✓' : ''));
+    sec.append(title);
+    const body = h('div', { class: 'jc__b' });
     if (state === 'current') {
-      sec.append(h('div', { class: 'jn-step__head c-body' }, title));
-      sec.append(...bodyOf(id));
+      body.append(...bodyOf(id));
     } else if (state === 'done') {
-      sec.append(h('div', { class: 'jn-step__head c-body' }, title));
       const change = canChange(id)
         ? h(
             'button',
@@ -226,19 +272,19 @@ export async function render(ctx) {
             L('Change', 'Spremeni'),
           )
         : null;
-      sec.append(h('div', { class: 'jn-step__sum c-meta' }, h('span', { class: 'mono jn-sum' }, summaryOf(id)), change));
+      body.append(h('div', { class: 'jn-step__sum' }, h('span', { class: 'mono jn-sum' }, summaryOf(id)), change));
     } else if (state === 'skipped') {
-      sec.append(h('div', { class: 'jn-step__head c-body' }, title));
-      sec.append(h('p', { class: 'jn-step__sum c-meta small muted' }, L(`Not needed: no texts in ${countryName(flow.country, locale)}.`, `Ni potrebno: v državi ${countryName(flow.country, 'sl')} ni SMS.`)));
+      body.append(h('p', { class: 'jn-step__sum small muted' }, L(`Not needed: no texts in ${countryName(flow.country, locale)}.`, `Ni potrebno: v državi ${countryName(flow.country, 'sl')} ni SMS.`)));
     } else {
-      sec.append(h('div', { class: 'jn-step__head c-body' }, title));
-      sec.append(h('p', { class: 'jn-step__sum c-meta small muted' }, TODO[id]));
+      body.append(h('p', { class: 'jn-step__sum small muted' }, TODO[id]));
     }
+    sec.append(body);
     return sec;
   }
 
   function draw({ focus = true } = {}) {
     stepsWrap.replaceChildren(...STEPS.map(stepSection));
+    drawPreview();
     finalWrap.replaceChildren(...(flow.step === 'final' || flow.step === 'activating' ? [finalSection()] : []));
     if (!focus) return;
     const target = flow.step === 'final' || flow.step === 'activating' ? finalWrap.querySelector('h2') : stepsWrap.querySelector(`#jn-h-${flow.step}`);
@@ -553,24 +599,6 @@ export async function render(ctx) {
     input.addEventListener('input', showRead);
     showRead();
 
-    // the preview: the exact BUY text in the chosen language, its septet count, one segment
-    const meter = h('p', { class: 'jn-meter mono' });
-    const bar = h('span', { class: 'jn-meter__bar', 'aria-hidden': 'true' }, h('i'));
-    const phoneWrap = h('div', { class: 'jn-preview__phone' });
-    const cap = h('p', { class: 'figcaption' });
-    const drawPreview = () => {
-      const m = pick ? buySms(pick, flow.smsLocale, flow.token) : smsModel('OPT_IN', flow.smsLocale, { token: flow.token });
-      const t = phoneThread({ messages: [{ text: m.text, at: pick ? pick.disseminatedAt : null }], locale: flow.smsLocale, label: L('Preview of a pick text', 'Predogled SMS z izbiro') });
-      phoneWrap.replaceChildren(t.node);
-      meter.replaceChildren(h('b', {}, m.label), h('span', { class: 'muted' }, ` · ${m.segments} ${m.segments === 1 ? L('text', 'SMS') : L('texts', 'SMS')} · ${L('no č, š, ž, no emoji, no prices', 'brez č, š, ž, emojijev in cen')}`));
-      bar.style.setProperty('--fill', `${Math.min(100, (m.used / m.max) * 100)}%`);
-      bar.setAttribute('title', m.label);
-      cap.replaceChildren(
-        pick
-          ? L(`The exact text of pick #${pick.no} as written for ${fmt.date(pick.issueDate)} (before launch nothing is sent), rendered here with your own stop link (qrm.si/u/${flow.token}). Every pick text has this shape.`, `Natančno besedilo izbire #${pick.no}, kot je pripravljeno za ${fmt.date(pick.issueDate)} (pred zagonom se nič ne pošlje), tu z vašo povezavo za odjavo (qrm.si/u/${flow.token}). Vsak SMS z izbiro ima to obliko.`)
-          : L('The confirmation text, rendered with your own stop link.', 'Potrditveni SMS z vašo povezavo za odjavo.'),
-      );
-    };
     const langBtns = ['en', 'sl'].map((lc) =>
       h(
         'button',
@@ -587,8 +615,6 @@ export async function render(ctx) {
         lc === 'en' ? 'English' : 'Slovenščina',
       ),
     );
-    drawPreview();
-
     const btn = h('button', { type: 'submit', class: 'btn' }, live ? L('Text me a code', 'Pošlji mi kodo') : L('Continue to the code', 'Nadaljuj do kode'), h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'));
     const form = h(
       'form',
@@ -661,17 +687,7 @@ export async function render(ctx) {
       complete('phone');
     });
 
-    return [
-      h('div', { class: 'c-body jn-phone-main' }, form, carries),
-      h(
-        'figure',
-        { class: 'c-meta jn-preview figure' },
-        h('p', { class: 'label' }, L('What arrives on a pick day', 'Kaj prispe na dan izbire')),
-        phoneWrap,
-        h('div', { class: 'jn-meter-wrap' }, bar, meter),
-        h('figcaption', {}, cap),
-      ),
-    ];
+    return [h('div', { class: 'c-body jn-phone-main' }, form, carries)];
   }
 
   // ---- 05 code -------------------------------------------------------------------------------------------------

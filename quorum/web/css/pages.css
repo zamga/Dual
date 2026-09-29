@@ -1,775 +1,842 @@
-/* Per-page layout. Home first (The Level and its sections), then content pages. */
+/* Per-page layout. Home first (the Assembly and its sections), then content pages. */
 
 /* ============================================================================================
-   THE LEVEL (home hero)
+   THE ASSEMBLY (home hero) · WP-B · docs/DESIGN-V2.md §4.1, §4.3, §4.6
+   Markup and behaviour: web/js/hero/assembly.js. The scene is drawn by web/js/hero/gl.js (WebGL),
+   flat.js (2D canvas, and the SVG first paint). `.lv` stays on the section as the shared hero hook
+   (shell.js header surface, base.css grounds, e2e). Only this block styles .asm.
    ============================================================================================ */
-.lv {
+.asm {
   position: relative;
-  height: 400vh;
-  height: 400svh;
-  margin-top: calc(-1 * var(--chrome-h, 112px));
-  background: var(--chamber);
+  height: 520vh;
+  height: 520svh;
+  margin-top: calc(-1 * var(--chrome-h, 92px));
+  background: var(--night);
   color: var(--mist);
   z-index: 1;
 }
 
-.lv__stage {
+.asm.is-frozen {
+  height: 100vh;
+  height: 100svh;
+}
+
+.asm__view {
   position: sticky;
   top: 0;
   height: 100vh;
   height: 100svh;
-  overflow: hidden;
-  background: var(--chamber);
-  grid-template-rows:
-    [top] calc(var(--chrome-h, 112px) + clamp(10px, 3.2vh, 40px))
-    [kicker] auto
-    [head] auto
-    [cap] auto
-    [plot] minmax(0, 1fr)
-    [axes] auto
-    [steps] auto
-    [bottom] clamp(14px, 3vh, 34px);
+  overflow: clip;
+  grid-template-rows: [top] var(--chrome-h, 92px) [a] minmax(0, 1fr) [steps] auto [bottom] clamp(8px, 1.6vh, 18px);
 }
 
-.lv__canvas {
+.asm__stage {
   position: absolute;
   inset: 0;
   padding: 0 !important;
+  pointer-events: none;
   z-index: 0;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 450ms var(--ease);
 }
 
-.lv.has-engine .lv__canvas {
-  opacity: 1;
-}
-
-.lv__kicker {
-  grid-row: kicker;
-  color: var(--mist-2);
-  margin-bottom: clamp(6px, 1.2vh, 14px);
-}
-
-.lv__h {
-  grid-row: head;
-  grid-column: r1 / full-end;
-  color: var(--mist);
-  font-size: min(11rem, 10.2vw);
-  white-space: nowrap;
-  position: relative;
-  z-index: 2;
-}
-
-.lv__h > span {
-  display: inline;
-}
-
-.lv__meta {
-  grid-row: kicker;
-  grid-column: r3 / full-end;
-  justify-self: end;
-  text-align: right;
-  color: var(--mist-2);
-  padding-right: max(var(--inset), 16px);
-}
-
-.lv__caps {
-  grid-row: cap;
-  display: grid;
-  margin-top: clamp(10px, 2vh, 22px);
-  position: relative;
-  z-index: 2;
-}
-
-.lv__cap {
-  grid-area: 1 / 1;
-  max-width: 50ch;
-  font-size: clamp(1rem, 0.9rem + 0.45vw, 1.3125rem);
-  line-height: 1.4;
-  color: var(--mist);
-  opacity: 0;
-  transform: translate3d(0, 8px, 0);
-  transition: opacity var(--t-mid) var(--ease), transform var(--t-slow) var(--ease);
-}
-
-.lv__cap:first-child {
-  color: var(--mist-2);
-}
-
-.lv__cap.is-on {
-  opacity: 1;
-  transform: none;
-}
-
-.lv__cap[data-s='3'] {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: clamp(1.25rem, 1rem + 1vw, 1.875rem);
-  line-height: 1.2;
-  color: var(--mist);
-}
-
-.lv__plot {
-  grid-row: plot;
-  grid-column: r1 / r4;
-  align-self: stretch;
-  position: relative;
-  z-index: 1;
-  margin-top: clamp(34px, 6vh, 64px);
-  margin-bottom: 10px;
-}
-
-.lv__svgfield,
-.lv__over {
+.asm__svg,
+.asm__canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  display: block;
 }
 
-.lv__svgfield {
-  transition: opacity 500ms var(--ease);
+.asm__svg {
+  opacity: var(--dim, 1);
+  transition: opacity var(--d-3) var(--e-ui);
 }
 
-.lv.has-engine .lv__svgfield {
+.asm__canvas {
   opacity: 0;
+  transition: opacity var(--d-4) var(--e-out);
 }
 
-.lv__ln {
-  fill: none;
-  stroke: var(--mist);
-  stroke-opacity: 0.17;
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
+.asm.has-engine .asm__svg {
+  animation: asm-hand-over 0s linear var(--d-4) forwards;
 }
 
-.lv__ln--near {
-  stroke-opacity: 0.36;
-}
-
-.lv__band {
-  fill: var(--mist);
-  fill-opacity: 0.045;
-}
-
-.lv__thr {
-  stroke: var(--mist);
-  stroke-opacity: 0.4;
-  stroke-width: 1;
-  stroke-dasharray: 2 5;
-  vector-effect: non-scaling-stroke;
-}
-
-.lv__col {
-  stroke-width: 3;
-  vector-effect: non-scaling-stroke;
-  stroke-linecap: butt;
-}
-
-.lv__col.is-agree {
-  stroke: var(--lift);
-}
-
-.lv__col.is-miss {
-  stroke: var(--mist);
-  stroke-opacity: 0.6;
-}
-
-.lv__pick {
-  fill: none;
-  stroke: var(--lift);
-  stroke-width: 1.5px;
-  stroke-linejoin: round;
-  stroke-linecap: square;
-  vector-effect: non-scaling-stroke;
-}
-
-.lv__val {
-  position: absolute;
-  background: var(--chamber);
-  padding: 2px 4px;
-  transform: translate(6px, calc(-100% - 6px));
-  font-family: var(--font-mono);
-  font-stretch: var(--wdth-mono);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1;
-  opacity: 0;
-  white-space: nowrap;
-}
-
-.lv__val.is-agree {
-  color: var(--lift);
-}
-
-.lv__val.is-miss {
-  color: var(--mist-2);
-  transform: translate(8px, -50%);
-}
-
-.lv__val[data-k='3'] {
-  transform: translate(calc(-100% - 8px), calc(-100% - 8px));
-}
-
-.lv__val[data-k='3'].is-miss {
-  transform: translate(calc(-100% - 8px), -50%);
-}
-
-.lv__bandlabel {
-  position: absolute;
-  right: calc(100% + 18px);
-  top: 0;
-  height: 10%;
-  display: flex;
-  align-items: flex-end;
-  white-space: nowrap;
-  color: var(--mist-2);
-  opacity: 0;
-  line-height: 1;
-}
-
-.lv__picklabel {
-  position: absolute;
-  left: calc(100% + 16px);
-  top: 10%;
-  transform: translateY(-50%);
-  color: var(--lift);
-  font-family: var(--font-mono);
-  font-stretch: var(--wdth-mono);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-  opacity: 0;
-}
-
-.lv__picklabel b {
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.lv__bar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 1000px;
-  height: 4px;
-  background: var(--lift);
-  transform-origin: 0 50%;
-  z-index: 6;
-  visibility: hidden;
-  pointer-events: none;
-  transition: background-color var(--t-mid) var(--ease);
-}
-
-.lv__bar.is-in {
-  background: var(--ultramarine);
-}
-
-.lv__axes {
-  grid-row: axes;
-  grid-column: full-start / full-end;
-  display: grid;
-  grid-template-columns: subgrid;
-  position: relative;
-  z-index: 2;
-  padding-top: 4px;
-}
-
-.lv__axes li {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  padding-left: 10px;
-  min-width: 0;
-  color: var(--mist-2);
-  font-size: 0.75rem;
-  line-height: 1.2;
-}
-
-.lv__axes li b {
-  font-family: var(--font-mono);
-  font-stretch: var(--wdth-mono);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--mist);
-}
-
-.lv__axes li.is-agree b {
-  color: var(--lift);
-}
-
-.lv__axes li span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lv__axes li {
-  grid-row: 1;
-}
-
-.lv__axes li:nth-child(1) {
-  grid-column: r1 / r2;
-}
-.lv__axes li:nth-child(2) {
-  grid-column: r2 / r3;
-}
-.lv__axes li:nth-child(3) {
-  grid-column: r3 / r4;
-}
-.lv__axes li:nth-child(4) {
-  grid-column: r4 / full-end;
-}
-
-.lv__phonewrap {
-  grid-row: plot / steps;
-  grid-column: r1 / r4;
-  align-self: stretch;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 3;
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  padding-block: 8px;
-  min-height: 0;
-}
-
-.lv .phone {
-  height: 100%;
-  max-height: 600px;
-  width: auto;
-  aspect-ratio: 9 / 18.5;
-  --phone-w: auto;
-}
-
-.lv .phone__screen {
-  grid-template-rows: auto auto 1fr;
-}
-
-.sms.is-tapped u {
-  background: rgb(255 255 255 / 0.22);
-  text-decoration-thickness: 2px;
-}
-
-.lv__note {
-  grid-row: plot / steps;
-  grid-column: r1 / r4;
-  align-self: stretch;
-  transform-origin: 0 0;
-  z-index: 4;
-  visibility: hidden;
-  background: var(--paper);
-  color: var(--graphite);
-  border-radius: var(--radius);
-  display: grid;
-  grid-template-rows: auto auto minmax(80px, 1fr) auto auto;
-  row-gap: 10px;
-  padding: clamp(14px, 2.4vh, 28px) 0 clamp(12px, 2vh, 20px);
-  margin-top: clamp(20px, 4vh, 48px);
-  min-height: 0;
-  overflow: hidden;
-  --content: 0;
-}
-
-/* The note's content appears block by block (level.js sets visibility): never at a partial opacity (an
-   ultramarine badge at half opacity on Paper reads as lavender) and never cropped mid-line */
-.lv__note > :not(.lv__notechart) {
-  padding-inline: var(--inset);
-}
-
-.lv__notehead {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 8px 16px;
-  align-items: baseline;
-}
-
-.lv__noteid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  align-items: center;
-}
-
-.lv__noteticker {
-  font-size: clamp(1.25rem, 1rem + 1vw, 1.75rem);
-  line-height: 1;
-}
-
-.lv__notename {
-  font-size: var(--fs-small);
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.lv__notedates {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 28px;
-  font-family: var(--font-mono);
-  font-stretch: var(--wdth-mono);
-  font-size: 0.75rem;
-}
-
-.lv__notedates .label {
-  margin-right: 4px;
-}
-
-.lv__notechart {
-  position: relative;
-  min-height: 80px;
-  margin-block: 6px 30px;
-}
-
-.lv__notechart svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.lv__zero {
-  stroke: var(--ultramarine);
-  stroke-width: 3;
-  vector-effect: non-scaling-stroke;
-}
-
-.lv__vgrid {
-  stroke: var(--hairline);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.lv__path {
-  fill: none;
-  stroke-width: 2;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.lv__path.gain {
-  stroke: var(--gain);
-}
-.lv__path.loss {
-  stroke: var(--loss);
-}
-.lv__path.flat {
-  stroke: var(--graphite);
-}
-
-.lv__endlabel {
-  position: absolute;
-  z-index: 1;
-  right: 10px;
-  transform: translateY(calc(-100% - 10px));
-  font-family: var(--font-mono);
-  font-stretch: var(--wdth-mono);
-  font-size: 0.875rem;
-  font-weight: 600;
-  opacity: 0;
-  background: var(--paper);
-  padding: 0 4px;
-}
-
-/* below 1200 a loss ends under the lintel: its label goes under the end point, away from the zero line */
-@media (max-width: 1199.98px) {
-  .lv__endlabel.is-below {
-    transform: translateY(10px);
+@keyframes asm-hand-over {
+  to {
+    visibility: hidden;
   }
 }
 
-.lv__daylabel {
+/* the SVG frame: columns as stone slivers, grains as round-capped zero-length strokes */
+.asm__svcol {
+  fill: var(--mist);
+  opacity: 0.34;
+}
+.asm__svcol--1 {
+  opacity: 0.22;
+}
+.asm__svcol--2 {
+  opacity: 0.12;
+}
+
+.asm__svslab {
+  fill: var(--mist);
+  opacity: 0.06;
+}
+
+.asm__svdot {
+  fill: none;
+  stroke: var(--mist);
+  stroke-linecap: round;
+  stroke-width: 2.4px;
+}
+
+.asm__svdot--0 {
+  opacity: 0.2;
+}
+.asm__svdot--1 {
+  opacity: 0.36;
+}
+.asm__svdot--2 {
+  opacity: 0.6;
+}
+.asm__svdot--3 {
+  opacity: 0.95;
+  stroke-width: 2.8px;
+}
+
+.asm__svdot--pick {
+  fill: var(--mist);
+}
+
+.asm__svlintel {
+  stroke: var(--ultra);
+  stroke-width: 3px;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px var(--ultra));
+}
+
+/* ---- the issue line and the story beats ---------------------------------------------------- */
+/* the scene's columns pass behind the issue line: a night ground clipped to the line (the display mask) */
+.asm__issue {
+  width: fit-content;
+  background: var(--night);
+  padding: 0.45em 0.4em !important;
+  margin-left: calc(var(--inset) - 0.4em);
+  transition: opacity var(--d-2) var(--e-ui);
+  grid-row: a;
+  grid-column: r1 / r4;
+  align-self: start;
+  justify-self: start;
+  margin-top: calc(clamp(10px, 2.2vh, 24px) - 0.45em);
+  color: var(--mist-2);
+  z-index: 2;
+}
+
+.asm__beat {
+  grid-row: a;
+  grid-column: full-start / full-end;
+  align-self: end;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: end;
+  padding: 0 0 clamp(14px, 3vh, 36px) !important;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.asm__beat.is-on {
+  pointer-events: auto;
+}
+
+.asm__beat > * {
+  grid-column: r1 / r4;
+  grid-row: 1;
+}
+
+/* masked lines (§4.7): in 700 ms on --e-out, 60 ms apart; out 450 ms, 25 ms apart. The clip box is
+   padded so descenders and č š ž survive the tight leading. */
+.asm__ln {
+  display: block;
+  overflow: clip;
+  padding: 0.1em 0 0.14em;
+  margin: -0.1em 0 -0.14em;
+}
+
+.asm__li {
+  display: block;
+  /* each line keeps its own layer from the start, so a beat change starts transitions on layers that are
+     already rastered instead of promoting and rastering ~15 display lines in the same frame */
+  will-change: transform;
+  transform: translate3d(0, 140%, 0);
+  transition: transform 450ms var(--e-io) calc(var(--i, 0) * 25ms);
+}
+
+.asm__beat.is-past .asm__li {
+  transform: translate3d(0, -140%, 0);
+}
+
+.asm__beat.is-on .asm__li {
+  transform: none;
+  transition: transform var(--d-4) var(--e-out) calc(120ms + var(--i, 0) * 60ms);
+}
+
+.asm__beat > :not(.asm__h, .asm__d2, .asm__wide, .asm__voice) {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0);
+  transition:
+    opacity 200ms var(--e-ui),
+    transform 200ms var(--e-ui);
+}
+
+.asm__beat.is-on > :not(.asm__h, .asm__d2, .asm__wide, .asm__voice) {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--d-3) var(--e-out) 260ms,
+    transform var(--d-3) var(--e-out) 260ms;
+}
+
+/* stacked lines in a flex column: the clip boxes' negative margins must not collapse */
+.asm__h,
+.asm__d2,
+.asm__wide,
+.asm__voice,
+.asm__whatever {
+  display: flex;
+  flex-direction: column;
+}
+
+.asm__h,
+.asm__d2 {
+  font-family: var(--font-display);
+  font-stretch: 75%;
+  color: var(--mist);
+  text-wrap: balance;
+  word-spacing: 0.06em;
+  margin-left: -0.04em;
+}
+
+.asm__h {
+  grid-column: r1 / full-end;
+  font-size: var(--t-hero);
+  font-weight: 460;
+  line-height: var(--lh-hero, 0.84);
+  letter-spacing: var(--tr-hero, -0.035em);
+}
+
+.asm__d2 {
+  font-size: var(--t-d2);
+  font-weight: 480;
+  line-height: 0.9;
+  letter-spacing: -0.025em;
+}
+
+.asm__wide {
+  font-family: var(--font-sans);
+  font-stretch: 125%;
+  font-weight: 300;
+  font-size: var(--t-lintel);
+  line-height: 1;
+  letter-spacing: -0.015em;
+  color: var(--mist);
+}
+
+.asm__voice {
+  font-family: var(--font-voice);
+  font-style: italic;
+  font-size: var(--t-voice);
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  color: var(--mist);
+}
+
+.asm__lede,
+.asm__sub {
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--mist-2);
+  max-width: 44ch;
+}
+
+.asm__lede {
+  color: var(--mist);
+}
+
+.asm__beat--2 {
+  grid-template-rows: auto auto auto;
+  row-gap: clamp(10px, 1.6vh, 18px);
+}
+
+.asm__beat--2 > .asm__wide {
+  grid-row: 1;
+}
+.asm__beat--2 > .asm__voice {
+  grid-row: 2;
+}
+.asm__beat--2 > .asm__sub {
+  grid-row: 3;
+}
+
+.asm__beat--3 {
+  grid-template-rows: auto auto;
+  row-gap: clamp(10px, 1.6vh, 18px);
+}
+.asm__beat--3 > .asm__wide {
+  grid-row: 1;
+}
+.asm__beat--3 > .asm__sub {
+  grid-row: 2;
+}
+
+/* ---- labels that follow the scene (positioned from the projection by assembly.js) -------------- */
+.asm__fams,
+.asm__slablabel,
+.asm__quorum-label,
+.asm__novote,
+.asm__lintel-line {
   position: absolute;
-  bottom: -18px;
-  transform: translateX(-50%);
+  left: 0;
+  top: 0;
+  margin: 0;
+  padding: 0 !important;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.asm__fams {
+  width: 0;
+  height: 0;
+  opacity: 0;
+  transition: opacity var(--d-2) var(--e-ui);
+}
+
+.asm__fam {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 12px;
   white-space: nowrap;
 }
 
-.lv__d0 {
-  left: 0;
-  transform: none;
-  padding-left: 8px;
-}
-.lv__d7 {
-  left: 33.333%;
-}
-.lv__d14 {
-  left: 66.667%;
-}
-.lv__d21 {
-  left: auto;
-  right: 0;
-  transform: none;
-  padding-right: 8px;
+.asm__fam b {
+  font-family: var(--font-mono);
+  font-stretch: 75%;
+  font-weight: 520;
+  font-size: 0.8125rem;
+  color: var(--mist);
 }
 
-.lv__noteresult {
+.asm__fam span {
+  font-family: var(--font-mono);
+  font-stretch: 75%;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mist-2);
+}
+
+.asm__slablabel {
+  color: var(--mist-2);
+  white-space: nowrap;
+  translate: calc(-100% - 34px) -50%;
+  transition: opacity var(--d-2) var(--e-ui);
+}
+
+.asm__quorum-label {
+  font-family: var(--font-mono);
+  font-stretch: 75%;
+  font-size: 0.8125rem;
+  font-weight: 420;
+  letter-spacing: 0.02em;
+  color: var(--lift);
+  white-space: nowrap;
+  translate: calc(-100% - 22px) 14px;
+  opacity: 0;
+  transition: opacity var(--d-2) var(--e-ui);
+}
+
+.asm__quorum-label b {
+  font-weight: 520;
+  letter-spacing: 0.04em;
+}
+
+.asm__novote {
+  color: var(--mist-2);
+  white-space: nowrap;
+  translate: 12px -50%;
+  opacity: 0;
+  transition: opacity var(--d-2) var(--e-ui);
+}
+
+/* ---- the phone and the SMS baseline (§4.6) --------------------------------------------------- */
+.asm__phonewrap {
+  grid-row: a;
+  grid-column: r3 / r4;
+  justify-self: center;
+  align-self: center;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 0 !important;
+  z-index: 2;
+  visibility: hidden;
+}
+
+.asm .phone {
+  --phone-w: min(300px, 78vw, calc((100svh - var(--chrome-h, 92px) - 120px) * 300 / 620));
+}
+
+/* the bubble grows up from the baseline, as on #join: the thread stands at the bottom of the screen */
+.asm .phone__thread {
+  align-content: end;
+  min-height: 100%;
+}
+
+.asm__gsm {
+  color: var(--mist-2);
+}
+
+.asm__lintel-line {
+  height: 2px;
+  background: var(--ultra);
+  opacity: 0;
+  z-index: 3;
+}
+
+.asm__lintel-line.is-landed {
+  opacity: 0 !important;
+  transition: opacity var(--d-2) var(--e-ui) 700ms;
+}
+
+.asm .sms {
+  clip-path: inset(100% 0 0 0);
+}
+
+.asm .sms u {
+  text-decoration-color: transparent;
+  transition: text-decoration-color var(--d-1) var(--e-ui);
+}
+
+.asm .is-grown .sms u {
+  text-decoration-color: currentColor;
+  transition: text-decoration-color var(--d-2) var(--e-ui) 900ms;
+}
+
+/* ---- the note: the phone screen expands into it (FLIP, 700 ms) ------------------------------ */
+.asm__note {
+  grid-row: a;
+  grid-column: r1 / r4;
+  align-self: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 24px;
+  row-gap: clamp(10px, 1.8vh, 20px);
+  padding: clamp(18px, 3vh, 32px) clamp(16px, 2vw, 28px) !important;
+  border-radius: var(--radius-sheet, 24px);
+  background: var(--paper);
+  color: var(--graphite);
+  transform-origin: 0 0;
+  visibility: hidden;
+  z-index: 4;
+}
+
+.asm.is-note .asm__note,
+.asm__note.is-leaving {
+  visibility: visible;
+}
+
+.asm__note > * {
+  grid-column: 1 / -1;
+}
+
+.asm__nb,
+.asm__notechart {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0);
+  transition:
+    opacity 150ms var(--e-ui),
+    transform 150ms var(--e-ui);
+}
+
+.asm.is-note .asm__nb,
+.asm.is-note .asm__notechart {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--d-3) var(--e-out) 560ms,
+    transform var(--d-3) var(--e-out) 560ms;
+}
+
+.asm__notehead {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 18px;
   align-items: baseline;
-  border-top: 1px solid var(--hairline);
-  padding-top: 10px;
+  gap: 8px 14px;
 }
 
-.lv__notex {
-  font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
-  font-stretch: 80%;
-  font-weight: 560;
-  line-height: 1;
+.asm__noteticker {
+  font-size: 1.125rem;
+  font-weight: 520;
 }
 
-.lv__notesub {
-  font-size: var(--fs-xs);
+.asm__notename {
   color: var(--slate);
-  display: inline-flex;
-  gap: 6px;
+}
+
+.asm__noteno {
+  margin-left: auto;
+  color: var(--slate);
+}
+
+.asm__notedates {
+  display: flex;
   flex-wrap: wrap;
-}
-
-.lv__noteadvice {
-  font-size: 0.6875rem;
+  gap: 4px 24px;
   color: var(--slate);
 }
 
-.lv__cue {
-  grid-row: plot;
+.asm__notechart {
+  position: relative;
+  height: clamp(110px, 24vh, 240px);
+  margin-bottom: 22px;
+}
+
+.asm__pathsvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.asm__path {
+  fill: none;
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.asm__path {
+  stroke: var(--graphite);
+}
+
+/* the zero line's own label, at the right end under the line (the path ends above or below it) */
+.asm__zerolabel {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  translate: -6px 6px;
+  color: var(--slate);
+}
+
+.asm__zerolabel.is-above {
+  translate: -6px calc(-100% - 6px);
+}
+
+.asm__zero {
+  stroke: var(--graphite);
+  stroke-width: 1px;
+  opacity: 0.35;
+}
+
+.asm__daylabel {
+  position: absolute;
+  bottom: -18px;
+  color: var(--slate);
+  translate: 6px 0;
+}
+
+.asm__daylabel[data-d='0'] {
+  left: 0;
+}
+.asm__daylabel[data-d='7'] {
+  left: 33.333%;
+}
+.asm__daylabel[data-d='14'] {
+  left: 66.667%;
+}
+.asm__daylabel[data-d='21'] {
+  right: 0;
+  translate: -6px 0;
+}
+
+.asm__noteresult {
+  margin-top: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.asm__notex {
+  font-family: var(--font-mono);
+  font-stretch: 75%;
+  font-weight: 300;
+  font-size: var(--t-fig-xl);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.asm__notesub {
+  color: var(--slate);
+}
+
+/* the result as a digit reveal (§4.7): sign and arrow first, then each character drops from blank */
+.asm__digits {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+}
+
+.asm__dsign {
+  display: inline-flex;
+  gap: 0.1em;
+  margin-right: 0.02em;
+  opacity: 0;
+  transition: opacity var(--d-1) var(--e-ui);
+}
+
+.asm__dcell {
+  display: inline-block;
+  overflow: clip;
+  padding-bottom: 0.08em;
+}
+
+.asm__dcell.is-p {
+  margin-inline: -0.12em;
+}
+
+.asm__dcell > span {
+  display: inline-block;
+  transform: translate3d(0, -110%, 0);
+  transition: transform 200ms var(--e-ui);
+}
+
+.asm__note.is-result .asm__dsign {
+  opacity: 1;
+}
+
+.asm__note.is-result .asm__dcell > span {
+  transform: none;
+  transition: transform 520ms var(--e-out) calc(150ms + var(--d, 0) * 35ms);
+}
+
+.asm__whatever {
+  font-family: var(--font-voice);
+  font-size: clamp(1.4rem, 1rem + 1.4vw, 2.4rem);
+  line-height: 1.05;
+  color: var(--graphite);
+}
+
+.asm__whatever em {
+  font-style: italic;
+}
+
+.asm__note.is-result .asm__whatever .asm__li {
+  transform: none;
+  transition: transform var(--d-4) var(--e-out) 620ms;
+}
+
+.asm__noteadvice {
+  font-size: 0.75rem;
+  color: var(--slate);
+}
+
+/* ---- the step buttons and the cue ------------------------------------------------------------- */
+.asm__steps {
+  grid-row: steps;
+  grid-column: r1 / r4;
+  display: flex;
+  gap: 2px;
+  padding: 0 !important;
+  margin-left: calc(-1 * var(--inset));
+  z-index: 5;
+}
+
+.asm__stepbtn {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--mist-2);
+  font-family: var(--font-mono);
+  font-stretch: 75%;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--inset);
+  cursor: pointer;
+  position: relative;
+  transition: color var(--d-1) var(--e-ui);
+}
+
+.asm__stepbtn::after {
+  content: '';
+  position: absolute;
+  left: var(--inset);
+  right: var(--inset);
+  bottom: 8px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform var(--d-2) var(--e-ui);
+}
+
+.asm__stepbtn:hover,
+.asm__stepbtn.is-on {
+  color: var(--mist);
+}
+
+.asm__stepbtn.is-on::after {
+  transform: none;
+}
+
+.asm__stepn {
+  font-weight: 520;
+}
+
+.asm__cue {
+  grid-row: a;
   grid-column: r4 / full-end;
   align-self: end;
   justify-self: start;
-  z-index: 2;
   display: grid;
   gap: 10px;
-  opacity: var(--cue, 1);
+  padding-bottom: 20px !important;
   color: var(--mist-2);
-  max-width: 13ch;
-  padding-bottom: 12px;
+  opacity: var(--cue, 1);
+  z-index: 2;
 }
 
-.lv__cueline {
+.asm__cueline {
   display: block;
   width: 1px;
   height: 36px;
   background: var(--mist-2);
 }
 
-.lv__stepnav {
-  grid-row: plot;
-  grid-column: full-start / r1;
-  align-self: end;
-  justify-self: end;
-  display: grid;
-  gap: 2px;
-  z-index: 5;
-  padding: 0 var(--inset) 8px 0;
+.asm.is-frozen :is(.asm__beat, .asm__steps, .asm__cue, .asm__phonewrap, .asm__note) {
+  display: none;
 }
 
-.lv__stepbtn {
-  appearance: none;
-  background: none;
-  border: 0;
-  color: var(--mist-2);
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 10px;
-  justify-content: end;
-  align-items: baseline;
-  padding: 5px 0;
-  min-height: 30px;
-  font-family: var(--font-mono);
-  font-stretch: var(--wdth-mono);
-  font-size: 0.625rem;
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  text-align: right;
-  transition: color var(--t-fast) var(--ease);
-}
-
-.lv__stepbtn:hover {
-  color: var(--mist);
-}
-
-.lv__stepbtn.is-on {
-  color: var(--mist);
-}
-
-.lv__stepbtn.is-on .lv__stepn::after {
-  content: '';
-  display: inline-block;
-  width: 14px;
-  height: 2px;
-  margin-left: 8px;
-  vertical-align: middle;
-  background: var(--mist);
-}
-
-@media (min-width: 1200px) {
-  /* the result hangs in the right margin, where the lintel ends */
-  .lv__endlabel {
-    right: auto;
-    left: calc(100% + 16px);
-    transform: translateY(-50%);
-    background: transparent;
-    padding: 0;
-    font-size: 1rem;
-  }
-  .lv__endlabel .signed.gain {
-    color: var(--gain-dark);
-  }
-  .lv__endlabel .signed.loss {
-    color: var(--loss-dark);
-  }
-  .lv__note {
-    overflow: visible;
-  }
-}
-
-@media (max-width: 1199.98px) {
-  .lv__picklabel,
-  .lv__bandlabel {
-    display: none;
-  }
-}
-
-@media (max-width: 1023.98px) {
-  .lv__h {
-    white-space: normal;
-    font-size: min(9.6rem, 17.5vw);
-  }
-  .lv__h > span {
-    display: block;
-  }
-  .lv__meta {
-    display: none;
-  }
-  .lv__cue {
-    display: none;
-  }
-  .lv__stepnav {
-    grid-row: steps;
-    grid-column: r1 / r4;
-    justify-self: stretch;
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 0 0;
-    border-top: 1px solid var(--rule-dark);
-    margin-top: 8px;
-  }
-  .lv__stepbtn {
-    grid-template-columns: auto;
-    min-height: 44px;
-    padding: 0 6px;
-    text-align: left;
-    justify-content: start;
-    align-items: center;
-  }
-  .lv__stepbtn .lv__steps {
-    display: none;
-  }
-  .lv__stepbtn.is-on .lv__steps {
-    display: inline;
-  }
-  .lv__stepbtn.is-on {
-    grid-template-columns: auto auto;
-  }
-  .lv__stepbtn.is-on .lv__stepn::after {
-    display: none;
-  }
-  .lv__axes li span {
-    display: none;
-  }
-  .lv__axes li:nth-child(4) {
+/* ---- desktop: the lede stands in bay 3 beside the headline's short second line --------------- */
+@media (min-width: 1024px) {
+  .asm__beat--0 > .asm__lede {
     grid-column: r3 / r4;
-    justify-self: end;
-    padding: 0 10px 0 0;
+    align-self: end;
+    margin-bottom: 0.2em;
+  }
+  .asm__beat--0 > .asm__h {
+    grid-column: r1 / full-end;
+  }
+  .asm__beat--1 > .asm__sub,
+  .asm__beat--3 > .asm__sub,
+  .asm__beat--4 > .asm__sub {
+    grid-column: r3 / r4;
+  }
+  .asm__beat--1 > .asm__d2 {
+    grid-column: r1 / r3;
+  }
+  .asm__beat--2 > .asm__wide,
+  .asm__beat--3 > .asm__wide {
+    grid-column: r1 / r3;
+  }
+  .asm__beat--2 > .asm__sub,
+  .asm__beat--3 > .asm__sub {
+    grid-column: r3 / r4;
+    grid-row: 1 / 3;
+    align-self: end;
+  }
+  .asm__beat--3 > .asm__wide {
+    grid-row: 1 / 3;
+    align-self: end;
+  }
+  /* the text beat: the words stand under the floor in bays 1–2, the phone rises in bay 3 */
+  .asm__beat--4 > .asm__sub {
+    grid-column: r1 / r3;
+    font-size: var(--t-lede);
+    line-height: 1.3;
+    max-width: 30ch;
+    color: var(--mist);
+  }
+}
+
+/* ---- tablet and phone ---------------------------------------------------------------------- */
+@media (max-width: 1023.98px) {
+  .asm__beat {
+    row-gap: 14px;
+  }
+  .asm__beat--0,
+  .asm__beat--1 {
+    grid-template-rows: auto auto;
+  }
+  .asm__beat--0 > .asm__lede,
+  .asm__beat--1 > .asm__sub {
+    grid-row: 2;
+  }
+  .asm__phonewrap {
+    grid-column: r1 / r4;
+    align-self: end;
+    margin-bottom: 4px;
+  }
+  .asm .phone {
+    --phone-w: min(300px, 78vw, calc((100svh - var(--chrome-h, 92px) - 250px) * 300 / 620));
+  }
+  .asm__beat--4 {
+    align-self: start;
+    padding: 12px 0 0 !important;
+  }
+  .asm__cue {
+    display: none;
+  }
+  .asm__stepname {
+    display: none;
+  }
+  .asm__steps {
+    justify-content: space-between;
+    margin-right: calc(-1 * var(--inset));
+  }
+  .asm__fam span {
+    display: none;
+  }
+  .asm__fam:first-child {
+    align-items: flex-start;
+  }
+  .asm__fam:last-child {
+    align-items: flex-end;
+  }
+  .asm__slablabel {
+    display: none;
   }
 }
 
 @media (max-width: 639.98px) {
-  .lv__h {
-    font-size: min(6.4rem, 22.5vw);
-    transition: opacity var(--t-slow) var(--ease), transform var(--t-slow) var(--ease);
-  }
-  /* Phones: from the second state on, the caption takes the headline's place and the phone or
-     the note gets the rest of the stage. */
-  :lang(sl) .lv__h {
-    font-size: min(6rem, 19.5vw);
-  }
-  .lv:not([data-step='0']) .lv__h {
-    opacity: 0;
-    transform: translate3d(0, -16px, 0);
-  }
-  .lv__caps {
-    transition: transform var(--t-slow) var(--ease);
-  }
-  .lv:not([data-step='0']) .lv__caps {
-    transform: translate3d(0, calc(-1 * var(--head-h, 140px)), 0);
-  }
-  .lv__phonewrap {
-    grid-row: cap / steps;
-    align-items: flex-start;
-    padding-top: 12px;
-    padding-bottom: 0;
-    overflow: hidden;
-  }
-  .lv .phone {
-    height: auto;
-    width: min(270px, 76vw);
-    max-height: none;
-  }
-  /* the caption has moved up into the headline's place, so the note starts under it, not under the
-     (hidden) headline: the whole note, advice line included, fits a 780 px tall phone */
-  .lv__note {
-    grid-row: head / steps;
-    margin-top: calc(var(--caps-h, 64px) + clamp(10px, 2vh, 22px) + 14px);
-  }
-  .lv__stepnav {
-    background: var(--chamber);
-    position: relative;
-    z-index: 6;
-  }
-  .lv__noteno {
-    display: none;
-  }
-  .lv__notedates {
-    font-size: 0.6875rem;
-    gap: 2px 14px;
-  }
-  .lv__notechart {
-    min-height: 92px; /* 18 px less than before, so the advice line always fits */
-  }
-  /* phones: the result row below already prints the big signed result; no in-plot label to collide
-     with the lintel */
-  .lv__endlabel {
-    display: none;
-  }
-  .lv__cap {
+  .asm__lede,
+  .asm__sub {
     font-size: 0.9375rem;
-    line-height: 1.38;
   }
-  .lv__plot {
-    margin-top: 30px;
+  .asm__wide {
+    white-space: normal;
   }
-  .lv__val {
-    font-size: 0.6875rem;
+  .asm__noteno {
+    margin-left: 0;
   }
-}
-
-@media (max-height: 700px) and (min-width: 640px) {
-  .lv__h {
-    font-size: min(8rem, 9vw, 15vh);
+  .asm__note {
+    row-gap: 10px;
   }
 }
 
-/* ============================================================================================
-   HOME SECTIONS
-   ============================================================================================ */
+
 .home > .section:first-of-type {
   border-top: 0;
 }
@@ -814,6 +881,13 @@
   align-content: start;
 }
 
+.sc-more {
+  font-size: var(--t-body);
+  line-height: 1.55;
+  max-width: 44ch;
+  margin-bottom: var(--s-5);
+}
+
 .sc-legend {
   display: grid;
   gap: 8px;
@@ -830,7 +904,7 @@
 .sc-key {
   width: 9px;
   height: 18px;
-  border: 1px solid var(--graphite);
+  border: 1px solid var(--line);
   flex: none;
 }
 
@@ -848,7 +922,7 @@
   font-size: 0.8125rem;
   line-height: 1.55;
   padding: 10px 0;
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--rule-inner);
 }
 
@@ -973,9 +1047,37 @@
 
 /* 02 How a pick happens --------------------------------------------------------------------------- */
 .how-steps {
+  position: relative;
   display: grid;
   margin-top: var(--s-7);
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
+}
+
+.how-rail {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .how-rail {
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: calc(50% - 1.5 * min(25%, 460px));
+    pointer-events: none;
+  }
+  .how-rail .day-clock {
+    display: grid;
+    justify-items: end;
+    padding: clamp(22px, 3.6vw, 40px) calc(var(--inset) + 14px) 0 0;
+  }
+  .how-rail .fig-xl {
+    font-size: min(2.75rem, 3.4vw);
+  }
+  .home-how .how-step__time {
+    opacity: 0;
+  }
 }
 
 .how-step {
@@ -995,7 +1097,7 @@
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
   font-size: clamp(0.875rem, 0.8rem + 0.4vw, 1.125rem);
-  font-weight: 500;
+  font-weight: 480;
   padding-top: 0.3em;
 }
 
@@ -1021,7 +1123,7 @@
 .how-step__title {
   font-size: var(--fs-d4);
   font-stretch: var(--wdth-sub);
-  font-weight: 560;
+  font-weight: 500;
   line-height: 1.05;
   max-width: 24ch;
   margin-bottom: 10px;
@@ -1036,12 +1138,14 @@
   padding-top: 0.4em;
 }
 
+/* the four families take four equal columns on r1→r4 (family D no longer squeezed into the margin) */
 .how-fams {
-  grid-column: full-start / full-end;
+  grid-column: r1 / r4;
   grid-row: 2;
   display: grid;
-  grid-template-columns: subgrid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: 12px;
+  padding: 0 !important;
 }
 
 .how-fam {
@@ -1051,28 +1155,16 @@
   padding: 0 var(--inset);
 }
 
-.how-fam:nth-child(1) {
-  grid-column: r1 / r2;
-}
-.how-fam:nth-child(2) {
-  grid-column: r2 / r3;
-}
-.how-fam:nth-child(3) {
-  grid-column: r3 / r4;
-}
-.how-fam:nth-child(4) {
-  grid-column: r4 / full-end;
-}
 
 .how-fam__id {
   font-stretch: 62%;
-  font-weight: 600;
+  font-weight: 520;
   font-size: clamp(3.5rem, 2rem + 4vw, 6rem);
   line-height: 0.8;
 }
 
 .how-fam__name {
-  font-weight: 600;
+  font-weight: 520;
   font-size: 1rem;
 }
 
@@ -1095,7 +1187,7 @@
   grid-column: r1 / r4;
   position: relative;
   height: clamp(160px, 18vw, 240px);
-  border-bottom: 1px solid var(--graphite);
+  border-bottom: 1px solid var(--line);
 }
 
 .how-col {
@@ -1114,7 +1206,7 @@
 
 .how-col.is-miss {
   background: transparent;
-  border: 1px solid var(--graphite);
+  border: 1px solid var(--line);
 }
 
 .how-col {
@@ -1129,7 +1221,7 @@
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 480;
 }
 
 .how-col.is-miss b {
@@ -1160,7 +1252,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(var(--thr, 0.95) * 100%); /* meta.rule.topPct, set by home.js */
+  bottom: calc(var(--thr, 0.95) * 100%);
   border-top: 1px dashed var(--slate);
 }
 
@@ -1212,7 +1304,7 @@
   .how-step__tick {
     display: none;
   }
-  /* the threshold's number goes under the lintel, centred in bay 1 where no column or value stands */
+
   .how-quorum__thr .label {
     right: auto;
     left: calc(100% / 6);
@@ -1234,8 +1326,6 @@
   }
 }
 
-/* Below 1024 the four families no longer fit a bay each: a 2 × 2 of equal halves between rule 1 and
-   rule 4 (never two bays beside one), so no family is squeezed. */
 @media (max-width: 1023.98px) {
   .how-fams {
     grid-column: r1 / r4;
@@ -1256,6 +1346,23 @@
   display: grid;
   gap: 12px;
   align-content: start;
+}
+
+.verify__print {
+  display: grid;
+  align-content: end;
+  gap: 2px;
+  max-height: 13.5em;
+  overflow: hidden;
+  margin-block: 14px 10px;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--mist-2);
+  white-space: nowrap;
+}
+
+.verify__print li:last-child {
+  color: var(--mist);
 }
 
 .verify__btn {
@@ -1313,7 +1420,7 @@
 }
 
 .chain__kind {
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .chain__kind.is-quorum::before {
@@ -1368,7 +1475,6 @@
 .ledger-stats .stat {
   border-bottom-color: var(--rule-dark);
 }
-
 
 @media (max-width: 1023.98px) {
   .chain__row {
@@ -1516,7 +1622,7 @@
 }
 
 .sb__axis {
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
   padding-top: 10px;
 }
 
@@ -1544,10 +1650,9 @@
 
 .sb__tick.is-coin {
   color: var(--graphite);
-  font-weight: 600;
+  font-weight: 520;
 }
 
-/* ticks on a rule sit beside it, never across it (the rule would strike the digits) */
 .sb__tick.is-start,
 .sb__tick.is-mid {
   transform: translateX(6px);
@@ -1557,18 +1662,17 @@
   transform: translateX(calc(-100% - 6px));
 }
 
-/* the coin-flip / no-skill note on its own line under the middle tick, so it never runs into the next */
 .sb__ticks {
   height: 34px;
 }
 
 .sb__coin {
   display: block;
-  font-weight: 400;
+  font-weight: 420;
 }
 
 @media (max-width: 639.98px) {
-  /* phones: the rule ticks and the quartiles only */
+
   .sb__tick.is-minor {
     display: none;
   }
@@ -1622,91 +1726,36 @@
 /* 05 Pricing teaser --------------------------------------------------------------------------------------- */
 .home-price .honest,
 .pricing-honest {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 1.125rem;
   line-height: 1.4;
-  border-left: 1px solid var(--graphite);
-  padding-left: 16px;
   align-self: end;
 }
 
-.tier {
-  display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
-  gap: 16px;
-  padding-top: 18px;
-  margin-top: var(--s-6);
-  border-top: 1px solid var(--graphite);
+.pl__amount {
+  display: inline-block;
 }
 
-@media (min-width: 640px) {
-  /* name, price, items, note and button line up across the three tiers */
-  .home-price .tier,
-  .pricing-tiers .tier {
-    grid-row: 3 / span 5;
-    grid-template-rows: subgrid;
-    row-gap: 16px;
-  }
+.pl-note {
+  padding-inline: var(--inset);
 }
 
-.tier__name {
-  color: var(--graphite);
-  font-size: 0.75rem;
-}
-
-.tier__price {
+.pl-note .launch-note {
   display: grid;
   gap: 6px;
 }
 
-.tier__amount {
-  font-stretch: 64%;
-  font-weight: 580;
-  font-size: var(--fs-d3);
-  line-height: 0.9;
-  letter-spacing: -0.01em;
-}
-
-.tier__items {
+.pl__cta {
   display: grid;
-  gap: 8px;
-  font-size: var(--fs-small);
-  align-content: start;
+  gap: 12px;
+  justify-items: start;
+  align-content: end;
 }
 
-/* lists of short text lines are one ground (DESIGN.md §4): no stub of a rule between their items */
-:where(#view) :is(.tier__items, .jn-list, .sc-legend) {
-  background-color: var(--bg);
-  background-clip: content-box;
+.pl__note {
+  max-width: 40ch;
 }
 
-.tier__items li {
-  padding-left: 18px;
-  position: relative;
-}
-
-.tier__items li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.72em;
-  width: 9px;
-  border-top: 1px solid currentColor;
-}
-
-.tier__cta {
-  justify-self: start;
-}
-
-@media (max-width: 639.98px) {
-  .tier {
-    grid-column: r1 / r4;
-  }
-}
-
-/* ============================================================================================
-   CONTENT PAGES
-   ============================================================================================ */
 .page {
   padding-bottom: var(--s-9);
 }
@@ -1750,7 +1799,7 @@
 .content-sec h2 {
   font-size: var(--fs-d3);
   font-stretch: var(--wdth-display);
-  font-weight: 580;
+  font-weight: 480;
   line-height: 0.95;
   max-width: 18ch;
 }
@@ -1783,7 +1832,7 @@
   grid-column: r1 / r4;
   position: relative;
   height: clamp(140px, 22vh, 220px);
-  border-bottom: 1px solid var(--graphite);
+  border-bottom: 1px solid var(--line);
   margin-bottom: var(--s-4);
 }
 
@@ -1792,7 +1841,7 @@
   bottom: 0;
   width: 5px;
   transform: translateX(-2px);
-  border: 1px solid var(--graphite);
+  border: 1px solid var(--line);
   height: calc(var(--h) * 100%);
 }
 
@@ -1827,7 +1876,7 @@
 
 /* ---- long-form pages ------------------------------------------------------------------------------ */
 .page-masthead {
-  padding-block: clamp(4rem, 2rem + 6vw, 8rem) clamp(3rem, 2rem + 3vw, 5rem);
+  padding-block: clamp(32px, 4vw, 56px) clamp(2.5rem, 1.5rem + 2.5vw, 4rem);
 }
 
 .page-masthead > .label {
@@ -1897,13 +1946,13 @@
 
 .fam-cell__id {
   font-stretch: 62%;
-  font-weight: 600;
+  font-weight: 520;
   font-size: 2.25rem;
   line-height: 0.85;
 }
 
 .fam-cell__def {
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .table--fams th[scope='row'] {
@@ -1926,7 +1975,7 @@
 }
 
 .table--ai th[scope='row'] {
-  font-weight: 600;
+  font-weight: 520;
   width: 16%;
 }
 
@@ -1951,7 +2000,6 @@
   border-color: var(--loss);
 }
 
-/* tables inside the prose column may be wider than 68ch: let them use the body width */
 .content-sec .prose .table-wrap {
   max-width: none;
 }
@@ -1978,7 +2026,6 @@
   font-size: var(--fs-small);
 }
 
-/* a figure in a long-form section spans the page on the rules, under the text */
 .content-fig {
   grid-column: full-start / full-end;
   display: grid;
@@ -1997,7 +2044,6 @@
   padding-inline: var(--inset);
 }
 
-/* #how-it-works: the daily cadence as a timetable (the home page's how-step rows, one line each) */
 .hw-times .how-step {
   padding-block: 14px;
 }
@@ -2006,10 +2052,9 @@
   max-width: 58ch;
 }
 
-/* #how-it-works: the sealed record's funnel */
 .hw-funnel__list {
   display: grid;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .hw-funnel__row {
@@ -2064,7 +2109,7 @@
 .changelog {
   grid-column: full-start / full-end;
   padding: 0 !important;
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
 }
 
 .changelog__item {
@@ -2098,7 +2143,7 @@
 /* ---- about: people on the rules ------------------------------------------------------------------ */
 .people {
   padding-block: var(--s-7) var(--s-9);
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
   row-gap: var(--s-6);
 }
 
@@ -2133,7 +2178,7 @@
 }
 
 .person__title {
-  font-weight: 560;
+  font-weight: 500;
 }
 
 @media (max-width: 1023.98px) {
@@ -2157,26 +2202,25 @@
 }
 
 /* ---- pricing page ---------------------------------------------------------------------------------- */
-.pricing-tiers {
+.pl-head {
+  padding-block: clamp(32px, 4vw, 56px) var(--s-6);
+  row-gap: var(--s-4);
+}
+
+.pl-head__bar {
+  align-self: end;
+  display: grid;
+  gap: var(--s-4);
+  justify-items: start;
+}
+
+.pl-head__more {
+  max-width: 44ch;
+}
+
+.pl-sec {
   padding-bottom: var(--s-9);
-  align-items: stretch;
-}
-
-@media (min-width: 640px) {
-  .pricing-tiers .tier {
-    grid-row: 1 / span 5;
-  }
-}
-
-.pricing-tiers .tier {
-  margin-top: 0;
-}
-
-.tier__lead {
-  font-family: var(--font-serif);
-  font-size: 1.0625rem;
-  line-height: 1.35;
-  margin-bottom: 14px;
+  row-gap: var(--s-6);
 }
 
 .billing {
@@ -2185,7 +2229,6 @@
   justify-items: start;
 }
 
-/* the masthead strip on #pricing: the billing switch, then the launch note */
 .pricing-meta {
   display: grid;
   gap: var(--s-6);
@@ -2202,7 +2245,7 @@
   padding: 0 16px;
 }
 
-.seg--light button:hover {
+.seg--light button:not([aria-pressed="true"]):hover {
   background: rgb(17 20 24 / 0.06);
 }
 
@@ -2213,14 +2256,14 @@
 
 .honest-block {
   padding-block: var(--s-8);
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
   row-gap: var(--s-4);
 }
 
 .honest-quote {
   font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.5rem);
   line-height: 1.18;
-  font-weight: 380;
+  font-weight: 360;
   letter-spacing: -0.01em;
   max-width: 30ch;
 }
@@ -2252,7 +2295,7 @@
 
 .legal-nav a[aria-current='page'] {
   color: var(--graphite);
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .legal-nav a[aria-current='page']::before {
@@ -2263,9 +2306,6 @@
   margin-right: 8px;
 }
 
-/* ============================================================================================
-   STAGE 2 · SHARED: record pages (pick, issue, stock, ledger, backtest, disclosures)
-   ============================================================================================ */
 .rec-sec {
   padding-block: clamp(3.5rem, 2rem + 4vw, 7rem);
   row-gap: var(--s-5);
@@ -2305,19 +2345,16 @@
   gap: 4px 28px;
 }
 
-/* a single long word in a display face never pushes the page sideways (fallback fonts included) */
 :is(.ledger, .bt, .issue, .stock, .disc, .pk) :is(.display, h2, h3),
 .state .display {
   overflow-wrap: break-word;
 }
 
-/* a bordered block inside the grid: its box starts on the inset line, not on the rule */
 .grid > .boxed {
   padding-inline: 0;
   margin-inline: var(--inset);
 }
 
-/* key swatches used by chart legends (lines, not colours: series are told apart by stroke) */
 .key {
   display: inline-block;
   width: 22px;
@@ -2339,13 +2376,12 @@
   border-top: 1px solid var(--fg-2);
 }
 
-/* the crosshair of line charts (charts/hover.js) */
 .xh {
   position: absolute;
   top: 0;
   bottom: 0;
   left: var(--x, 100%);
-  border-left: 1px solid var(--fg);
+  border-left: 1px solid var(--line);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--t-fast) var(--ease);
@@ -2356,54 +2392,134 @@
   opacity: 0.55;
 }
 
-/* ============================================================================================
-   PICK NOTE (#p-NNNN)
-   ============================================================================================ */
-.pk-head {
-  padding-block: clamp(3.5rem, 2rem + 5vw, 7rem) clamp(2.5rem, 1.5rem + 3vw, 4.5rem);
-  row-gap: var(--s-5); /* the shared masthead rhythm: kicker, then the h1 (.masthead .display) */
-}
-
 .pk-h1 {
-  font-stretch: var(--wdth-display-tight);
-  letter-spacing: 0.01em;
+  letter-spacing: -0.02em;
 }
 
 .pk-h1__t {
   font-variant-numeric: tabular-nums slashed-zero;
 }
 
-.pk-id {
+/* the stage: the frozen Assembly (or the plain colonnade) behind the ticker */
+.pk-stage {
+  overflow: clip;
+  isolation: isolate;
+}
+
+.pk-stage > :not(.pk-scene, .pk-cols) {
+  position: relative;
+  z-index: 1;
+}
+
+.pk-scene {
+  position: absolute !important;
+  inset: 0;
+  z-index: 0;
+}
+
+.pk-scene > .asm {
+  height: 100%;
+  margin: 0;
+}
+
+.pk-scene .asm__view {
+  position: absolute;
+  inset: 0;
+  height: auto;
+}
+
+.pk-stage.has-scene {
+  min-height: max(560px, calc(100svh - var(--chrome-h, 92px)));
+}
+
+.pk-stage .stage-screen__strip .tag {
+  color: var(--mist);
+}
+
+.pk-when a {
+  color: var(--mist);
+}
+
+/* in flow, in the stage's first row: it takes the free height and stops 40 px above the kicker */
+.pk-stage:not(.has-scene) {
+  grid-template-rows: minmax(clamp(160px, 30svh, 360px), 1fr);
+  align-content: stretch;
+}
+
+.pk-cols {
+  position: relative;
+  grid-row: 1;
+  grid-column: full-start / full-end;
+  align-self: stretch;
+  margin: 28px 0 40px;
+  padding-inline: 0 !important;
+  z-index: 0;
   display: grid;
-  gap: var(--s-3);
-  align-content: start;
+  grid-template-columns: var(--cols);
+  grid-template-rows: minmax(0, 1fr);
+  pointer-events: none;
 }
 
-.pk-name {
-  font-weight: 450;
+.pk-pillar {
+  grid-row: 1;
+  align-self: end;
+  justify-self: start;
+  position: relative;
+  width: 9px;
+  margin-left: -4.5px;
+  height: calc(var(--h) * 100%);
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-bottom: 0;
 }
 
-.pk-name .tag {
-  vertical-align: 0.25em;
-  margin-left: 4px;
+.pk-pillar.is-agree {
+  background: var(--mist-2);
 }
 
-.pk-idline {
-  color: var(--fg-2);
-  overflow-wrap: anywhere;
+.pk-pillar:nth-child(1) {
+  grid-column: r1;
+}
+.pk-pillar:nth-child(2) {
+  grid-column: r2;
+}
+.pk-pillar:nth-child(3) {
+  grid-column: r3;
+}
+.pk-pillar:nth-child(4) {
+  grid-column: r4;
 }
 
-.pk-state {
-  display: grid;
-  gap: var(--s-3);
-  align-content: start;
+/* the label stands over its column, 14 px clear of the lintel (never struck by it); the last column's
+   label hangs to the left so it never leaves the page */
+.pk-pillar__k {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  font-size: var(--t-label);
+  color: var(--mist-2);
+  white-space: nowrap;
 }
 
-.pk-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+.pk-pillar.is-agree .pk-pillar__k {
+  bottom: calc(max(100%, 100% * var(--t) / var(--h)) + 14px);
+  color: var(--mist);
+}
+
+.pk-pillar:nth-child(4) .pk-pillar__k {
+  left: auto;
+  right: 0;
+}
+
+.pk-cols__lintel {
+  grid-row: 1;
+  align-self: end;
+  position: relative;
+  bottom: calc(var(--t) * 100%);
+  height: 3px;
+  margin-inline: -8px;
+  background: var(--ultra);
+  box-shadow: 0 0 0 1px var(--lift), 0 0 18px 2px var(--ultra);
 }
 
 .pk-badge {
@@ -2422,11 +2538,10 @@
   }
 }
 
-/* the summary box: a Paper sheet, statement in bays 1–2, times and prices in bay 3 */
 .pk-summary {
   padding-block: var(--s-7) var(--s-7);
   row-gap: var(--s-5);
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
 }
 
 .pk-sum__main {
@@ -2447,7 +2562,7 @@
 }
 
 .pk-sum__what b {
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .pk-sum__advice {
@@ -2485,8 +2600,6 @@
   margin-top: var(--s-2);
 }
 
-
-/* the thesis: Newsreader, the checks in the strip */
 .pk-thesis__text {
   font-size: clamp(1.125rem, 1.02rem + 0.35vw, 1.3125rem);
   line-height: 1.55;
@@ -2498,7 +2611,6 @@
   }
 }
 
-
 .pk-aside {
   display: grid;
   gap: var(--s-3);
@@ -2507,7 +2619,7 @@
 
 .pk-checks {
   display: grid;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .pk-check {
@@ -2550,7 +2662,6 @@
   max-width: 68ch;
 }
 
-/* the texts */
 .pk-texts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
@@ -2589,7 +2700,6 @@
   }
 }
 
-/* commit–reveal on Chamber */
 .pk-json {
   margin: 0;
   padding: 16px 18px;
@@ -2620,7 +2730,6 @@
   }
 }
 
-
 .pk-verify {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -2637,7 +2746,6 @@
   }
 }
 
-/* history */
 .pk-chain__label {
   margin-bottom: var(--s-3);
 }
@@ -2646,7 +2754,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .pk-renew__item {
@@ -2674,7 +2782,7 @@
 
 .pk-renew__no {
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .pk-renew__item.is-current .pk-renew__no {
@@ -2690,10 +2798,9 @@
   font-size: var(--fs-small);
 }
 
-/* the MAR block */
 .pk-mar__list {
   display: grid;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .pk-mar__item dd {
@@ -2710,7 +2817,7 @@
 }
 
 .pk-mar__item dt {
-  font-weight: 620;
+  font-weight: 520;
 }
 
 .pk-mar__links {
@@ -2737,7 +2844,6 @@
   gap: 8px 24px;
 }
 
-/* the sealed note (Free viewers, open pick) */
 .pk-sealed__dl {
   max-width: 820px;
   border-top-color: var(--rule-dark-strong);
@@ -2804,7 +2910,7 @@
 .col-cap__id {
   grid-row: 1 / span 2;
   font-stretch: var(--wdth-display-tight);
-  font-weight: 600;
+  font-weight: 520;
   font-size: clamp(2.6rem, 1.6rem + 2.4vw, 4.25rem);
   line-height: 0.8;
 }
@@ -2836,7 +2942,7 @@
   grid-column: r1 / r4;
   position: relative;
   height: clamp(220px, 22vw, 330px);
-  border-bottom: 1px solid var(--fg);
+  border-bottom: 1px solid var(--line);
 }
 
 .col-band {
@@ -2894,7 +3000,7 @@
 
 .col-col.is-miss {
   background: var(--paper);
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
 }
 
 .col-col.is-suspended {
@@ -2924,7 +3030,7 @@
 
 .col-fam__head {
   font-size: var(--fs-small);
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .col-fam__head b {
@@ -2932,7 +3038,7 @@
 }
 
 .col-fam__pct {
-  font-weight: 400;
+  font-weight: 420;
   color: var(--fg-2);
 }
 
@@ -2973,7 +3079,7 @@
 .col-bar.is-neg {
   right: 100%;
   background: transparent;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
 }
 
 .col-fam.is-miss .col-bar.is-pos {
@@ -3004,7 +3110,6 @@
   max-width: 68ch;
 }
 
-/* below 1280 the drivers leave the rules: one block per family, a zero line in the middle */
 @media (max-width: 1279.98px) {
   .colonnade {
     --zlen: 50%;
@@ -3054,7 +3159,6 @@
   }
 }
 
-/* 640–1279: two equal halves between rule 1 and rule 4, every bar starting at its own drawn zero line */
 @media (min-width: 640px) and (max-width: 1279.98px) {
   .col-drivers {
     grid-column: r1 / r4;
@@ -3078,8 +3182,7 @@
 }
 
 @media (max-width: 1023.98px) {
-  /* no right margin to hang the band label in: it goes under the lintel, centred in bay 1, where no
-     column stands, on a Paper ground */
+
   .col-thrlabel {
     left: calc(100% / 6);
     bottom: auto;
@@ -3285,8 +3388,6 @@
   font-size: 0.75rem;
 }
 
-/* End labels are placed by path.js endLabelYs() (clear of each other and of the zero line) and wear an
-   opaque ground, so no line of the chart runs through their text. */
 .path-end {
   position: absolute;
   left: calc(var(--x) + var(--inset));
@@ -3297,13 +3398,13 @@
   align-items: baseline;
   white-space: nowrap;
   font-size: var(--fs-small);
-  font-weight: 560;
+  font-weight: 500;
   background: var(--bg);
   padding: 1px 4px;
 }
 
 .path-end.is-bench {
-  font-weight: 400;
+  font-weight: 420;
 }
 
 .path-days {
@@ -3321,7 +3422,7 @@
   font-stretch: var(--wdth-mono);
   font-size: 0.6875rem;
   letter-spacing: var(--track-label);
-  text-transform: uppercase; /* one case for axis labels, as the hero note's DAY 0 */
+  text-transform: uppercase;
   color: var(--fg-2);
 }
 
@@ -3344,7 +3445,7 @@
 }
 
 @media (max-width: 1023.98px) {
-  /* the ticks move inside the plot: above their line on an opaque ground, so a series passes behind */
+
   .path-tick {
     right: auto;
     left: 4px;
@@ -3374,11 +3475,60 @@
   }
 }
 
-/* ============================================================================================
-   LEDGER (#ledger)
-   ============================================================================================ */
-.ledger .page-masthead + .rec-sec {
+.ledger .wall + .rec-sec {
   border-top-color: var(--graphite);
+}
+
+.wall__title {
+  grid-row: 2;
+}
+
+@media (min-width: 1024px) {
+  .wall > .wall__title {
+    grid-column: r1 / r3;
+  }
+}
+
+.wall > .wall__lede {
+  grid-column: r3 / r4;
+  grid-row: 2;
+  align-self: end;
+  font-size: var(--t-body);
+  line-height: 1.5;
+}
+
+.wall__toc {
+  grid-column: r1 / full-end;
+}
+
+.wall__toc .toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 22px;
+  align-items: baseline;
+}
+
+.wall__toc .toc a {
+  border: 0;
+  min-height: 44px;
+}
+
+.wall__toc .toc > .label {
+  flex-basis: 100%;
+}
+
+@media (max-width: 1023.98px) {
+  .wall__aside {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .wall__title,
+  .wall > .wall__lede {
+    grid-column: r1 / r4;
+    grid-row: auto;
+  }
 }
 
 .lg-stats__order {
@@ -3389,13 +3539,11 @@
   border-top-color: var(--fg);
 }
 
-
 .lg-gap {
   display: grid;
   gap: 6px;
 }
 
-/* the record table */
 .lg-controls {
   display: flex;
   flex-wrap: wrap;
@@ -3452,7 +3600,6 @@
   align-content: start;
 }
 
-/* two copies, labelled apart: the hash chain (every record with its hashes) and the picks table */
 .lg-csv__item {
   display: grid;
   gap: 6px;
@@ -3469,7 +3616,6 @@
     grid-row: 2 / span 2;
   }
 }
-
 
 .lg-table-wrap {
   overflow-x: visible;
@@ -3553,7 +3699,7 @@
 }
 
 .lg-no {
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .lg-kind {
@@ -3596,13 +3742,10 @@
   white-space: nowrap;
 }
 
-/* the record table's columns sit on the rules from 1024 px only: below that its cells are opaque like
-   every other table, so no rule strikes a number */
 .lg-status.is-open {
-  font-weight: 600;
+  font-weight: 520;
 }
 
-/* an open row and a hovered row are grounds of their own: text grounds inside follow them (--bg) */
 .lg-row.is-open {
   --bg: color-mix(in srgb, var(--paper) 55%, var(--karst));
 }
@@ -3622,7 +3765,7 @@
   }
   .lg-row.is-open td,
   .lg-row.is-open th {
-    background: var(--bg); /* the open row's own ground: Paper 55% over Karst */
+    background: var(--bg);
   }
 }
 
@@ -3645,7 +3788,7 @@
   min-height: 44px;
   display: flex;
   align-items: center;
-  font-weight: 540;
+  font-weight: 480;
 }
 
 .lg-rawbox[open] summary {
@@ -3665,7 +3808,6 @@
   resize: vertical;
 }
 
-/* tablets: the table keeps its rows; entry price and benchmark (in every pick's note) step out */
 @media (min-width: 640px) and (max-width: 1023.98px) {
   .lg-c-bench,
   .lg-c-entryOpen {
@@ -3676,7 +3818,6 @@
   }
 }
 
-/* phones: every record becomes a card on the four-column grid */
 @media (max-width: 639.98px) {
   .lg-table,
   .lg-table tbody {
@@ -3685,9 +3826,7 @@
   .lg-table thead {
     display: none;
   }
-  /* the card spans rule 1 to rule 4 and its three columns are the three bays, text inset from each
-     rule: the number with its models badge and status, the stock, then dates (issued, entry, exit)
-     and results (net, benchmark, excess) as two rows in the same order as the desktop columns */
+
   .lg-table {
     width: calc(100% + 2 * var(--inset));
     margin-inline: calc(-1 * var(--inset));
@@ -3780,14 +3919,13 @@
     white-space: normal;
   }
   .lg-table tr.lg-row:first-child {
-    border-top: 1px solid var(--fg);
+    border-top: 1px solid var(--line);
   }
   .lg-row.is-open {
     background: color-mix(in srgb, var(--paper) 55%, transparent);
   }
 }
 
-/* the chain on Chamber */
 .lg-verify {
   gap: 14px;
 }
@@ -3797,7 +3935,6 @@
     grid-row: 2 / span 3;
   }
 }
-
 
 .vp {
   height: 3px;
@@ -3939,16 +4076,16 @@
   flex-wrap: wrap;
   gap: 6px 18px;
   align-items: baseline;
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .cb__head > .cb__anchor {
-  grid-column: r3 / r4; /* the tags wrap inside the bay; never past rule 4 */
+  grid-column: r3 / r4;
 }
 
 .cb__q {
   font-size: var(--fs-xs);
-  font-weight: 400;
+  font-weight: 420;
   color: var(--mist-2);
 }
 
@@ -3966,7 +4103,7 @@
   flex-wrap: wrap;
   gap: 4px 10px;
   align-items: center;
-  font-weight: 400;
+  font-weight: 420;
 }
 
 .cb__root {
@@ -4028,7 +4165,6 @@
   }
 }
 
-/* scoreboard */
 .lg-sb,
 .lg-ds {
   grid-column: full-start / full-end;
@@ -4048,8 +4184,6 @@
   }
 }
 
-
-/* the holdout view of the scoreboard and deciles is backtest output: hatched like #backtest, Graphite */
 .lg-sb.is-hypothetical,
 .lg-ds.is-hypothetical {
   position: relative;
@@ -4070,7 +4204,7 @@
 .figcaption.is-hypothetical,
 .lg-period.is-hypothetical {
   color: var(--fg);
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .sb__dot.is-hypo {
@@ -4078,7 +4212,7 @@
 }
 
 .lg-corr__t td.is-over {
-  font-weight: 700;
+  font-weight: 520;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -4098,7 +4232,7 @@
 }
 
 .sb__row--quorum .sb__k b {
-  font-weight: 700;
+  font-weight: 520;
 }
 
 .sb__track.is-empty .sb__dot {
@@ -4130,7 +4264,6 @@
   font-size: 0.75rem;
 }
 
-/* deciles */
 .lg-ds-controls {
   display: grid;
   gap: 14px;
@@ -4142,7 +4275,6 @@
     grid-row: 2 / span 2;
   }
 }
-
 
 .ds {
   grid-column: full-start / full-end;
@@ -4164,7 +4296,7 @@
   left: 0;
   right: 0;
   top: var(--y);
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .ds-slot {
@@ -4184,7 +4316,7 @@
 
 .ds-bar.is-neg {
   background: transparent;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
 }
 
 .ds-ci {
@@ -4268,13 +4400,12 @@
   }
 }
 
-/* monthly IC sparklines */
 .ic {
   grid-column: full-start / full-end;
   display: grid;
   grid-template-columns: subgrid;
   margin-top: var(--s-4);
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .ic-row {
@@ -4343,7 +4474,7 @@
 
 .ic-dot.is-neg {
   background: var(--bg);
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
 }
 
 .ic-v {
@@ -4386,7 +4517,6 @@
   }
 }
 
-/* the Silence Calendar on the ledger */
 .lg-cal .sc-figure {
   margin-top: var(--s-4);
 }
@@ -4396,7 +4526,6 @@
   gap: 4px;
 }
 
-/* the line chart (charts/equity.js) */
 .eq {
   grid-column: full-start / full-end;
   display: grid;
@@ -4551,7 +4680,7 @@
 }
 
 .eq-end--main {
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .eq-years {
@@ -4581,7 +4710,7 @@
 }
 
 @media (max-width: 1023.98px) {
-  /* the ticks move inside the plot: above their line on an opaque ground, so the series pass behind */
+
   .eq-tick {
     right: auto;
     left: 4px;
@@ -4604,9 +4733,6 @@
   }
 }
 
-/* ============================================================================================
-   ISSUE (#issue-YYYY-MM-DD)
-   ============================================================================================ */
 .is-head .display {
   max-width: 14ch;
 }
@@ -4638,7 +4764,6 @@
   border-top-color: var(--graphite);
 }
 
-/* the four columns of the day: how far the strongest stock reached */
 .is-fig {
   grid-column: full-start / full-end;
   display: grid;
@@ -4650,7 +4775,7 @@
   position: relative;
   height: clamp(150px, 16vw, 230px);
   margin-top: 28px;
-  border-bottom: 1px solid var(--fg);
+  border-bottom: 1px solid var(--line);
   --thr: 0.95;
 }
 
@@ -4668,7 +4793,7 @@
 }
 
 .is-col.is-short {
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   background: transparent;
 }
 
@@ -4694,7 +4819,7 @@
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 480;
   white-space: nowrap;
 }
 
@@ -4733,13 +4858,11 @@
   border-top-color: var(--fg);
 }
 
-
-/* picks and exits as cards on the bays */
 .is-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 0 calc(var(--inset) * 2);
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .is-card {
@@ -4784,7 +4907,6 @@
   margin: var(--s-6) 0 var(--s-3);
 }
 
-/* the texts */
 .is-textlist {
   display: grid;
   gap: var(--s-5);
@@ -4832,7 +4954,7 @@
 .is-hv {
   display: grid;
   gap: var(--s-4);
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
   padding-top: var(--s-4);
 }
 
@@ -4847,14 +4969,10 @@
   }
 }
 
-
 .is-chain {
   margin-top: var(--s-5);
 }
 
-/* ============================================================================================
-   STOCK (#s-TICKER)
-   ============================================================================================ */
 .st-h1 {
   font-stretch: var(--wdth-display-tight);
   letter-spacing: 0.01em;
@@ -4900,7 +5018,7 @@
   grid-column: r1 / r4;
   position: relative;
   height: clamp(140px, 14vw, 200px);
-  border-bottom: 1px solid var(--fg);
+  border-bottom: 1px solid var(--line);
   --thr: 0.95;
 }
 
@@ -4927,7 +5045,7 @@
 }
 
 .st-col.is-out {
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
 }
 
 .st-col b {
@@ -4937,7 +5055,7 @@
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 480;
   white-space: nowrap;
 }
 
@@ -4955,15 +5073,26 @@
   margin-top: var(--s-5);
 }
 
-
 .st-gate {
   display: grid;
   gap: var(--s-3);
 }
 
-/* ============================================================================================
-   DISCLOSURES (#disclosures)
-   ============================================================================================ */
+/* the 12-month list takes r1→r4 from 640 px (at 834 it was squeezed into bays 1–2 and hid Excess behind
+   a sideways scroll); the section's note falls under it */
+@media (min-width: 640px) {
+  .content-sec:has(.dc-table) .prose {
+    max-width: none;
+  }
+  .content-sec:has(.dc-table) > .c-body {
+    grid-column: r1 / r4;
+  }
+  .content-sec:has(.dc-table) > .c-meta {
+    grid-column: r1 / r3;
+    grid-row: auto;
+  }
+}
+
 @media (min-width: 1024px) {
   .content-sec:has(.dc-table) .prose {
     max-width: none;
@@ -4990,6 +5119,16 @@
   vertical-align: bottom;
 }
 
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .dc-table .table td:not(.num) {
+    white-space: normal;
+  }
+  .dc-name {
+    display: inline;
+    max-width: none;
+  }
+}
+
 .dc-plain {
   font-size: var(--fs-lede);
   line-height: 1.35;
@@ -4997,7 +5136,7 @@
 }
 
 .dc-plain b {
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .dc-dist td.num {
@@ -5008,7 +5147,7 @@
   display: inline-block;
   min-width: 4.5em;
   padding: 1px 6px;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   text-align: right;
 }
 
@@ -5016,7 +5155,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: var(--s-5) calc(var(--inset) * 2);
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
   padding-top: var(--s-4);
 }
 
@@ -5035,7 +5174,7 @@
 }
 
 .dc-person__name {
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .dc-person__name .tag {
@@ -5069,7 +5208,6 @@
   }
 }
 
-/* numeric table heads keep the label size (the mono body size is for the numbers) */
 .table thead th.num {
   font-size: var(--fs-label);
 }
@@ -5078,29 +5216,35 @@
   max-width: 68ch;
 }
 
-/* ============================================================================================
-   BACKTEST (#backtest) — hypothetical: a shaded, hatched frame, a sticky flag, hatched plots
-   ============================================================================================ */
 .bt {
   --shade: color-mix(in srgb, var(--karst), var(--hairline) 42%);
 }
 
-.bt-flag {
-  position: sticky;
-  top: env(safe-area-inset-top, 0px);
-  z-index: 4;
-  display: grid;
-  grid-template-columns: var(--cols);
-  background: var(--shade);
-  --bg: var(--shade);
-  border-bottom: 1px dashed var(--graphite);
+.bt .scaffold-banner {
+  z-index: 15;
+  padding-left: calc(var(--gutter) + var(--inset));
+  --bg: var(--karst);
 }
 
-.bt-flag .label {
-  grid-column: r1 / r4;
-  padding: 7px var(--inset);
-  color: var(--graphite);
-  font-weight: 600;
+@media (min-width: 640px) {
+  .bt .scaffold-banner {
+    padding-left: calc(40px + var(--inset));
+  }
+}
+
+@media (min-width: 1024px) {
+  .bt .scaffold-banner {
+    padding-left: calc(50% - 1.5 * min(25%, 460px) + var(--inset));
+  }
+}
+
+.bt-h1 {
+  width: fit-content;
+  padding-block: 0.12em;
+  margin-block: -0.12em;
+  background: var(--bg) content-box;
+  font-size: calc(var(--t-voice) * 2);
+  line-height: 0.9;
 }
 
 .bt-banner-row {
@@ -5127,7 +5271,7 @@
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
   font-size: 0.8125rem;
-  font-weight: 700;
+  font-weight: 520;
   letter-spacing: var(--track-label);
   text-transform: uppercase;
 }
@@ -5194,7 +5338,6 @@
   border-top: 0;
 }
 
-/* things that sit in the margins stand on a Karst ground above the hatch */
 .bt .eq-end,
 .bt .eq-tick {
   background: var(--karst);
@@ -5256,7 +5399,6 @@
   height: clamp(160px, 14vw, 220px);
 }
 
-/* annual table with a drawn difference */
 .bt-annual .table td,
 .bt-annual .table th {
   white-space: nowrap;
@@ -5264,7 +5406,7 @@
 
 .bt-annual tr.is-holdout th,
 .bt-annual tr.is-holdout td {
-  background: color-mix(in srgb, var(--hairline) 22%, var(--bg)); /* opaque: the rules pass behind */
+  background: color-mix(in srgb, var(--hairline) 22%, var(--bg));
 }
 
 .bt-excell {
@@ -5302,13 +5444,12 @@
 
 .bt-exbar.is-neg {
   right: 50%;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
 }
 
-/* the gates */
 .bt-gates {
   display: grid;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .bt-gate {
@@ -5322,13 +5463,13 @@
 
 .bt-gate.is-fail {
   border-bottom-color: var(--fg);
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
   margin-top: -1px;
 }
 
 .bt-gate__id {
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .bt-gate__body {
@@ -5338,7 +5479,7 @@
 }
 
 .bt-gate__label {
-  font-weight: 560;
+  font-weight: 500;
   font-size: 1.0625rem;
 }
 
@@ -5354,7 +5495,7 @@
   text-transform: uppercase;
   white-space: nowrap;
   padding: 4px 10px;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
 }
 
 .bt-verdict.is-fail {
@@ -5372,7 +5513,6 @@
   }
 }
 
-/* the launch block: the gates that decide (A-1), each with its figure under the name and the verdict */
 @media (min-width: 1024px) {
   .bt-launch > .bt-launch__gates {
     grid-row: 2 / span 2;
@@ -5409,7 +5549,7 @@
 }
 
 .bt-lv.is-fail {
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .bt-launch__gates > .bt-lv--orig {
@@ -5434,7 +5574,6 @@ p.bt-lv {
   padding-block: 4px 12px;
 }
 
-
 .bt-amend {
   display: grid;
   gap: 10px;
@@ -5443,11 +5582,11 @@ p.bt-lv {
 
 .bt-amend > .label {
   padding-top: 12px;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .bt-amend__text {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 1.0625rem;
   line-height: 1.55;
   max-width: 68ch;
@@ -5459,12 +5598,11 @@ p.bt-lv {
   margin-top: var(--s-5);
 }
 
-/* (d1) and (d2) side by side: the two halves of the amended gate, each on two bays */
 .bt-pooled__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-5) calc(var(--inset) * 2);
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
   padding-top: var(--s-4);
 }
 
@@ -5482,7 +5620,7 @@ p.bt-lv {
 .bt-meter {
   position: relative;
   height: 12px;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   margin-top: 26px;
 }
 
@@ -5511,7 +5649,6 @@ p.bt-lv {
   color: var(--fg);
 }
 
-
 @media (max-width: 639.98px) {
   .bt-pooled__grid {
     grid-template-columns: 1fr;
@@ -5527,7 +5664,6 @@ p.bt-lv {
   align-self: start;
 }
 
-/* a one-column strip in the metadata strip: text keeps the inset from rule 3 on the left only */
 .bt-od .stat {
   padding-inline: 0;
 }
@@ -5535,7 +5671,7 @@ p.bt-lv {
 .bt-crash {
   display: grid;
   gap: 8px;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
   padding-top: 12px;
 }
 
@@ -5543,7 +5679,6 @@ p.bt-lv {
   padding-block: var(--s-7);
 }
 
-/* the variant histogram */
 .vh {
   grid-column: full-start / full-end;
   display: grid;
@@ -5555,7 +5690,7 @@ p.bt-lv {
   grid-column: r1 / r4;
   position: relative;
   height: clamp(200px, 20vw, 300px);
-  border-bottom: 1px solid var(--fg);
+  border-bottom: 1px solid var(--line);
   margin-top: calc(var(--rows, 3) * 22px + 2px);
 }
 
@@ -5565,7 +5700,7 @@ p.bt-lv {
   left: var(--x);
   width: var(--w);
   height: var(--h);
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   border-bottom: 0;
   background: var(--karst);
 }
@@ -5633,19 +5768,17 @@ p.bt-lv {
   }
 }
 
-/* home families row: a long family name never pushes a phone page sideways (fallback fonts) */
 .how-fam__name,
 .how-fam__def {
   overflow-wrap: anywhere;
 }
 
-/* the path of a pick entered today */
 .path-plot--pending {
   height: auto;
   min-height: 140px;
   display: grid;
   align-items: end;
-  border-bottom: 1px solid var(--fg);
+  border-bottom: 1px solid var(--line);
   cursor: default;
 }
 
@@ -5731,7 +5864,7 @@ p.bt-lv {
   }
   .dc-list tr.dc-row:first-child,
   .st-list tr.st-row:first-child {
-    border-top: 1px solid var(--fg);
+    border-top: 1px solid var(--line);
   }
   .dc-list tr.dc-row > *,
   .st-list tr.st-row > * {
@@ -5796,10 +5929,6 @@ p.bt-lv {
   }
 }
 
-/* ============================================================================================
-   STAGE 3 · SHARED: member pages (join, app, research, account, u-TOKEN, status)
-   Forms, switches, consent boxes, the phone thread, copy panels and in-page confirmations.
-   ============================================================================================ */
 .m-mode {
   font-size: var(--fs-small);
   line-height: 1.5;
@@ -5816,12 +5945,12 @@ p.bt-lv {
   display: grid;
   gap: 6px;
   padding-top: 12px;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .m-launch__lead {
   font-size: 1.0625rem;
-  font-weight: 560;
+  font-weight: 500;
   line-height: 1.3;
 }
 
@@ -5833,7 +5962,6 @@ p.bt-lv {
   color: var(--fg);
 }
 
-/* fields */
 .m-form {
   display: grid;
   gap: var(--s-5);
@@ -5848,7 +5976,7 @@ p.bt-lv {
 
 .m-field__label {
   font-size: 0.9375rem;
-  font-weight: 560;
+  font-weight: 500;
   line-height: 1.35;
 }
 
@@ -5858,7 +5986,7 @@ p.bt-lv {
 }
 
 .m-field__err {
-  font-weight: 560;
+  font-weight: 500;
   color: var(--fg);
   border-left: 2px solid var(--fg);
   padding-left: 10px;
@@ -5933,7 +6061,6 @@ p.bt-lv {
   cursor: pointer;
 }
 
-/* checkboxes: square, Graphite, the text beside them is the exact hashed text */
 .m-check {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
@@ -5949,7 +6076,7 @@ p.bt-lv {
   width: 22px;
   height: 22px;
   margin: 1px 0 0;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   background: transparent;
   cursor: pointer;
@@ -5995,7 +6122,7 @@ p.bt-lv {
 }
 
 .m-consent .m-check__text {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 1.0625rem;
   line-height: 1.5;
 }
@@ -6013,10 +6140,9 @@ p.bt-lv {
   color: var(--graphite);
 }
 
-/* switches: a Graphite pill; on = filled. Never ultramarine: a setting is not a quorum. */
 .m-channels {
   display: grid;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .m-switch-row {
@@ -6035,7 +6161,7 @@ p.bt-lv {
 
 .m-switch-row__label {
   font-size: 1.0625rem;
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .m-switch-row.is-disabled .m-switch-row__label {
@@ -6059,7 +6185,7 @@ p.bt-lv {
   position: relative;
   width: 46px;
   height: 26px;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   transition: background-color var(--t-mid) var(--ease);
 }
@@ -6123,7 +6249,6 @@ p.bt-lv {
   max-width: 60ch;
 }
 
-/* the phone with a thread of texts (shares .phone from components.css) */
 .m-phone {
   --phone-w: min(280px, 100%);
   flex: none;
@@ -6152,7 +6277,6 @@ p.bt-lv {
   }
 }
 
-/* copy panels: Copy + raw text (the viewer blocks downloads) */
 .m-copy {
   display: grid;
   gap: 10px;
@@ -6199,7 +6323,6 @@ p.bt-lv {
   resize: vertical;
 }
 
-/* in-page confirmation (no window.confirm) */
 .m-confirm {
   display: grid;
   gap: 14px;
@@ -6212,7 +6335,7 @@ p.bt-lv {
   width: 100%;
   max-width: 44rem;
   padding: 22px 24px 24px;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   background: var(--paper);
   color: var(--graphite);
   --fg: var(--graphite);
@@ -6253,9 +6376,6 @@ p.bt-lv {
   border-left: 2px solid var(--fg);
 }
 
-/* ============================================================================================
-   JOIN (#join): seven steps as one timetable; the open step on the rules, finished ones folded
-   ============================================================================================ */
 .jn .page-masthead {
   padding-bottom: var(--s-8);
 }
@@ -6265,37 +6385,44 @@ p.bt-lv {
   gap: var(--s-5);
 }
 
-.jn-steps {
-  border-top: 1px solid var(--graphite);
-}
-
-.jn-step {
-  position: relative;
-  align-items: baseline;
-  row-gap: var(--s-4);
-  padding-block: 20px 22px;
-  border-bottom: 1px solid var(--rule);
+.jn .jc {
+  padding-block: var(--s-6) var(--s-9);
 }
 
 .jn-step.is-current {
-  align-items: start;
-  row-gap: var(--s-6);
-  padding-block: var(--s-7) var(--s-8);
-  border-bottom-color: var(--graphite);
+  padding-block: var(--s-6) var(--s-8);
 }
 
-/* the open step lights its column: a Graphite bar on rule 1 */
-.jn-step.is-current::before {
-  content: '';
-  position: absolute;
-  grid-column: r1 / r2;
-  top: -1px;
-  bottom: -1px;
-  left: -1px;
-  width: 3px;
-  background: var(--graphite);
-  pointer-events: none;
+.jn-step.is-current > .jc__t {
+  font-size: var(--t-d3);
 }
+
+.jc__b {
+  display: grid;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.jc__b > * {
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+  padding-inline: 0;
+  margin-inline: 0;
+}
+
+.jc .jn-tiers {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+}
+
+.jc__plabel {
+  margin-bottom: 4px;
+}
+
+.jc__preview .figcaption {
+  max-width: 44ch;
+}
+
 
 .jn-idx {
   font-family: var(--font-mono);
@@ -6345,7 +6472,7 @@ p.bt-lv {
 .jn-step:not(.is-current) .jn-step__title {
   font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.625rem);
   font-stretch: var(--wdth-sub);
-  font-weight: 560;
+  font-weight: 500;
   line-height: 1.15;
 }
 
@@ -6426,7 +6553,6 @@ p.bt-lv {
   color: var(--graphite);
 }
 
-/* 01 tier: the chosen bay turns Graphite between its rules */
 .jn-billing {
   display: grid;
   gap: 8px;
@@ -6447,10 +6573,10 @@ p.bt-lv {
   gap: 16px;
   align-content: start;
   padding: 20px var(--inset) 26px;
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--rule);
   cursor: pointer;
-  background-color: var(--bg); /* a tier is a block of text: the rules pass behind it (DESIGN.md §4) */
+  background-color: var(--bg);
   background-clip: content-box;
   transition: background-color var(--t-mid) var(--ease), color var(--t-mid) var(--ease);
 }
@@ -6486,13 +6612,13 @@ p.bt-lv {
 
 .jn-tier__name {
   color: var(--fg);
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .jn-tier__mark {
   width: 20px;
   height: 20px;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   border-radius: 50%;
   display: grid;
   place-content: center;
@@ -6516,7 +6642,7 @@ p.bt-lv {
 .jn-tier__amount {
   font-size: clamp(2.75rem, 2rem + 2.4vw, 4.25rem);
   font-stretch: var(--wdth-display);
-  font-weight: 580;
+  font-weight: 480;
   line-height: 0.9;
   letter-spacing: -0.01em;
 }
@@ -6565,7 +6691,6 @@ p.bt-lv {
   max-width: 40ch;
 }
 
-/* 03 country: the refusal is plain, final and polite */
 .jn-verdict:empty {
   display: none;
 }
@@ -6603,7 +6728,6 @@ p.bt-lv {
   gap: 10px;
 }
 
-/* 04 phone: what the field reads, character by character, and the exact text */
 .jn-read {
   display: flex;
   flex-wrap: wrap;
@@ -6694,7 +6818,7 @@ p.bt-lv {
   right: 0;
   top: -4px;
   bottom: -4px;
-  border-right: 1px solid var(--graphite);
+  border-right: 1px solid var(--line);
 }
 
 .jn-meter {
@@ -6703,14 +6827,13 @@ p.bt-lv {
 }
 
 .jn-meter b {
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .jn-preview figcaption {
   max-width: 34ch;
 }
 
-/* 07 checkout: a Paper sheet of what the payment page collects */
 .jn-sheet {
   display: grid;
   gap: 14px;
@@ -6734,9 +6857,9 @@ p.bt-lv {
   justify-content: space-between;
   align-items: baseline;
   padding-top: 12px;
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
   font-size: 1.0625rem;
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .jn-sheet__total b {
@@ -6751,10 +6874,9 @@ p.bt-lv {
 }
 
 .jn-sent__t {
-  font-weight: 600;
+  font-weight: 520;
 }
 
-/* 08 activation and the finished state */
 .jn-final {
   padding-block: var(--s-8) var(--s-9);
   row-gap: var(--s-6);
@@ -6805,7 +6927,7 @@ p.bt-lv {
 
 .jn-act {
   display: grid;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
   counter-reset: none;
 }
 
@@ -6825,7 +6947,7 @@ p.bt-lv {
 }
 
 .jn-act__i.is-now {
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .jn-act__n {
@@ -6835,24 +6957,6 @@ p.bt-lv {
 @media (max-width: 1023.98px) {
   .jn-idx {
     display: none;
-  }
-  .jn-idx-inline {
-    display: inline;
-    font-family: var(--font-mono);
-    font-stretch: var(--wdth-mono);
-    font-size: 0.6875rem;
-    font-weight: 450;
-    letter-spacing: var(--track-label);
-    color: var(--fg-2);
-    align-self: center;
-  }
-  .jn-step.is-current .jn-idx-inline {
-    color: var(--fg);
-  }
-  .jn-step.is-current::before {
-    grid-column: full-start / r1;
-    left: auto;
-    right: -1px;
   }
 }
 
@@ -6877,16 +6981,13 @@ p.bt-lv {
     justify-items: center;
   }
   .jn-preview {
-    justify-items: center;
+    justify-items: stretch;
   }
   .jn-preview figcaption {
     max-width: none;
   }
 }
 
-/* ============================================================================================
-   STOP LINK (#u-TOKEN): one question, one button, the phone that receives the confirmation
-   ============================================================================================ */
 .us-top {
   padding-block: var(--s-9) var(--s-9);
   row-gap: var(--s-7);
@@ -6962,7 +7063,7 @@ p.bt-lv {
 .us-facts {
   padding-block: var(--s-8) var(--s-9);
   row-gap: var(--s-5);
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
 }
 
 .us-facts__dl {
@@ -6979,7 +7080,7 @@ p.bt-lv {
 }
 
 .us-fact dt {
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .us-fact dd {
@@ -7012,9 +7113,6 @@ p.bt-lv {
   }
 }
 
-/* ============================================================================================
-   STATUS (#status): a departure board per channel and the day's timetable on rule 1
-   ============================================================================================ */
 .st .page-masthead .display {
   max-width: 16ch;
 }
@@ -7028,7 +7126,7 @@ p.bt-lv {
   display: grid;
   gap: 6px;
   padding-top: 12px;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .st-next {
@@ -7056,13 +7154,13 @@ p.bt-lv {
 
 .st-c-name {
   font-size: 1rem;
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .st-when {
   display: block;
   margin-top: 2px;
-  font-weight: 400;
+  font-weight: 420;
 }
 
 .st-state {
@@ -7080,7 +7178,7 @@ p.bt-lv {
 .st-state i {
   width: 9px;
   height: 9px;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
 }
 
 .st-state.is-published i,
@@ -7111,11 +7209,10 @@ p.bt-lv {
   text-decoration-thickness: 2px;
 }
 
-/* the timetable: time in the margin, the step on rule 1, its state in the strip */
 .st-tt {
   display: grid;
   grid-template-columns: subgrid;
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
 }
 
 .st-slot {
@@ -7148,7 +7245,7 @@ p.bt-lv {
   flex: none;
   width: 9px;
   height: 9px;
-  border: 1px solid var(--fg);
+  border: 1px solid var(--line);
   transform: translateY(-1px);
 }
 
@@ -7202,7 +7299,7 @@ p.bt-lv {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: calc(var(--inset) * 2);
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
 }
 
 .st-rule {
@@ -7214,7 +7311,7 @@ p.bt-lv {
 }
 
 .st-rule dt {
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .st-rule dd {
@@ -7258,7 +7355,7 @@ p.bt-lv {
   .st-rules {
     grid-template-columns: 1fr;
   }
-  /* the board becomes one card per channel */
+
   .st-board thead {
     display: none;
   }
@@ -7316,9 +7413,6 @@ p.bt-lv {
   }
 }
 
-/* ============================================================================================
-   APP (#app): the issue desk. The issue's records on the bays, open picks with day x of 21
-   ============================================================================================ */
 .app-meta {
   display: grid;
   gap: var(--s-5);
@@ -7328,7 +7422,7 @@ p.bt-lv {
   display: grid;
   gap: 6px;
   padding-top: 12px;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .app-next__when {
@@ -7340,7 +7434,7 @@ p.bt-lv {
 
 .app-next__when .mono:first-child {
   font-size: 1rem;
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .app-next__left {
@@ -7368,7 +7462,7 @@ p.bt-lv {
 
 .app-items {
   display: grid;
-  border-top: 1px solid var(--graphite);
+  border-top: 1px solid var(--line);
 }
 
 .app-item {
@@ -7378,7 +7472,6 @@ p.bt-lv {
   align-items: start;
 }
 
-/* the section's own hairline closes the list: no second rule and empty band under the last record */
 .app-items > .app-item:last-child {
   border-bottom: 0;
   padding-bottom: 0;
@@ -7399,7 +7492,7 @@ p.bt-lv {
 
 .app-item__no .mono {
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .app-item__who {
@@ -7466,7 +7559,6 @@ p.bt-lv {
   max-width: 48ch;
 }
 
-/* open picks */
 .app-table th,
 .app-table td {
   vertical-align: middle;
@@ -7477,7 +7569,7 @@ p.bt-lv {
 }
 
 .app-c-no .mono {
-  font-weight: 600;
+  font-weight: 520;
   margin-right: 8px;
 }
 
@@ -7567,7 +7659,7 @@ p.bt-lv {
   .app-item__sms {
     max-width: none;
   }
-  /* open picks: a card per pick, the day track across the width */
+
   .app-table thead {
     display: none;
   }
@@ -7644,9 +7736,6 @@ p.bt-lv {
   }
 }
 
-/* ============================================================================================
-   ACCOUNT (#account): everything agreed to, and how to undo it
-   ============================================================================================ */
 .acc-meta {
   display: grid;
   gap: var(--s-5);
@@ -7708,7 +7797,7 @@ p.bt-lv {
   display: grid;
   gap: 12px;
   padding-top: 14px;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .acc-plan__price {
@@ -7721,7 +7810,7 @@ p.bt-lv {
 .acc-plan__amount {
   font-size: clamp(2.75rem, 2rem + 2.4vw, 4.25rem);
   font-stretch: var(--wdth-display);
-  font-weight: 580;
+  font-weight: 480;
   line-height: 0.9;
 }
 
@@ -7761,7 +7850,7 @@ p.bt-lv {
 
 .acc-result__t {
   font-size: 1.125rem;
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .acc-join {
@@ -7779,16 +7868,10 @@ p.bt-lv {
   }
 }
 
-/* the join page ends on its Chamber state without a Karst band before the footer */
 .jn:has(.jn-final.is-done) {
   padding-bottom: 0;
 }
 
-/* ============================================================================================
-   RESEARCH (#app-research): the universe on Chamber. Stock in bay 1, the four family percentiles
-   as four columns in bay 2, agreement, veto and size in bay 3. Virtualised rows; Lift only where
-   three or four families agree.
-   ============================================================================================ */
 .rx {
   background: var(--chamber);
   color: var(--mist);
@@ -7824,7 +7907,6 @@ p.bt-lv {
   margin-top: var(--s-7);
 }
 
-/* inputs on Chamber */
 .rx .m-input {
   background: var(--surface);
   border-color: var(--rule-dark-strong);
@@ -7855,13 +7937,12 @@ p.bt-lv {
   border-color: var(--rule-dark-strong);
 }
 
-/* the screener summary */
 .rx-sum {
   display: grid;
   gap: 12px;
   align-content: start;
   padding-top: 12px;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .rx-sum__head {
@@ -7874,7 +7955,7 @@ p.bt-lv {
 .rx-sum__n {
   font-size: var(--fs-stat);
   font-stretch: 80%;
-  font-weight: 540;
+  font-weight: 480;
   line-height: 1;
   color: var(--fg);
 }
@@ -7914,7 +7995,7 @@ p.bt-lv {
 
 .rx-sum__quorum dd {
   color: var(--quorum);
-  font-weight: 600;
+  font-weight: 520;
 }
 
 .rx-hist__v {
@@ -7939,7 +8020,6 @@ p.bt-lv {
   color: var(--fg-2);
 }
 
-/* presets and controls */
 .rx-presets {
   display: flex;
   flex-wrap: wrap;
@@ -8022,7 +8102,6 @@ p.bt-lv {
   display: none;
 }
 
-/* the grid: one geometry for the filter row, the head and every row */
 .rx-gridwrap {
   container-type: inline-size;
   position: relative;
@@ -8072,8 +8151,8 @@ p.bt-lv {
 
 .rx-headrow {
   min-height: 44px;
-  border-top: 1px solid var(--fg);
-  border-bottom: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .rx-h {
@@ -8253,7 +8332,7 @@ p.bt-lv {
 
 .rx-c-fam.is-top .rx-p {
   color: var(--fg);
-  font-weight: 650;
+  font-weight: 520;
 }
 
 .rx-c-fam.is-top .rx-bar i {
@@ -8305,10 +8384,9 @@ p.bt-lv {
 
 .rx-c-agree.is-quorum .rx-agree {
   color: var(--quorum);
-  font-weight: 600;
+  font-weight: 520;
 }
 
-/* 3/4 or 4/4 stopped by a veto: hollow Mist markers, never the quorum colour */
 .rx-dots.is-blocked i.is-on {
   background: transparent;
   border-color: var(--mist);
@@ -8344,7 +8422,6 @@ p.bt-lv {
   max-width: 76ch;
 }
 
-/* the two-thumb percentile range */
 .rx-range {
   display: grid;
   gap: 4px;
@@ -8455,7 +8532,6 @@ p.bt-lv {
   display: none;
 }
 
-/* copy and deciles */
 .rx-copy__body {
   display: grid;
   gap: var(--s-5);
@@ -8477,14 +8553,13 @@ p.bt-lv {
   }
 }
 
-/* the preview for Free and Signal */
 .rx-gate__cta {
   display: grid;
   gap: 14px;
   justify-items: start;
   align-content: start;
   padding-top: 12px;
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .rx-gate__price {
@@ -8497,7 +8572,7 @@ p.bt-lv {
 .rx-gate__amount {
   font-size: clamp(2.75rem, 2rem + 2.4vw, 4.25rem);
   font-stretch: var(--wdth-display);
-  font-weight: 580;
+  font-weight: 480;
   line-height: 0.9;
   color: var(--fg);
 }
@@ -8506,7 +8581,7 @@ p.bt-lv {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: calc(var(--inset) * 2);
-  border-top: 1px solid var(--fg);
+  border-top: 1px solid var(--line);
 }
 
 .rx-gate__col {
@@ -8615,7 +8690,7 @@ p.bt-lv {
     height: 28px;
     margin-top: 8px;
   }
-  /* a card per stock: name, the four percentiles on one line, veto and return */
+
   .rx-datarow {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-template-areas:
@@ -8632,7 +8707,7 @@ p.bt-lv {
     padding: 0;
   }
   .rx-scroll {
-    border-top: 1px solid var(--fg);
+    border-top: 1px solid var(--line);
   }
   .rx-gridwrap {
     margin-top: 0;
@@ -8667,7 +8742,7 @@ p.bt-lv {
   .rx-fk {
     display: inline;
     color: var(--fg-2);
-    font-weight: 400;
+    font-weight: 420;
   }
   .rx-datarow .rx-c-agree {
     grid-area: ag;
@@ -8684,7 +8759,6 @@ p.bt-lv {
   }
 }
 
-/* join · 04: what every pick text carries, and never */
 .jn-phone-main {
   display: grid;
   gap: var(--s-7);
@@ -8742,7 +8816,6 @@ p.bt-lv {
   align-content: start;
 }
 
-/* member pages: long labels (Slovene) wrap inside the button instead of pushing the page sideways */
 :is(.jn, .app, .acc, .us, .rx, .st) .btn {
   max-width: 100%;
   white-space: normal;
@@ -8756,7 +8829,7 @@ p.bt-lv {
 }
 
 @media (max-width: 639.98px) {
-  /* tap targets of 44 px on phones (segmented controls on the member pages) */
+
   :is(.jn, .app, .acc, .rx) .seg button {
     min-height: 44px;
   }
@@ -8771,7 +8844,6 @@ p.bt-lv {
   white-space: nowrap;
 }
 
-/* Slovene numbers are longer (5,6 mrd; +14,8 %): the size and return columns take more of bay 3 */
 :root[lang='sl'] .rx-row {
   grid-template-columns: var(--b) repeat(4, calc(var(--b) / 4)) 3.9rem minmax(0, 1fr) 4.9rem 4.9rem 5.3rem;
 }
@@ -8782,9 +8854,55 @@ p.bt-lv {
   }
 }
 
-/* the agreement dots only on phone cards; on wider screens the family cells already show who agrees */
 @media (min-width: 640px) {
   .rx-datarow .rx-dots {
     display: none;
+  }
+}
+
+/* #how-it-works: "Lower the bar" under the silence section, its columns on the four rules */
+.how-ltb {
+  margin-top: var(--s-6);
+}
+
+/* research: the universe strips are the page's object; the head stays short so they start in the first screen */
+.rx > .masthead {
+  padding-bottom: var(--s-4);
+}
+.rx-strips .strips-fig {
+  padding-top: var(--s-3);
+}
+.rx-strips .strips {
+  height: clamp(280px, 50svh, 560px);
+}
+
+@media (min-width: 1024px) {
+  /* research: the lede stands in bay 3 beside the title, the note under it; the strips rise into view */
+  .rx > .masthead {
+    grid-template-rows: auto auto auto;
+  }
+  .rx > .masthead > h1 {
+    grid-column: r1 / r3;
+    grid-row: 2;
+  }
+  .rx > .masthead > .masthead__lede {
+    grid-column: r3 / r4;
+    grid-row: 2;
+    align-self: end;
+    font-size: var(--t-body);
+    line-height: 1.5;
+  }
+  .rx > .masthead > .masthead__meta {
+    grid-column: r1 / r4;
+    grid-row: 3;
+  }
+  .rx .rx-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-6);
+    align-items: baseline;
+  }
+  .rx .rx-meta > * {
+    max-width: 52ch;
   }
 }

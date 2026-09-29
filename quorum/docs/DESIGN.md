@@ -1,8 +1,8 @@
-# Quorum design system: Colonnade, as built
+# Quorum design system: Stone and Signal (v2), as built
 
-This is the system the web lead built in `web/`. Follow it exactly and new pages will be indistinguishable from the existing ones. The spec it implements is `docs/BRIEF.md` §5; the structure is `docs/ARCHITECTURE.md` §5. Where this file and the code disagree, the code is right and this file is a bug.
+This is the system in `web/`. The art direction and its reasons are `docs/DESIGN-V2.md` (29.09.2026), which replaced the v1 "Colonnade" look; the product rules did not change (brief §2, §5, §7; the meaning of ultramarine; §9 and §14 below). The structure is `docs/ARCHITECTURE.md` §5. Where this file and the code disagree, the code is right and this file is a bug. v2 is the default; there is no v1 switch.
 
-**The idea in one line:** four model families are four columns (the fixed hairline rules on every page). A pick is a lintel resting on at least three of them. Ultramarine means the models agreed. The only imagery is data and type.
+**The idea in one line:** every day about 1,350 stocks fall through four stone columns (the four faint rules on every page) and nearly all come to rest as silence; on the rare day three columns hold the same stock, one ultramarine beam is laid across them, and that beam is the text. Ultramarine still means only one thing: the models agreed. The only imagery is data and type.
 
 ---
 
@@ -11,143 +11,150 @@ This is the system the web lead built in `web/`. Follow it exactly and new pages
 | File | What it holds |
 |---|---|
 | `web/index.html` | The shell: fonts, CSS, skip link, **the four rules** (`.rules`), demo bar, header, `<main id="view">`, footer, menu sheet, plinths, rule tip, two aria-live regions. No inline script or style (the server CSP forbids them). |
-| `web/css/tokens.css` | Palette, semantic tokens per surface, type, space, motion, and the metric-matched fallback faces (§3). **The only file allowed to contain hex colours.** |
-| `web/css/base.css` | Reset, type classes, the grid and the rules, focus ring, reduced motion, scroll-driven reveals, View Transitions. |
-| `web/css/components.css` | Shell and shared components (§7). |
-| `web/css/pages.css` | Page layouts: The Level, home sections, long-form pages, pricing, about, legal, 404. Add your page's block here with a banner comment. |
+| `web/css/tokens.css` | Palette, semantic tokens per surface, type, space, motion, and the metric-matched fallback faces (§3). **The only file allowed to contain hex colours.** v1 token names (`--chamber`, `--ultramarine`, `--hairline`, `--fs-*`, `--t-fast` …) remain as aliases of the v2 tokens. |
+| `web/css/base.css` | Reset, type classes, the grid and the rules (with the plumb line), focus ring, grain, reveals (masked lines, digits), the boot, reduced motion, View Transitions (the lintel sweep). |
+| `web/css/components.css` | Shell and shared components (§7): demo bar, header, pill, menu sheet, plinths, plumb label, footer and footer lintel, buttons, tables, SMS and phone. |
+| `web/css/layouts.css` | The v2 page compositions (§10): record wall, stage screen, note sheet, scaffold, pricing plinths, join colonnade, day clock, "Lower the bar", strips. **Page modules compose these.** |
+| `web/css/pages.css` | Page blocks (one banner comment per page prefix, §9), and the Assembly's block (`.asm`, owned by the hero). |
 | `web/js/app.js` | Boot, hash router, View Transitions, data loader + cache, demo clock, locale, view-as tier (demo) or the viewer's tier from `GET /api/me` (live), `ctx.launch()`. |
 | `web/js/router.js` | Route table (pure). **Add routes here.** Links are built with `href(name, param?, section?)`: `href('ledger', null, 'scoreboard')` → `#ledger~scoreboard` (a section is `~id` after the flat token, never `?key=value`). |
 | `web/js/launch.js` | `launchInfo(backtest)` (pure): the **engine launch gate** under amendment A-1, gates (a)(b)(c)(e) + (d1) + (d2); `state` is `waiting`, `research` (a gate that cannot recover failed), `ready` (the engine gate passes) or `unknown`. `launchCopy(info, locale)`: every launch sentence a page prints, for every state (§9). Every page asks `ctx.launch()` before it says anything about texts. |
-| `web/js/shell.js` | Demo bar, header, pill, menu sheet, footer, rule labels, header surface detection. |
+| `web/js/shell.js` | Demo bar, header, pill, menu sheet (the day's status in its foot, a question lights its rule), footer and the footer lintel (from the latest issue), the plumb line and plinth labels, header surface detection. |
 | `web/js/clock.js` | Demo clock and pill state (pure, tested). |
 | `web/js/i18n.js` | Shared EN/SL strings, `t()`, `tp()` (plurals), `pickL()`, `formatters()`. |
-| `web/js/dom.js` | `h()`, `svg()`, `html```, `raw()`, `announce()`, `focusEl()`, `copyText()`, `setNumber()`, `store()`, `prefersReducedMotion()`, `onVisible()`. |
+| `web/js/dom.js` | `h()`, `svg()`, `html```, `raw()`, `announce()`, `focusEl()`, `copyText()`, `setNumber()`, `store()`, `prefersReducedMotion()`, `onVisible()`; the reveals: `splitLines()` / `reveal()` (masked lines, undone once they land), `digits()` / `playDigits()` (digit reveal), `sweepLine()` / `sweep()` (the lintel sweep). |
 | `web/js/ui.js` | Components with behaviour: `hashChip`, `timestamp`, `signed`, `quorumBadge`, `sectionHead`, `statStrip`, `trackRecordLabel`, `launchNote`, `simulationNote`, `phone`, `familyName`, `familyDef`. |
 | `web/js/pages/_content.js` | Long-form template: `masthead`, `contentSections`, `toc`, `table`, `page`, `toNode`. |
-| `web/js/hero/level.js`, `level-data.js` | The Level (home hero) and its pure helpers. |
-| `web/js/charts/silence-calendar.js` | The Silence Calendar. Put new charts in `web/js/charts/` (`quorum-example.js` is the small real quorum used on home and #how-it-works). |
+| `web/js/hero/assembly.js`, `gl.js`, `shaders.js`, `flat.js`, `level-data.js` | The Assembly (home hero, DESIGN-V2 §4.1) and its pure helpers. |
+| `web/js/charts/*.js` | Charts (`silence-calendar.js`, `lower-the-bar.js`, `quorum-example.js` …). |
 | `web/js/pages/*.js` | One module per route. Stubs (`export { render } from './_pending.js'`) mark routes still to build: replace the file. |
 
-## 2. Palette and surfaces
+## 2. Palette and surfaces (DESIGN-V2 §3.2)
 
-Exact brief §5 values. Never add a colour; derive only as listed.
+Dark first. Exact values; never add a colour.
 
 | Token | Hex | Use |
 |---|---|---|
-| `--karst` | `#E3E6E4` | Page background |
-| `--paper` | `#F4F5F3` | Note sheets, the pick note, SMS phone screen |
-| `--graphite` | `#111418` | Text, primary buttons, focus ring, demo bar |
-| `--slate` | `#545C63` | Secondary text (5.4:1 on Karst) |
-| `--hairline` | `#AEB6B9` | Rules and table rules. **Never text.** |
-| `--chamber` | `#0D1014` | Dark data surfaces: hero, ledger chain, research |
-| `--mist` | `#C9CFD2` | Text on Chamber |
-| `--ultramarine` | `#1F2EE0` | **Only a quorum**: lintel, pick badge, SMS bubble, quorum cells and dots, favicon |
-| `--lift` | `#8C96FF` | The same role on Chamber |
-| `--gain` / `--loss` | `#0B6E4F` / `#B3261E` | P&L on light surfaces, always with sign and arrow |
-| `--gain-dark` / `--loss-dark` | `#4FD1A1` / `#FF8A7A` | P&L on Chamber |
+| `--night` / `--night-2` | `#0A0C0F` / `#12151A` | Home, the pick hero, research, the chain, the menu, the footer / raised on night (demo bar, phone bezel) |
+| `--mist` / `--mist-2` | `#C9CFD2` (12.6:1) / `#8E979D` (6.3:1) | Text / secondary text on night |
+| `--karst` | `#E3E6E4` | The reading ground: ledger, backtest, pricing, join |
+| `--paper` | `#F7F8F6` | Note sheets, the phone screen (lifted so it separates from Karst) |
+| `--graphite` / `--slate` | `#111418` / `#545C63` | Text / secondary text on light |
+| `--ultra` | `#1F2EE0` | **Only a quorum**: fills, badge, SMS bubble, lintel core, favicon |
+| `--lift` | `#8C96FF` | Quorum text and strokes on night (7.2:1) |
+| `--gain` / `--loss` | `#0B6E4F` / `#B3261E` | P&L on light, always with sign and arrow |
+| `--gain-night` / `--loss-night` | `#4FD1A1` / `#FF8A7A` | P&L on night |
+| `--white` | `#FFFFFF` | Text on an ultramarine fill only |
 
-Derived (same hues): `--mist-2` `#9AA3A8` (secondary text on Chamber, 7.4:1), `--rule-dark` (Mist 17%: rules on Chamber), `--rule-dark-strong` (Mist 32%), `--hairline-soft` (inner table rules).
+Alphas (not colours): `--rule-light` Graphite 11% and `--rule-night` Mist 10% (the four rules); `--line-*` 20% (borders, table rules; never text); `--line-soft-*` 10% (inner rules). `--hairline` is kept as an opaque Graphite-24%-on-Karst mix for v1 blocks that mix it.
 
-**Semantic tokens** switch per surface; components use only these: `--bg --surface --fg --fg-2 --rule --rule-inner --quorum --on-quorum --gain-c --loss-c --focus`.
+**Semantic tokens** switch per surface; components use only these: `--bg --surface --fg --fg-2 --rule --line --rule-inner --quorum --on-quorum --gain-c --loss-c --focus --grain`.
 
-- Default (Karst). `.chamber` or `[data-surface='chamber']` flips to Chamber (`--quorum` becomes Lift, Gain/Loss become the dark variants, focus becomes Mist). `.paper` returns to light inside a Chamber section.
-- `prefers-contrast: more` darkens Hairline and Slate and raises the Chamber rule alpha.
+- Default: Karst. `.night` (also `.chamber`, `[data-surface='night'|'chamber']`) flips to night: `--quorum` becomes Lift, Gain/Loss the night variants, focus Mist, grain 3.5%. `.paper` returns to light (Paper ground) inside night; `.karst` does the same on Karst.
+- `prefers-contrast: more` raises the rule and line alphas and darkens Slate.
+- **On night the lintel is light, not paint** (DESIGN-V2 §4.3): an ultramarine core with a Lift edge and a falloff. Only the lintel may emit light. Nothing uses a gradient fill; a `mask-image` falloff is technique (the plumb line), and `tests/web/design-system.test.js` allows `gradient(` only inside a mask.
 
-**Rule: if ultramarine is on screen, the models agreed.** Buttons, links, focus, hover, decoration: never ultramarine. `tests/web/design-system.test.js` fails a CSS rule that uses `--ultramarine`, `--lift` or `--quorum` unless its selector names a quorum element (allowlist in the test; extend it only for a real quorum element).
+**Rule: if ultramarine is on screen, the models agreed.** Buttons, links, focus, hover, decoration: never ultramarine. The design-system test fails a CSS rule that reads `--ultra`, `--ultramarine`, `--lift` or `--quorum` unless its selector names a quorum element (allowlist in the test; extend it only for a real quorum element).
 
-## 3. Type
+## 3. Type (DESIGN-V2 §3.1)
 
-Fonts (exact URL in `index.html`, with preconnect): **Archivo** (wdth 62–125), **Newsreader** (opsz), **Martian Mono** (wdth 75–112.5). `font-variant-numeric: tabular-nums` is global. The first route render waits up to 700 ms for Archivo and Martian Mono so headlines never reflow.
+Fonts (exact URL in `index.html`, with preconnect): **Mona Sans** (wdth 75–125, wght 200–900) for ~95% of text, **Martian Mono** (wdth 75–112.5) for every figure, ticker, timestamp, hash and label, **Instrument Serif Italic** for the voice. Newsreader and Archivo are retired. `font-variant-numeric: tabular-nums` is global; weights are intermediate (300, 360, 420, 460, 480, 500, 520).
 
-**Metric-matched fallbacks.** If Google Fonts does not load, the layout holds: each stack names a fallback family right after the web font (`'Archivo', 'Archivo Fallback', …`), defined in `tokens.css` as `@font-face` rules with `local()` sources and `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override: 0%`. Archivo Fallback maps Arial-metric faces (Arial, Liberation Sans, Arimo, Helvetica) and, because they have no width axis, has one face per `font-stretch` band (≤63% the hero, ≤72% headlines, ≤90% sub-heads, above that text and UI) and per weight band (regular below 550, bold from 550): the element's own `font-stretch` picks the face. Newsreader Fallback maps Times-metric faces (regular, italic, bold, bold italic), Martian Mono Fallback Courier-metric faces. `size-adjust` is the web font's width over the fallback's on sample copy; ascent and descent are the web fonts' own metrics (Archivo 0.878/0.210, Newsreader 0.735/0.265, Martian Mono 1.0/0.2) divided by `size-adjust`, so baselines and line boxes match. Re-measure if a font or a stretch token changes. Check with `node scripts/e2e.js` and a screenshot with the font hosts blocked: "No quorum, no text." fits at 1440 either way.
-
-| Class | Face and setting | Use |
+| Class | Setting | Use |
 |---|---|---|
-| `.display` + `.d-hero` | Archivo 62%, 600, `--fs-hero` (to 11rem), leading 0.88 | The home headline only |
-| `.display.d1` | Archivo 64%, 580, `--fs-d1` (to 8.5rem) | Page titles (`masthead`) |
-| `.display.d2` | same, `--fs-d2` (to 6rem) | Section headlines (`sectionHead`) |
-| `.display.d3` / `.d4` | `--fs-d3` / `--fs-d4` (78%) | Sub-heads, content-section h2, step titles |
-| `.lede` (+ `.serif`) | Archivo 100, `--fs-lede`, max 44ch | Standfirst under a headline |
-| `.prose` (+ `.prose--serif`) | body, max **68ch** | Long text; Newsreader for theses and notes |
-| `.serif` | Newsreader, optical sizing | Theses, pull quotes (`.honest-quote`), the hero's last caption |
-| `.label` | Martian Mono 87.5%, 11px, uppercase, tracked 0.09em, `--fg-2` | Kickers, metadata, table heads |
-| `.mono`, `.num` | Martian Mono 87.5%, 13px, slashed zero | Tickers (`.ticker`), ISO timestamps, hashes, numeric columns |
+| `.display.d-hero` | Mona 75 / 460, `--t-hero` (to 13rem), leading .84, −.035em | The home headline; the pick ticker |
+| `.display.d1` | Mona 75 / 480, `--t-d1` (to 9rem), .88, −.03em | Page titles (`masthead`, `.wall__title`) |
+| `.display.d2` | Mona 75 / 500, `--t-d2` (to 6rem), .9 | Section headlines (`sectionHead`), the menu questions |
+| `.display.d3` / `.d4` | Mona 75 / 500, `--t-d3` / `--t-d4` | Sub-heads, content-section h2, step titles |
+| `.t-lintel` | Mona **125 / 300**, `--t-lintel` | One horizontal statement across r1→r4 ("1,349 stocks, no quorum.") |
+| `.voice` | Instrument Serif italic, `--t-voice`, .95 | **Once per page at most**: the verdict ("Most days, nothing.", "Whatever happened.", the scoreboard answer, "Hypothetical.") |
+| `.lede` | Mona 112 / 360, `--t-lede`, 1.3, max 40ch | Standfirst under a headline |
+| `.prose` | Mona 100 / 420, 17 px (16 below 640), 1.55, max **64ch** | Long text (r1→r3) |
+| `.fig-xl` | Martian 75 / 300, `--t-fig-xl`, −.04em, nowrap | Record figures: the ledger wall, pricing prices |
+| `.label` | Martian 75 / 520 caps, 11 px, +.08em, `--fg-2` | Kickers, metadata, table heads |
+| `.mono`, `.num` | Martian 75 / 420, 13 px, slashed zero | Tickers, timestamps, hashes, numeric columns |
 
-Headlines hang from rule 1: `.display` has a −0.04em optical margin so stems, not side bearings, sit on the inset line. Headlines may run past rule 4 into the right margin; body text never does.
+Display type runs to at most three lines with `text-wrap: balance`, `word-spacing: var(--ws-condensed)` (.02em: measured with the real Mona Sans, DESIGN-V2's .06em read loose), and a minimum of 2.5rem on phones. `.serif` / `.prose--serif` (v1 names in page modules) now set Mona Sans.
 
-## 4. The grid and the rules
+**Metric-matched fallbacks.** If Google Fonts does not load, the layout holds (`tokens.css`): `'Mona Sans Fallback'` maps Arial-metric faces (Arial, Liberation Sans, Arimo, Helvetica) with one face per width band, picked by the element's `font-stretch` (≤87.4% the display band, ≤106% text, ≤118% ledes, above that the lintel), plus a bold face for text; display type tries `'Mona Sans Fallback N'` (Arial Narrow / Liberation Sans Narrow, width estimated) first. `'Martian Mono Fallback'` maps Courier-metric faces; `'Instrument Serif Fallback'` maps Georgia Italic (estimated from the Times ratio) and `'Instrument Serif Fallback T'` Times-metric italics (measured). `size-adjust` is the web font's width over the fallback's on sample copy (Mona 75 at 480: 70.6%, 100: 102.4%, 112: 104.6%, 125: 107.6%; Martian 75: 100%; Instrument Serif: 86.4% of Times italic); ascent/descent are the web fonts' own metrics (Mona 1.09/0.32, Martian 1.0/0.2, Instrument Serif 0.99/0.31) divided by `size-adjust`, so line breaks and line boxes match. Re-measure if a font or a stretch token changes (render sample copy in both faces and compare widths).
 
-Four fixed, full-height hairlines (`.rules > i`, in `index.html`) are painted once and never re-render. They are the axes of every page. Every full-width element uses the same template, so its lines coincide with the rules:
+## 4. The grid and the rules (DESIGN-V2 §3.3)
+
+Four fixed, full-height rules (`.rules > i`, in `index.html`) are painted once and never re-render. They are the axes of every page. Every full-width element uses the same template, so its lines coincide with the rules:
 
 ```
 --cols: [full-start] M [r1] BAY [r2] BAY [r3] BAY [r4] M [full-end]
-phone  (<640):   M = 16px, BAY = 1fr         (rules on a 4-column grid with 16 px gutters)
+phone  (<640):   M = 16px, BAY = 1fr
 tablet (640+):   M = 40px, BAY = 1fr
 desktop(1024+):  BAY = min(25%, 460px), M = 1fr each (1440 → rules at 180/540/900/1260)
 ```
 
-- Put `.grid` on any full-width block (sections, rows). Children get `padding-inline: var(--inset)` (12/14/16 px) so text never touches a rule; `.flush` removes it (plots, canvases, subgrids).
-- Placement: `.c-head` r1→full-end (headlines), `.c-body` r1→r3 (text, 68ch), `.c-meta` r3→r4 (metadata strip), `.c-wide` r1→r4 (charts, tables), `.c-b1/.c-b2/.c-b3` single bays, `.c-b23`, `.c-r4` r4→full-end, `.c-margin` full-start→r1 (section index, clock times; falls to r1→r4 below 1024). Below 640 everything but `.c-head`/`.c-wide`/`.c-margin` spans r1→r4.
-- Nested alignment: `display: grid; grid-template-columns: subgrid` on a child spanning `full-start / full-end` keeps the line names (used by the nav, footer, scoreboard, families row, hero axes).
-- Opaque full-width surfaces (Chamber sections, the hero stage, the footer) add `.ruled`: two pseudo-elements redraw the rules in `--rule` (Mist at 17% on Chamber), so the colonnade continues through dark sections.
-- Charts put their axes on the rules. Examples: the hero's four percentile axes; the scoreboard's 10–90% hit-rate axis across r2→r4 so **50% is rule 3**; the pick note's 21 trading days across r1→r4 (7 days a bay); three pricing tiers on three bays; four responsible persons on four rules.
-- **Rule labels.** Hovering within 5 px of a rule for 220 ms lights it and shows a tip (`.rule-tip`): "Column A · Trend · definition" from `meta.families`. Keyboard and screen readers get the four `.plinth` buttons (A–D) fixed at the rule bases, hidden over the hero (whose axes carry the labels) and below 1024 px. The plinths never sit on content: they are transparent and let clicks through until the pointer comes within 48 px of the viewport's bottom (`.is-near`), a rule is lit, or a keyboard user tabs to one (`:focus-within`).
-- **Rules pass behind data, never through it.** A column rule must not strike a digit (`tests/e2e/checks.js ruleStrike`). Either lay the columns out on the rules (the ledger's record table, marked `.table--on-rules`), or let the rules pass behind: every other `.table` has opaque cells (`--bg`) and `.dl` terms and values are opaque, so the colonnade stops at the data and resumes after it. Stat strips (`dl.stats`) stand on the colonnade: one stat per bay from 640 px, one per half-bay from 1280 px, text inset from the rule, and each `.stat` is a row subgrid so values share one baseline.
-- **Rules pass behind running text, at every width** (`base.css`, checked by `proseStrike`). Like columns behind a lintel: every block of text in the view stands on an opaque ground of its surface (`background-color: var(--bg)`, `background-clip: content-box`): paragraphs and ledes, list items, notes and captions, labels and kickers, definition terms and values, non-display sub-heads, `summary`, `time`, `.ts`, `.small`/`.muted`/`.mono`/`.num` runs, TOC links and arrow links. The content-box clip keeps the inset clear, so a rule beside the text (rule 1 or 4) stays visible and a rule inside the block (2 or 3) stops at its top and resumes under it. A text group (`.prose`, a text-only `div.c-body`, a list of short lines such as `.tier__items`, `.jn-list`, `.sc-legend`, the `.toc`) is one ground, gaps included, so no stub of a rule shows between its paragraphs. A row laid out on the page grid (a `.grid` list item: the timetables, the chain, the changelog) is not one block: its columns sit on the rules and its text is grounded piece by piece (`groundMismatch` fails a grounded grid row). One-line labels, kickers and phone section indexes shrink to their words (`justify-self: start`), so their ground does not cut the rules where there is no text. Idle segmented controls, tags and ghost buttons are opaque too; a filled button inverts to the ground on hover, never to glass. The rule is zero-specificity (`:where`), so a component that paints its own ground keeps it. **Not grounded:** headlines (`.display`, and the content sections' `h2`, set like one: the rules may pass behind their glyphs), charts and plot labels (§8), the hero (§11).
-- **A container that paints another colour than `--bg` redefines `--bg`**, or its text grounds show as patches (`groundMismatch`): the phone (`--bg: chamber`, its screen `paper`), the backtest's shaded flag and banner (`--shade`), a join tier on hover (`paper`) or chosen (`graphite`), the ledger's open rows (Paper 55% over Karst) and hovered rows (`paper`). `.paper` and `.chamber` do it already.
-- **Below 1024 px** a 2 × 2 of four things (the home families, the pick drivers below 1280) uses two equal halves between rule 1 and rule 4, never two bays beside one.
+Bays: **bay 1** r1–r2, **bay 2** r2–r3, **bay 3** r3–r4, **bay 4** r4 → the edge (the families take one bay each; "Lower the bar" and the pricing launch note sit in bay 4).
 
-## 5. Space and rhythm
+- Put `.grid` on any full-width block. Children get `padding-inline: var(--inset)` (12/14/16 px); `.flush` removes it.
+- Placement: `.c-head` r1→full-end (headlines), `.c-body` r1→r3 (text, 64ch), `.c-meta` / `.c-b3` r3→r4, `.c-wide` and **`.c-lintel`** r1→r4 (one line from r1 to r4), `.c-b1` `.c-b2` `.c-b12` `.c-b23`, `.c-b34` r3→edge, `.c-b4` / `.c-r4` r4→edge, `.c-margin` full-start→r1. Below 1024 the margin and bay-4 placements fall to r1→r4; below 640 everything but `.c-head`/`.c-wide`/`.c-margin` spans r1→r4. `.on-bays` lays four children one per bay (two halves below 1024).
+- Nested alignment: `grid-template-columns: subgrid` on a child spanning `full-start / full-end`.
+- **The rules are continuous and faint** (1 px, Graphite 11% on light). They pass behind running text: there are no text grounds any more. Opaque full-width surfaces (night sections, the footer) add `.ruled`, whose pseudo-elements redraw the rules in that surface's `--rule` (Mist 10% on night). `tests/e2e/checks.js ruleContrast` fails a rule above alpha .12 where it crosses a line of text.
+- **Only display type masks the rules**: `.display` paints its surface's `--bg` clipped to its own box (`width: fit-content`, .12em padding), so a rule never cuts a headline. `.display--open` opts out (a headline over a canvas; the Assembly's headlines).
+- **Rules never strike a digit** (`ruleStrike`): lay table columns out on the rules (`.table--on-rules`), or let the rules pass behind opaque cells (every other `.table` and `.dl` values are opaque). A container that paints its own colour redefines `--bg` (`.paper`, `.night`, the phone), so opaque cells and display grounds match it (`groundMismatch`).
+- **The plumb line** (DESIGN-V2 §4.5, `pointer: fine`): within 24 px of a rule, shell.js adds `.is-lit` to that `.rules > i` and sets `--py` (pointer y) on it; the rule lights to alpha .5 over a 180 px window through a `mask-image` falloff. `.rules[data-surface='night']` lights it Mist. The label is `.rule-tip` (a Martian line, in 120 ms, out 200 ms). Keyboard and screen-reader users keep the four `.plinth` buttons at the rule bases.
+- Charts put their axes on the rules (50% on rule 3; the pick's 21 trading days across r1→r4, 7 a bay; three pricing plinths on three bays).
 
-4 px base: `--s-1` 4 … `--s-10` 128. Sections: `.section` pads `--section` (5–11 rem) and separates with a Hairline; one idea per viewport. Mastheads pad 4–8 rem. Tables pad 11 px vertically. Tap targets are at least 44 px on phones (pill, menu, selects, footer links, FAQ summaries).
+## 5. Space, texture and rhythm
 
-## 6. Motion
+4 px base: `--s-1` 4 … `--s-10` 128. Sections pad `--section` (5–11 rem); one idea per viewport. Tap targets are at least 44 px on phones.
 
-- Easing `--ease: cubic-bezier(0.2, 0, 0, 1)`; durations `--t-fast` 150, `--t-mid` 250, `--t-slow` 400 ms.
-- Native scroll only. The hero reads scroll progress; nothing hijacks it. The hero's step buttons scroll natively to a state.
-- Section reveals: add `.reveal` (fade + 28 px rise) or `.draw` (scaleX from the left) to any element; CSS scroll-driven animations (`animation-timeline: view()`) inside `@supports`, so no support means no animation.
-- Route changes: View Transitions on the root (viewport-sized snapshot, cheap); the rules, plinths and header are their own groups and never move. Content leaves up 10 px (160 ms) and arrives from 14 px (300 ms).
-- **Numbers never count up.** Change a number with `setNumber(el, text)`: a 150 ms cross-fade.
-- No looping animation after the hero settles. Nothing blinks, pulses or spins.
-- `prefers-reduced-motion` (or `?motion=reduce`): all transitions and animations are cut to 0.01 ms; the hero uses its stepped static states and the SVG field.
+**Grain** (DESIGN-V2 §3.4): static luminance grain, 2.5% on light and 3.5% on night (`--grain`), never animated. Without the WebGL composite it is an inline `feTurbulence` tile on `body::before`; the Assembly's composite pass sets `html[data-grain='gl']` to hide it (`off` hides it too).
+
+## 6. Motion (DESIGN-V2 §3.5, §4.2, §4.4, §4.7)
+
+- Easings: `--e-out` (reveals), `--e-io` (wipes, camera, the sweep), `--e-ui` (controls), `--e-land` (the lintel), `--e-exit` (route out). Durations `--d-1` 150, `--d-2` 260, `--d-3` 420, `--d-4` 700 ms. (`--ease`, `--t-fast|mid|slow` are aliases.)
+- Native scroll only; nothing hijacks it. Numbers never pass through false values; no looping UI animation; the hero's idle drift pauses after 12 s idle and off-screen.
+- **Everything is readable at rest.** A reveal starts from a visible state or is scroll-driven by the element's own position.
+- `.reveal`: body blocks fade up 12 px (scroll-driven, `entry 5% cover 25%`); `.draw`: a rule scales in from the left.
+- **Masked lines**: `span.ml > span.ml__i` per display line (set `--i` for the stagger). `.is-in` plays in (`translateY(102%)` → 0, 700 ms, 60 ms stagger, `--e-out`), `.is-out` plays out (→ −102%, 450 ms, 25 ms stagger). Inside `[data-reveal='scroll']` the lines ride a view timeline instead.
+- **Digits** (`digits(value, { sign })` in dom.js): `span.dg > span.visually-hidden(<whole value>) + span.dg__vis[aria-hidden] > span.dg__sign + span.dg__c > i` per character (`--r` = index from the right). `playDigits(el)` adds `.dg.is-in`: the sign fades in (150 ms) and each digit drops from blank (−100%) over 520 ms, 35 ms apart, right to left. The value is complete at rest; app.js plays the figures of the first screen on arrival.
+- **The boot** (first visit per session via `sessionStorage`, never under reduced motion or with blocked storage, skipped by any key, click, wheel or touch, gone by 1.4 s; `?boot=0` turns it off for tooling): app.js sets `html.is-boot` and inserts `div.boot > div.boot__rules > i × 4` (its own four rules rise, 60 ms apart; the page's rules are never touched) and `div.boot__lines > p.boot__line × 4`, the real latest issue from issues.json (`06:00 data in · 1,353 stocks` … `14:00 published · issue #249 · no new pick`, the outcome worded by the quorum rules of §9), typed in 12 steps, 120 ms apart; the readout fades at 900 ms, the cover at 1,200 ms, and the headline masks in from 1,000 ms. The boot hides the wait for Mona Sans (`document.fonts.load`, 1,200 ms timeout).
+- **Route changes: the lintel sweep.** `#view` is `view-transition-name: main`; the rules, the header (`chrome`), the plinths, the menu sheet and `#stage` never move. On `hashchange` a `div.sweep` (1 px on r1→r4, `view-transition-name: sweep`) draws itself along the header's bottom edge at once (the first visible change). When the page is rendered, the old main lifts 16 px and fades (180 ms, `--e-exit`), the line travels to the viewport bottom (420 ms, `--e-io`, WAAPI on `::view-transition-group(sweep)`), and the new main is revealed behind it by a px-exact `clip-path` on `::view-transition-new(main)` on the same curve. Without View Transitions the line still travels over an instant swap. A pick's badge or lintel carries `view-transition-name: pick-<no>` plus `.vt-pick` and morphs over 520 ms. Body text arriving after the sweep: `.reveal-in` inside `#view.vt-in`. Reduced motion: a 150 ms crossfade.
+- `prefers-reduced-motion` (or `?motion=reduce`): animations and transitions are cut to 0.01 ms, the boot never shows, the hero is stepped SVG.
 
 ## 7. Components (class names are the contract)
 
-**Shell.** `.demo-bar` (Graphite strip: the whole disclaimer "Simulated market · fictional companies · demo — not a real service, not investment advice" at every width, wrapping on narrow screens; view-as `.seg` (demo only, never in live mode), locale `.locale-btn`; a `<select>` on phones) · `.site-header` (sticky, hides on scroll down, shows on scroll up and on focus; `data-surface` follows the section under it) · `.mark` (lintel glyph + wordmark) · `.nav > .nav__group` (three questions in three bays: `.nav__q` label, `.nav__links`; `aria-current="page"` gets a 2 px underline) · `.pill` (issue pill: `data-state="countdown|quorum|none"`, `data-mode="live|pinned|override"`; two lines between 1200 and 1599 px) · `.menu-btn` + `.sheet` (full-height Chamber menu by the three questions; focus trapped; Escape closes) · `.site-footer` (four link columns on the rules, brief §7 disclosure, data line, wordmark).
+**Shell.** `.demo-bar` (Night-2 strip, Martian 10 px at wdth 75: the whole disclaimer "Simulated market · fictional companies · demo — not a real service, not investment advice" at every width, one line from 1024 px, at most two on phones; view-as `.seg` (demo only, never in live mode), locale `.locale-btn`; a `<select>` on phones) · `.site-header` (64 px, sticky, hides on scroll down and shows on scroll up and on focus; `data-surface` follows the section under it; the inline nav only from 1280 px) · `.mark` (lintel glyph + wordmark in Mona 125) · `.nav > .nav__group` (three questions in three bays: `.nav__q`, `.nav__links`; hover scales an underline in from the left, `aria-current="page"` holds a 2 px one) · `.pill` (`data-state="countdown|quorum|none"`, `data-mode`) · `.menu-btn` (the icon is two lintels that cross to ±45°, 220 ms) + `.sheet` (night; opens with the sweep reversed, a 420 ms clip from the bottom; three questions in d2 across bays 1–3, 2.75rem on phones; links are 48 px rows that mask in 40 ms apart; `.sheet__foot` carries the other links and the locale; focus trapped; Escape closes) · `.site-footer` (night, `.ruled`: four link columns on the rules, brief §7 disclosure, data line) with **the footer lintel**: `.footer-mark > p.d-foot` ("QUORUM" in Mona 125 / 300 across r1→r4, sized in container units) + `div.foot-lintel[data-state='quorum'|'none']` (6 px of quorum light when the latest issue had a quorum, else a hairline) + `p.label` (e.g. "No quorum today").
 
-**Actions.** `.btn` (Graphite fill; hover inverts to the ground; Mist on Chamber) · `.btn--ghost` (opaque ground) · `.arrow-link` (text + `→` in `.btn__arrow`, underline rule) · `.seg` / `.seg--light` (segmented control with `aria-pressed`; opaque in the view). Two copies of related data are labelled apart by what they hold: on #ledger "Copy the hash chain (CSV)" (every ledger record with its previous hash and hash, to verify offline) and "Copy the picks table (CSV)" (one row per pick, as the viewer sees it), each with a one-line description under it.
+**Actions.** `.btn` (Graphite fill; on hover the ground wipes in from the left through `clip-path`, 260 ms; the arrow moves 4 px; Mist on night) · `.btn--ghost` · `.arrow-link` (text + `→` in `.btn__arrow`; the underline scales in from the left, 220 ms) · `.link-u` (the same underline on any link) · `.seg` / `.seg--light` (segmented control with `aria-pressed`). Two copies of related data are labelled apart by what they hold: on #ledger "Copy the hash chain (CSV)" and "Copy the picks table (CSV)", each with a one-line description under it.
 
 **Headings.** `sectionHead({ index, kicker, title, lede, id })` returns the section index in the margin, the kicker `.label` and a `.display.d2` headline hanging from rule 1. `masthead({ kicker, title, lede, meta, draft })` is the page-level version (`h1.d1`, meta in the strip, optional `.draft-banner`).
 
 **Data atoms.**
 - `hashChip(hex)` → `button.hash`: 8 characters, `#` prefix, click copies the full hash, announces "Full hash copied: 6b80fa3c…" and flashes "Copied".
-- `timestamp([{ at, kind }])` → `span.ts` (focusable): shows `14:00 CEST`; hover or focus reveals `.ts__pop` with ISO-8601 with offset, UTC, and the kind: `produced` (production completed), `disseminated` (first disseminated), `sealed`, `published`. Pass both rows on a pick page.
+- `timestamp([{ at, kind }])` → `span.ts` (focusable): shows `14:00 CEST`; hover or focus reveals `.ts__pop` with ISO-8601 with offset, UTC, and the kind (`produced`, `disseminated`, `sealed`, `published`).
 - `signed(x)` → `span.signed.gain|loss|flat` with arrow and sign (`+3.4%`, `−2.0%`, true minus). Gain/Loss colour never appears without both.
 - `quorumBadge(n)` / `.badge-quorum` (ultramarine, `3/4` or `4/4` only) · `.tag` (hairline mono tag: `fictional`, `anchored`, `pass`) · `.ticker`.
-- `statStrip(summary, { counts })` → `dl.stats`: the headline statistics **in the brief §2.8 order** (recommendations + live since, split into new picks and renewals; hit rate with CI, median excess, mean excess, worst pick, max drawdown, median alert gap). `.stat__v` is capped at 2 rem: never the largest element, never animated. Pair it with `trackRecordLabel(locale)` wherever a record figure appears (ledger, home, pricing).
-- `CONTACT` + `contactHtml(addr)` (ui.js): one set of addresses; an address is selectable mono text with a Copy button (`button[data-copy]`, one delegated handler in app.js). In copy strings write `{{contact:support}}`; `_content.js toNode` fills it. Never `mailto:`.
+- `statStrip(summary, { counts })` → `dl.stats`: the headline statistics **in the brief §2.8 order**. `.stat__v` is Martian 300, capped at 2 rem: never the largest element on a page that also has a display headline, never animated. Pair it with `trackRecordLabel(locale)` wherever a record figure appears. (The ledger's record wall, §10, is the one place the figures are the headline.)
+- `CONTACT` + `contactHtml(addr)` (ui.js): one set of addresses as selectable mono text with a Copy button. Never `mailto:`.
 
-**Reading.** `.prose` lists use hairline dashes and mono counters · `.table` (hairline rules, Graphite head and foot rule, `.num` columns right-aligned in mono, `th scope="row"` first column) via `table({ head, rows, numCols })` · `.dl` definition rows · `.faq details` · `.note-box` · `.draft-banner` ("Draft for counsel review") · `.toc` (numbered, scrolls without re-rendering, updates `?s=` with `replaceState`).
+**Reading.** `.prose` lists use hairline dashes and mono counters · `.table` (hairline rules, a `--fg` head rule, `.num` columns right-aligned in mono, `th scope="row"` first column) via `table({ head, rows, numCols })` · `.table-scroll` (sideways scroll with a sticky first column) · `.dl` definition rows · `.faq details` · `.note-box` · `.draft-banner` · `.toc`.
 
-**SMS.** `phone({ text, at, locale })` → a hairline device with a Paper screen and the ultramarine `.sms` bubble (links underlined) · `.sms-plain` (mono, ultramarine rule) for templates in prose.
+**SMS.** `phone({ text, at, locale })` → the DOM phone (DESIGN-V2 §4.6): 300 px wide (78vw max), 44 px radius, a 10 px Night-2 bezel with a 1 px Mist-14% inner edge, a Paper screen with the real "14:00", and the ultramarine `.sms` bubble (links underlined) · `.sms-plain` (mono, quorum rule) for templates in prose.
 
-**Launch and simulation notes.** `launchNote(info, locale)` (`p.launch-note`): the state label over one computed sentence (`launchCopy().pricing`) and a link to the launch test, with a hairline above it; wherever a paid tier is offered (#pricing masthead strip, the home pricing teaser). The member pages use the fuller `launchBox` (`.m-launch`: label, lead, the engine gate in one line). `simulationNote(meta, locale)` (`section.sim-note#simulation`): `meta.notes.simulation` in the viewer's language, a label on rule 1 and one quiet paragraph, near the top of #methodology (after the masthead) and #backtest (under the hypothetical banner); nothing when the export has no note. The footer's demo line ends with a short link to it ("About the simulation" → `#methodology~simulation`) when the note exists.
+**Launch and simulation notes.** `launchNote(info, locale)` (`p.launch-note`) wherever a paid tier is offered; the member pages use `launchBox` (`.m-launch`). `simulationNote(meta, locale)` (`section.sim-note#simulation`) near the top of #methodology and #backtest; the footer's demo line links to it ("About the simulation" → `#methodology~simulation`) when the note exists.
 
-**States.** `.state` (error: data file named, Try again; a render error shows a generic sentence, never the exception) · `pages/not-found.js` (four hollow columns under a dashed lintel: "Nothing stands here.") · `_pending.js` (same room, "This room is still being built").
+**States.** `.state` (error: data file named, Try again; a render error shows a generic sentence, never the exception) · `pages/not-found.js` ("Nothing stands here.") · `_pending.js` ("This room is still being built").
 
 ## 8. Chart conventions
 
 1. Axes are the rules. Pick the domain so a meaningful value lands on a rule (50% on rule 3; day 7 and 14 on rules 2 and 3).
-2. Ultramarine (Lift on Chamber) marks only quorum marks: the lintel, 3/4 and 4/4 dots, quorum cells. Controls and non-quorum series are Graphite/Mist, hollow where they are "not a pick" (the 2/4 shadow dot, the non-agreeing column).
-3. Every estimate shows its uncertainty (CI whiskers with end caps), and small n is shown, not hidden.
-4. SVG first: `viewBox` normalised to 0–1000 with `preserveAspectRatio="none"` and `vector-effect: non-scaling-stroke`; labels are HTML positioned in % over the plot so text never stretches.
-5. Text alternative always: a caption (`.figcaption`) plus a visually hidden table or an `aria-label` summary. Interactive cells use a roving tabindex with arrow keys (see the Silence Calendar).
-6. Numbers in mono, tabular, true minus. Dates `28.09.26`; times `14:00 CEST` with the ISO on focus.
-7. No gradients, no glow, no 3D, no shadows except the hairline. Low-alpha Mist fills are allowed for bands (the top-decile band).
-8. **No label across a line.** A tick that falls on a rule is written beside it (`.sb__tick.is-start|is-mid|is-end`), never centred on it; ticks inside a plot (below 1024 px) sit above their line on an opaque `--bg` ground; end labels are stacked apart and kept clear of the zero line (`path.js endLabelYs`) on an opaque ground; a band label never sits under the lintel (below 1024 px it goes under it, centred in bay 1). Phones show fewer ticks (`.is-minor` hidden) and put notes like "coin flip" on their own line.
-9. One format per axis kind: months `MM.YY` (like dates `28.09.26`), multipliers `1× 2× 5× 10×` on ticks (`2.34×` in readouts), axis words uppercase like `.label` (`DAY 0`).
-10. A number that rounds to `0.0%` is flat: no arrow colour (`i18n.js signClassAt`, used by `fmt.signed`).
-11. Hypothetical figures shown outside #backtest (the ledger's holdout view) are labelled "Hypothetical backtest", hatched (`hatchLayer`) and drawn in Graphite: a backtest's quorum rows are not quorum marks.
+2. Ultramarine (Lift on night) marks only quorum marks: the lintel, 3/4 and 4/4 dots, quorum cells. Controls and non-quorum series are Graphite/Mist, hollow where they are "not a pick".
+3. Every estimate shows its uncertainty (CI whiskers with end caps; the wall's `.wall__ci` bar), and small n is shown, not hidden.
+4. SVG first: `viewBox` normalised to 0–1000 with `preserveAspectRatio="none"` and `vector-effect: non-scaling-stroke`; labels are HTML positioned in % over the plot. Canvas (2D or WebGL) where the mark count needs it (the Assembly, "Lower the bar", research strips), always with a text alternative.
+5. Text alternative always: a caption (`.figcaption`) plus a visually hidden table or an `aria-label` summary. Interactive cells use a roving tabindex with arrow keys; a slider is `role="slider"` with arrows ±1, PageUp/PageDown ±10, Home/End.
+6. Numbers in Martian, tabular, true minus. Dates `28.09.26`; times `14:00 CEST` with the ISO on focus.
+7. No gradient fills, no glass, no drop shadows. The one light is the quorum lintel (DESIGN-V2 §4.3); low-alpha Mist fills are allowed for bands (the 91–100 slab).
+8. **No label across a line.** A tick that falls on a rule is written beside it, never centred on it; end labels are stacked apart and kept clear of the zero line on an opaque ground.
+9. One format per axis kind: months `MM.YY`, multipliers `1× 2× 5× 10×` on ticks, axis words uppercase like `.label` (`DAY 0`).
+10. A number that rounds to `0.0%` is flat: no arrow colour (`i18n.js signClassAt`).
+11. **Everything hypothetical is scaffold**: dashed 4/3 strokes (`.scaffold` on the figure or `.is-hypo` on a mark) over the hatch, in Graphite, never a solid curve and never ultramarine: a backtest's quorum rows are not quorum marks. Outside #backtest (the ledger's holdout view) they are labelled "Hypothetical backtest".
 
 ## 9. The page-module contract
 
@@ -179,24 +186,72 @@ The app does the rest: scroll to top (or to `?s=<id>`), focus the page's `h1` (g
 
 **Quorum words.** "No quorum today" only when no stock reached the rule (`closest` below the required agreement). A day on which stocks met the rule but none could be issued (already open, capped, cooling down, removed) is "No new pick today", and says which (`_records.js issueCounts`). The quorum colour marks only stocks that met the rule with no veto.
 
-**Class prefixes (page blocks in `pages.css`).** Stage 1: `lv-` (the Level, written `lv__`), `home-`, `how-`, `sc-` (Silence Calendar), `hw-` (#how-it-works figures), `content-` (long-form). Stage 2, record pages: `rec-` (shared), `pk-` (pick), `lg-` (ledger), `cb-` (chain blocks), `is-` (issue; the same letters as the `.is-*` state modifiers, so issue blocks always carry a noun: `.is-cards`, `.is-funnel`), `st-` under `.stock` (stock), `dc-` (disclosures), `bt-` (backtest); charts `eq-` (equity), `path-`, `col-` (colonnade), `sb-` (scoreboard), `ic-`, `ds-` (deciles), `vh-` (variant histogram). Stage 3, member pages: `m-` (shared: forms, switches, consent boxes, phone thread, copy panels, confirmations, the launch line), `jn-` (join), `us-` (stop link), `st-` under `.st` (status; scope new status classes as `.st .st-*`), `app-` (app), `acc-` (account), `rx-` (research). A new page takes a new two- or three-letter prefix and a banner comment.
+**Class prefixes (page blocks in `pages.css`).** Stage 1: `asm__` (the Assembly), `lv` (the shared hero hook), `home-`, `how-`, `sc-` (Silence Calendar), `hw-` (#how-it-works figures), `content-` (long-form). Stage 2, record pages: `rec-` (shared), `pk-` (pick), `lg-` (ledger), `cb-` (chain blocks), `is-` (issue; the same letters as the `.is-*` state modifiers, so issue blocks always carry a noun: `.is-cards`, `.is-funnel`), `st-` under `.stock` (stock), `dc-` (disclosures), `bt-` (backtest); charts `eq-` (equity), `path-`, `col-` (colonnade), `sb-` (scoreboard), `ic-`, `ds-` (deciles), `vh-` (variant histogram). Stage 3, member pages: `m-` (shared: forms, switches, consent boxes, phone thread, copy panels, confirmations, the launch line), `jn-` (join), `us-` (stop link), `st-` under `.st` (status; scope new status classes as `.st .st-*`), `app-` (app), `acc-` (account), `rx-` (research). A new page takes a new two- or three-letter prefix and a banner comment.
 
-**Adding a page.** Replace the stub file for its route (or add a route to `ROUTES` and a file). Use `masthead` + `contentSections` for long-form pages, `sectionHead` + `.section.grid` for composed pages, `.chamber.ruled` for data spectacles. Add layout CSS to `pages.css` under a banner comment. Run `node --test "tests/web/**/*.test.js"` and `node scripts/e2e.js`.
+**Adding a page.** Replace the stub file for its route (or add a route to `ROUTES` and a file). Use `masthead` + `contentSections` for long-form pages, the §10 compositions (`layouts.css`) for composed pages, `.night.ruled` for data spectacles. Add page-specific CSS to `pages.css` under a banner comment. Run `node --test "tests/web/**/*.test.js"` and `node scripts/e2e.js`.
 
-## 10. Page templates
+## 10. Page compositions (DESIGN-V2 §5; classes in `layouts.css`)
 
-- **Home** (`#/`): The Level (Chamber, 400svh sticky stage, pulls up under the demo bar and header), 01 Silence Calendar, 02 How a pick happens (a timetable on rule 1; the families on all four rules; a real colonnade example), 03 Sealed ledger (Chamber: chain, Verify in your browser, headline statistics), 04 Scoreboard teaser (with the computed answer: holdout gate (b) and the sealed record), 05 Pricing teaser, footer.
-- **#how-it-works** uses the long-form template with figures (`contentSections` `figure`: a `.content-fig` subgrid under the text): the real quorum in §02, the sealed record's veto funnel in §03, the cadence as a timetable on rule 1 in §04.
-- **Long-form** (how it works, methodology, help, legal, about, pricing): `masthead` (kicker, `h1.d1`, lede in r1→r3, table of contents or controls in the meta strip), then numbered `content-sec` sections: index in the margin, `h2` on rule 1, `.prose` r1→r3, notes in the strip. Wide tables may take r1→r4 (the methodology model table does).
-- **Legal**: masthead with `.draft-banner` ("Draft for counsel review"), the other legal documents in the strip, placeholders in [brackets].
+Every page composes the grid (§4) with these blocks. Each composition names its surface; sections alternate by content, never by decoration, and the sweep is the only border between night and karst.
 
-## 11. The Level (home hero)
+**Home** (night → karst → night). The Assembly (§11) · §1 Silence: the calendar on r1→r4 under the headline, "Lower the bar" in bay 4 (`figure.ltb`, below) · §2 The day: a sticky clock in the margin (`div.day-clock.c-margin > time.fig-xl`) beside the timetable rows; the four families on `.on-bays` · §3 The chain (`section.night.ruled`) · §4 Scoreboard, the answer as `p.voice.verdict` · §5 Pricing (`.pl-row`), then the footer lintel.
 
-States by scroll progress `p` of the tall section (native scroll): **0 load** (900 ms: lines settle from noise, columns rise, the pick's polyline locks into the lintel at the 90th percentile; only after the engine is ready) → **1** `p .07–.30` every other line falls (gravity in the vertex shader, staggered by a per-line seed) → **2** `p .36–.62` the lintel travels into the phone and becomes the baseline of the real SMS; the bubble grows from it → **3** `p .68–.95` the phone screen scales into the pick note; the lintel extends 21 trading days as the excess path, Gain or Loss with sign and arrow. Caption: "Our latest closed pick. Whatever happened."
+**Ledger** (karst): the **record wall**.
+```
+section.wall.grid
+  p.label.c-wide                         kicker
+  h1.display.d1.wall__title              "The ledger."
+  div.wall__figs                         one figure per bay, in the brief's order; phones: a 2 × 3 grid of half-bays
+    div.wall__fig × 5                    87 · 51% · ↑ +0.7% · ↓ −20.3% · −15.9% (desktop: one row of five on r1→r4, an opaque slab the rules pass behind)
+      span.label.wall__k                 what it is
+      span.fig-xl.wall__v                the figure (signed() inside for excess)
+      span.wall__vci > span.wall__ci     under the hit rate only, as wide as the figure: --lo, --hi, --pt as % of its width (the 95% CI)
+      span.wall__s                       the note (n, window, "hypothetical paper portfolio" …)
+    div.wall__aside                      the sixth cell: trackRecordLabel() and a line
+```
+Then the table on the rules (`.table--on-rules`); a pick row carries `span.row-lintel` (3 px quorum, the shared `pick-<no>` transition element). The chain sits on night. Phones: rows become 3-line cards.
 
-Every in-between frame reads: the phone rises fully opaque behind a mask (never a half-transparent device), the SMS bubble grows one whole line at a time, the note's blocks appear whole one after another (never an ultramarine badge at partial opacity), and the path starts drawing as soon as the note is in place. On phones the note starts under the moved caption and keeps its "Not personal advice" line; below 1200 px the in-plot result label sits on the side of the end point away from the lintel (phones print it only in the result row).
+**Pick `#p-NNNN`** (night, then paper).
+```
+section.stage-screen.night.ruled.grid    first screen (min 100svh minus chrome, content at the bottom)
+  p.label.stage-screen__kicker
+  h1.display.d-hero.stage-screen__title  the ticker (30vw on phones)
+  div.stage-screen__strip                name (.t-lintel), .tag FICTIONAL, .badge-quorum BUY · 3/4
+article.note-sheet.paper                 rises over the stage on scroll, 24 px top radius
+  section.grid × n                       thesis + colonnade · drivers + sensitivity · the 21-day path · disclosures (always open)
+```
+When `hero.json` holds the pick, the stage is the Assembly frozen at the quorum (`createAssembly(ctx, hero, { freeze: 'quorum' })` inside `div.pk-scene`; its caption is demoted from h1, the ticker is the page's one h1); other picks get `div.pk-cols`: the four family percentiles as pillars on the rules with the lintel of quorum light over the ones that agreed. The strip's badge (`BUY · 3/4`) and the ledger row's `span.lg-lintel` carry `data-vt-pick=<no>`; app.js names the pair `pick-<no>` for one transition when both pages hold it, so it morphs. A sealed pick (Free, open) gets the same stage without the scene. The page's top is `chamber`.
 
-Engines: first paint is an inline SVG (300-line deterministic subsample, `level-data.subsample`); after two frames and idle time, raw WebGL1 (every line as anti-aliased quads, additive blending, DPR ≤ 2) on capable GPUs, a 2D canvas with the same 300 lines on software renderers, low core counts or without WebGL, and SVG only for `?gl=0` and reduced motion. Force with `?gl=webgl|canvas|0`. Rendering stops off-screen (IntersectionObserver) and when nothing changes; style writes are cached. On phones the headline yields to the caption from state 1 so the phone and note get the stage. Data: `hero.json` only (it carries the SMS in both languages, `sms` and `smsSl`, and `pick.kind`/`priorNo`: a RENEW hero is labelled "RENEW of #NNNN"). Before launch the captions say the text was published with the issue, not sent.
+**Backtest** (karst): stone versus scaffold. `div.scaffold-banner` (sticky under the header: HYPOTHETICAL) · the H1 "Hypothetical." in `.voice` · figures in `.scaffold` (`.scaffold-fig`: 16:9, 4:5 on phones) · wide tables in `.table-scroll`.
+
+**Join** (karst): the **join colonnade**.
+```
+section.jc.grid
+  ol.jc__steps                           r1→r3; the steps stand on rule 1
+    li.jc__step.jn-step.jn-step--<id>[.is-done|.is-current|.is-todo|.is-skipped]
+      span.jc__n  h2.jc__t  div.jc__b    a node on rule 1; a done step draws a short lintel (Graphite: not a quorum)
+  aside.jc__preview.jn-preview           sticky, r3→edge, for the whole flow: the live SMS preview (phoneThread), p.jn-meter.jc__count (septets)
+    button.jc__handle[aria-expanded]     phones and tablets: the preview is a bottom sheet with a 48 px handle; .is-open = 60svh
+```
+
+**Research** (night): `figure.strips-fig > div.strips` (`charts/strips.js`, full width) holds the universe canvas: every stock as a dot on each family's rule at its percentile, the top decile as a band, the rule as a dashed line (four equal lanes on phones). Research viewers see the latest universe and the virtualised table; everyone else sees the public hero issue (hero.json, dated as such), dots only, then the gate and glossary.
+
+**Pricing** (karst): "One price for everyone." in d1, then the **plinths**.
+```
+div.pl-row                               a subgrid row
+  article.pl × 3                         bays 1–3, equal, none highlighted, no ultramarine; a 6 px base under each
+    p.label.pl__name  p.fig-xl.pl__price  p.pl__per  p.pl__lead  ul.pl__items  div.pl__cta
+  p.pl-note                              its own row under the plinths, r1→r3 at a reading measure: launchNote()
+```
+Phones: stacked, under a 44 px monthly/annual `.seg`. (`.plinth` is the rule-label button; the pricing blocks are `.pl`.)
+
+**"Lower the bar"** (`charts/lower-the-bar.js`; on home §1 and in #how-it-works §5 it spans r1→r4 so its four columns are centred on the rules; the canvas spills past r1 and r4 into side pads; the thumb rides outside r4 from 1024 px, between B and C below): `figure.ltb > p.label.ltb__kicker + div.ltb__plot (canvas.ltb__canvas, span.ltb__lintel, div.ltb__bar[role=slider] > span.ltb__line + span.ltb__thumb) + figcaption.ltb__cap (span.tag.ltb__tag, p.ltb__readout, .ltb__how)`. `.is-hypothetical` on the figure dashes the tag; only at the real rule is the pick ultramarine.
+
+**Long-form** (how it works, methodology, help, legal, about): `masthead` then numbered `content-sec` sections (index in the margin, `h2` on rule 1, `.prose` r1→r3, notes in the strip). **Legal**: masthead with `.draft-banner`, placeholders in [brackets].
+
+## 11. The Assembly (home hero)
+
+DESIGN-V2 §4.1: `web/js/hero/assembly.js` builds `section.asm.lv.chamber` (520svh, a sticky 100svh `.asm__view`) with the scene on a canvas (`.asm__canvas`) over the inline SVG first paint; its block in `pages.css` is owned by the hero. The scene never runs through the words: the floor is measured to stay above every beat's headline (and the family labels under it), the quorum shot cranes in y only (no dolly in x or z; the silence tilt is 3° with depth compensation), so A and D stay within 4 px of rules 1 and 4 at every width; the step indicator's states come from the same `AT` table as the scene. A frozen scene (pick page) clears the host's kicker by 48 px (`clearOf`). States by native scroll progress `p`: universe, the vote, silence, the quorum (the lintel, the only ultramarine), the text (the lintel hands over to the SMS baseline, the phone rises, the bubble grows a line at a time), the result (the note, the 21-day path, the digit reveal, "Whatever happened."). Every state has a step button. Engines: SVG first paint (300-grain subsample) → WebGL2 (WebGL1 fallback) → 2D canvas on weak GPUs; `?gl=webgl|webgl1|canvas|0` forces one; reduced motion gets stepped SVG. Data: `hero.json` only. Before launch the captions say the text was published with the issue, not sent.
 
 ## 12. Demo clock and pill
 
@@ -208,12 +263,12 @@ WCAG 2.2 AA. Skip link (moves focus to the page `h1`). 2 px focus ring, Graphite
 
 ## 14. Do and don't
 
-**Do** say "would be texted", "a text was due" or "once SMS alerts launch" before launch, and compute every launch or gate sentence from `backtest.json` through `launchCopy` · say "engine launch gate" and name the other gates when it passes · let the rules pass behind every block of running text and redefine `--bg` on any container with its own colour · align every edge to a rule or the inset line · use one idea per viewport and real data as the spectacle · show the worst pick and every interval · keep headline stats small and in order · write "Not personal advice" where a pick appears · label every person and company in data as fictional · give every chart a caption and a text alternative · test at 1440×900, 1920×1080, 834×1194, 390×844 and 360×780.
+**Do** say "would be texted", "a text was due" or "once SMS alerts launch" before launch, and compute every launch or gate sentence from `backtest.json` through `launchCopy` · say "engine launch gate" and name the other gates when it passes · let the faint rules pass behind running text, keep tables and digits off them, and redefine `--bg` on any container with its own colour · align every edge to a rule or the inset line · use one idea per viewport and real data as the spectacle · set the voice face once per page at most · set every figure in Martian Mono · show the worst pick and every interval · keep headline stats small and in order · write "Not personal advice" where a pick appears · label every person and company in data as fictional · give every chart a caption and a text alternative · test at 1440×900, 1920×1080, 834×1194, 390×844 and 360×780.
 
-**Don't** use ultramarine for anything but a quorum · add colours, gradients, glows, glass, shadows, purple · use stock imagery or bulls, coins, robots, sparkles · animate numbers or loop animations · hijack scroll or smooth-scroll the page · centre body text or exceed 68ch · write `style=""` in templates or add external JS · show a real company name or a well-known real ticker · present a backtest outside the Backtest page · promise returns, urgency or scarcity · let a rule strike a line of text · say "launched", "SMS is open" or that a text was sent while there are no subscribers, whatever `launch.status` says · give two copy buttons the same label.
+**Don't** use ultramarine for anything but a quorum · add colours, gradient fills, glows (the quorum lintel is the one light), glass, shadows, purple · use stock imagery or bulls, coins, robots, sparkles · animate numbers or loop animations · hijack scroll or smooth-scroll the page · centre body text or exceed 64ch · write `style=""` in templates or add external JS · show a real company name or a well-known real ticker · present a backtest outside the Backtest page · promise returns, urgency or scarcity · let a rule strike a digit or a headline, or darken a rule above alpha .12 behind text · paint text grounds · say "launched", "SMS is open" or that a text was sent while there are no subscribers, whatever `launch.status` says · give two copy buttons the same label.
 
 ## 15. Tests
 
-- `node --test "tests/web/**/*.test.js"` — i18n parity and plurals, router, clock and pill states, hero data helpers, calendar layout, fixture contract and non-overwrite rule, page-module contract, design-system guards (palette, no stray hex, no gradients, ultramarine allowlist, font URL, no inline script, contrast of token pairs), and the `web/js/core` copy.
+- `node --test "tests/web/**/*.test.js"` — i18n parity and plurals, router, clock and pill states, hero data helpers, calendar layout, fixture contract and non-overwrite rule, page-module contract, design-system guards (the v2 palette, the faint rules, type and motion tokens, the fallback bands, no stray hex, gradients only in masks, retired fonts gone, ultramarine allowlist, font URL, no inline script, contrast of every §2 text pair on each surface, CSS ≤ 45 KB gzipped), and the `web/js/core` copy.
 - `node --test tests/web/launch.test.js` — the launch states with a pre-launch (back in research), a waiting and a ready fixture: labels, leads, every `launchCopy` sentence in both locales, no delivery claim in any state, the old gate name gone, the pages reading their launch copy from `launch.js`, and `simulationText`.
-- `node scripts/e2e.js` — Playwright: every route at the five sizes (390×844, 834×1194, 1440×900, 1920×1080, 360×780); fails on console errors, horizontal overflow, missing names, duplicate ids, one-h1, text contrast below AA, a rule striking a number (`ruleStrike`) or a line of running text (`proseStrike`), a text ground that differs from the surface under it or a grounded page-grid row (`groundMismatch`), and copy that breaks a contract (`copyChecks`: the demo bar's advice line at every width, no delivery claim in any launch state, no "Launch gate E", no implied launch date, no stray "null"); then a launch-state tour (home, #backtest, #methodology, #pricing, #join, #app, #status at 1440 and 390 with `backtest.json` patched to `ready` and to back-in-research and `meta.notes.simulation` present: the state's own copy, no "launched", the simulation note near the top, the footer link); plus the keyboard path, the three hero engines, reduced motion, and a live-mode tour through the Node server as an anonymous visitor (`tests/e2e/live.js`: no crash, no open ticker, no view-as; `--no-live` skips it). `node tests/e2e/member-run.js` covers the member pages' interactive states. `--sizes` picks sizes; `--base URL` tests a running server. Behind an intercepting proxy set `E2E_SPKI` to the proxy CA's SPKI hash so Google Fonts load; without them the metric-matched fallbacks (§3) keep every check meaningful.
+- `node scripts/e2e.js` — Playwright: every route at the five sizes (390×844, 834×1194, 1440×900, 1920×1080, 360×780); fails on console errors, horizontal overflow, missing names, duplicate ids, one-h1, text contrast below AA, a rule striking a number (`ruleStrike`), a rule above alpha .12 where it crosses a line of text (`ruleContrast`), a ground (a display mask, an opaque cell) that differs from the surface under it or a grounded page-grid row (`groundMismatch`), and copy that breaks a contract (`copyChecks`: the demo bar's advice line at every width, no delivery claim in any launch state, no "Launch gate E", no implied launch date, no stray "null"); then a launch-state tour (home, #backtest, #methodology, #pricing, #join, #app, #status at 1440 and 390 with `backtest.json` patched to `ready` and to back-in-research and `meta.notes.simulation` present: the state's own copy, no "launched", the simulation note near the top, the footer link); plus the keyboard path, the three hero engines, reduced motion, and a live-mode tour through the Node server as an anonymous visitor (`tests/e2e/live.js`: no crash, no open ticker, no view-as; `--no-live` skips it). `node tests/e2e/member-run.js` covers the member pages' interactive states. `--sizes` picks sizes; `--base URL` tests a running server. Behind an intercepting proxy set `E2E_SPKI` to the proxy CA's SPKI hash so Google Fonts load; without them the metric-matched fallbacks (§3) keep every check meaningful.
