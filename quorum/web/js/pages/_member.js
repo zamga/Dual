@@ -57,11 +57,12 @@ export function demoMe(ctx, asOf) {
       immediate_performance: { granted: true, version: 'v1' },
     },
     entitlements: { picks: { active: paid, until: paid ? periodEnd : null }, research_data: { active: paid && tier === 'research', until: paid && tier === 'research' ? periodEnd : null } },
-    subscription: tier === 'free' ? null : { tier, interval, status: demo.withdrawn ? 'canceled' : 'active', currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false, withdrawnAt: demo.withdrawn?.at ?? null, startedAt: start },
+    subscription: tier === 'free' ? null : { tier, interval, status: demo.withdrawn ? 'canceled' : j?.preview ? 'preview' : 'active', currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false, withdrawnAt: demo.withdrawn?.at ?? null, startedAt: start, preview: !!j?.preview },
     activation: paid ? 'active' : 'none',
     prefs: { ...demo.prefs, sms: smsEligible && smsConsent && demo.prefs.sms },
     sms: { on: paid && smsEligible && smsConsent && demo.prefs.sms },
-    withdrawal: tier === 'free' ? { eligible: false } : { eligible: !demo.withdrawn && !!start, deadline: start ? addDays(start, 14) : null, fullRefund: true },
+    // a preview join charged nothing, so there is nothing to refund: no withdrawal offer, no amount
+    withdrawal: tier === 'free' || j?.preview ? { eligible: false, preview: !!j?.preview } : { eligible: !demo.withdrawn && !!start, deadline: start ? addDays(start, 14) : null, fullRefund: true },
   };
 }
 
@@ -93,18 +94,18 @@ export function modeNote(ctx, extra) {
   );
 }
 
-// "Pre-launch · paid SMS opens at launch" with the gate status in one line and a link to the test.
+// The launch line: status label, one lead sentence, the gate status in one line and a link to the test.
+// When a gate failed that no further month can change, the lead says the engine is back in research.
 export function launchBox(ctx, backtest, { compact = false } = {}) {
   const info = launchInfo(backtest);
   const { L } = ctx;
+  const loc = (o) => o[ctx.locale] ?? o.en;
   return h(
     'div',
-    { class: ['m-launch', compact && 'is-compact', info.ready && 'is-ready'] },
-    h('p', { class: 'label' }, info.ready ? L('Launched', 'Zagnano') : L('Pre-launch', 'Pred zagonom')),
-    info.ready
-      ? h('p', { class: 'm-launch__lead' }, L('Paid SMS is open.', 'Plačljivi SMS je odprt.'))
-      : h('p', { class: 'm-launch__lead' }, L('Paid SMS opens at launch.', 'Plačljivi SMS se odpre ob zagonu.')),
-    h('p', { class: 'm-launch__gate small' }, info.text[ctx.locale] ?? info.text.en, ' ', h('a', { class: 'nowrap', href: href('backtest', null, 'launch') }, L('The launch test →', 'Preizkus za zagon →'))),
+    { class: ['m-launch', compact && 'is-compact', info.ready && 'is-ready', info.research && 'is-research'] },
+    h('p', { class: 'label' }, loc(info.label)),
+    h('p', { class: 'm-launch__lead' }, loc(info.lead)),
+    h('p', { class: 'm-launch__gate small' }, loc(info.text), ' ', h('a', { class: 'nowrap', href: href('backtest', null, 'launch') }, L('The launch test →', 'Preizkus za zagon →'))),
   );
 }
 

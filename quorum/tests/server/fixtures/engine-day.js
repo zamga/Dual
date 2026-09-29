@@ -141,12 +141,17 @@ export async function buildEngineDay({ date = '2025-11-04' } = {}) {
     vetoes: { rule: 2, llm: 0, human: 0, capped: 1 },
     methodology: '1.0',
   };
+  // A routine day: nothing in the news is material (tests put RECALL_NEWS in VLMA's place when the
+  // scan must find something).
   const news = {
     KRST: [{ id: 'k1', at: `${prevTradingDay(date)}T21:00:00Z`, source: 'Simulated Wire', headline: 'Krastova Mills opens a new plant (fictional)' }],
-    VLMA: [{ id: 'v1', at: `${prevTradingDay(date)}T12:00:00Z`, source: 'Simulated Wire', headline: 'Velmara Foods cuts full-year guidance after a product recall (fictional)' }],
+    VLMA: [{ id: 'v1', at: `${prevTradingDay(date)}T12:00:00Z`, source: 'Simulated Wire', headline: 'Velmara Foods opens a regional distribution centre (fictional)' }],
   };
   return { issue, picks, persons: PERSONS, ledger: entries, news, exit };
 }
+
+// Material negative news for VLMA (a guidance cut and a recall), for the scans that must find it.
+export const RECALL_NEWS = (date) => [{ id: 'v1', at: `${prevTradingDay(date)}T12:00:00Z`, source: 'Simulated Wire', headline: 'Velmara Foods cuts full-year guidance after a product recall (fictional)' }];
 
 // A short thesis written only from the factor JSON (for days the fixture has no template for).
 function genericThesis(d) {

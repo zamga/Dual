@@ -135,7 +135,7 @@ export async function render(ctx) {
       h('p', {}, h('a', { class: 'btn', href: href('join') }, L('Join Signal or Research', 'Naroči Signal ali Research'), h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
     );
   } else {
-    const status = sub.withdrawnAt || demo.withdrawn ? L('withdrawn', 'odstopljeno') : sub.cancelAtPeriodEnd ? L('ends at the period end', 'poteče ob koncu obdobja') : sub.status === 'active' ? L('active', 'aktivna') : sub.status;
+    const status = sub.withdrawnAt || demo.withdrawn ? L('withdrawn', 'odstopljeno') : sub.status === 'preview' ? L('preview · nothing charged', 'predogled · nič zaračunano') : sub.cancelAtPeriodEnd ? L('ends at the period end', 'poteče ob koncu obdobja') : sub.status === 'active' ? L('active', 'aktivna') : sub.status;
     billingBody.append(
       h(
         'div',
@@ -201,6 +201,8 @@ export async function render(ctx) {
     wBody.append(h('p', {}, L('There is no paid subscription to withdraw from.', 'Ni plačane naročnine, od katere bi odstopili.')));
   } else if (demo.withdrawn && !live) {
     wBody.append(withdrawnNode(demo.withdrawn));
+  } else if (w.preview) {
+    wBody.append(h('p', {}, L('Nothing was charged: this subscription is a pre-launch preview, so there is nothing to withdraw from or refund.', 'Nič ni bilo zaračunano: ta naročnina je predogled pred zagonom, zato ni česa odstopiti ali vrniti.')));
   } else if (!w.eligible) {
     wBody.append(h('p', {}, sub.withdrawnAt ? L('You have withdrawn from this subscription.', 'Od te naročnine ste odstopili.') : L('The 14-day withdrawal period has ended. You can still cancel at any time in the billing portal; access runs to the end of the paid period.', 'Rok 14 dni za odstop je potekel. Še vedno lahko kadar koli prekličete v portalu za plačila; dostop traja do konca plačanega obdobja.')));
   } else {
@@ -229,12 +231,25 @@ export async function render(ctx) {
         confirm: L('Confirm withdrawal', 'Potrdi odstop'),
         cancel: L('Keep my subscription', 'Obdrži naročnino'),
         onConfirm: async () => {
+          // Afterwards the whole page follows (channels off, billing withdrawn, no refund offer): it is
+          // rendered again from the viewer, and focus lands on the withdrawal result.
+          const refresh = () =>
+            setTimeout(async () => {
+              await ctx.reload();
+              const res = document.querySelector('#withdrawal .acc-result, #withdrawal .acc-result__t');
+              if (res) {
+                res.setAttribute('tabindex', '-1');
+                res.focus();
+              }
+            }, 0);
           if (!live) {
             demo.withdrawn = { at: stamp(), amount };
             announce(L('Withdrawal confirmed.', 'Odstop potrjen.'));
+            refresh();
             return withdrawnNode(demo.withdrawn);
           }
           const r = await api('/api/withdraw', { method: 'POST', body: {} });
+          refresh();
           return h(
             'div',
             {},

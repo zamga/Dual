@@ -13,14 +13,18 @@ import { masthead, toc } from './_content.js';
 import { ruleLabels } from '../rule.js';
 import { lineChart, hatchLayer } from '../charts/equity.js';
 import { variantHistogram } from '../charts/variants.js';
+import { launchInfo } from '../launch.js';
 
+// A month as the site writes it on every time axis (MM.YY, like dates 28.09.26): '2025-10' -> '10.25'.
+const monthOf = (m) => (m ? `${m.slice(5, 7)}.${m.slice(2, 4)}` : '');
 const yearsOf = (w) => (w ? `${w.from.slice(0, 4)}–${w.to.slice(0, 4)}` : '');
 
 export async function render(ctx) {
   const { L, fmt, locale } = ctx;
   const [bt, meta] = await Promise.all([ctx.data('backtest'), ctx.data('meta').catch(() => null)]);
   const R = ruleLabels(meta ?? bt, locale);
-  const window = yearsOf(bt.window);
+  // The hindsight span the banner discloses runs from the research window to the end of the holdout.
+  const window = yearsOf({ from: bt.window?.from ?? bt.holdout?.from ?? '', to: bt.holdout?.to ?? bt.window?.to ?? '' });
   const nVar = fmt.int(bt.variantsTried ?? 0);
   const banner = L(
     `BACKTESTED – HYPOTHETICAL. Generated with hindsight on data from ${window}. May suffer from look-ahead, survivorship and overfitting bias. We tried ${nVar} model variants. These are not live results.`,
@@ -72,6 +76,8 @@ export async function render(ctx) {
 }
 
 const xFmt = (v, fmt) => (v >= 10 ? `${fmt.num(v, 0)}×` : `${fmt.num(v, v >= 2 ? 1 : 2)}×`);
+// Axis ticks are round multiples (0.5, 1, 2, 5, 10 …): one format, no trailing decimals.
+const xTick = (v, fmt) => `${fmt.num(v, Number.isInteger(v) ? 0 : 1)}×`;
 
 function equitySection(ctx, bt, R) {
   const { L, fmt } = ctx;
@@ -107,10 +113,10 @@ function equitySection(ctx, bt, R) {
         log: true,
         bands,
         hatch: true,
-        yLabel: (v) => xFmt(v, fmt),
+        yLabel: (v) => xTick(v, fmt),
         label: L('Hypothetical growth of 1, month by month: use the arrow keys to read each month.', 'Hipotetična rast 1, mesec za mesecem: s puščicami preberete vsak mesec.'),
         legendLabel: L('Series', 'Serije'),
-        readout: (i) => `${eq[i][0].slice(0, 7)} · ${series.map((s) => `${s.label} ${xFmt(s.values[i], fmt)}`).join(' · ')}`,
+        readout: (i) => `${monthOf(eq[i][0].slice(0, 7))} · ${series.map((s) => `${s.label} ${xFmt(s.values[i], fmt)}`).join(' · ')}`,
         valueLabel: (v) => xFmt(v, fmt),
         altCaption: L('Hypothetical growth of 1 at each year end, by series', 'Hipotetična rast 1 ob koncu vsakega leta, po serijah'),
         dateLabel: L('Month', 'Mesec'),
@@ -203,6 +209,13 @@ function gatesSection(ctx, bt, R) {
   const { L, locale } = ctx;
   const gates = bt.gates ?? [];
   const passN = gates.filter((g) => g.pass).length;
+  const failIds = gates.filter((g) => !g.pass).map((g) => `(${g.id})`);
+  const join = (ids, and) => (ids.length < 2 ? ids.join('') : `${ids.slice(0, -1).join(', ')} ${and} ${ids.at(-1)}`);
+  const amended = bt.launch?.amendment;
+  const failEn = failIds.length === 0 ? 'All five passed.' : failIds.length === 1 ? `They were written before the holdout was opened and are published with their results, including the one that failed: ${failIds[0]}.` : `They were written before the holdout was opened and are published with their results, including the ${failIds.length} that failed: ${join(failIds, 'and')}.`;
+  const failSl = failIds.length === 0 ? 'Vseh pet je izpolnjenih.' : failIds.length === 1 ? `Zapisani so bili, preden je bilo preizkusno obdobje odprto, in so objavljeni z rezultati, tudi tisti, ki ni bil izpolnjen: ${failIds[0]}.` : `Zapisani so bili, preden je bilo preizkusno obdobje odprto, in so objavljeni z rezultati, tudi ${failIds.length === 2 ? 'dva, ki nista bila izpolnjena' : `${failIds.length}, ki niso bili izpolnjeni`}: ${join(failIds, 'in')}.`;
+  const amendEn = amended ? ` Gate (d) was amended after the holdout was opened (${amended.id}, disclosed in full below); the original wording’s result is kept.` : '';
+  const amendSl = amended ? ` Pogoj (d) je bil spremenjen, potem ko je bilo preizkusno obdobje odprto (${amended.id}, v celoti razkrito spodaj); rezultat prvotnega besedila ostane objavljen.` : '';
   return h(
     'section',
     { class: 'section grid rec-sec bt-sec', id: 'gates', 'aria-labelledby': 'bt-g-h' },
@@ -210,10 +223,7 @@ function gatesSection(ctx, bt, R) {
     h(
       'p',
       { class: 'lede c-body' },
-      L(
-        'All five must pass, net of costs, before SMS alerts launch. They were written before the holdout was opened and are published unchanged, including the one that failed.',
-        'Vseh pet mora biti izpolnjenih, po stroških, preden se zaženejo obvestila SMS. Zapisani so bili, preden je bilo preizkusno obdobje odprto, in so objavljeni nespremenjeni, tudi tisti, ki ni bil izpolnjen.',
-      ),
+      L(`All five must pass, net of costs, before SMS alerts launch. ${failEn}${amendEn}`, `Vseh pet mora biti izpolnjenih, po stroških, preden se zaženejo obvestila SMS. ${failSl}${amendSl}`),
     ),
     h(
       'ol',
@@ -232,6 +242,10 @@ function gatesSection(ctx, bt, R) {
   );
 }
 
+// The launch block under amendment A-1 (ARCHITECTURE.md §3): the gates that decide are (a), (b), (c), (e)
+// on the holdout, (d1) on the research window and (d2) on the pooled record. Gate (d) as first written is
+// published beside them with its result. The deflated pooled figures (launch.pooled, gate === false) are
+// comparison only: shown folded, never as a gate, never with a pass date.
 function launchSection(ctx, bt) {
   const { L, fmt, locale } = ctx;
   const ln = bt.launch;
@@ -243,8 +257,13 @@ function launchSection(ctx, bt) {
       h('p', { class: 'lede c-body' }, L('The launch assessment is not in this export. SMS alerts stay off until every gate passes.', 'Ocena za zagon ni v tem izvozu. Obvestila SMS ostanejo izklopljena, dokler niso izpolnjeni vsi pogoji.')),
     );
   }
+  const info = launchInfo(bt);
   const p = ln.pooled ?? {};
-  const ready = ln.status === 'ready';
+  const d1 = ln.d1 ?? null;
+  const d2 = ln.d2 ?? null;
+  const mtd = d2?.monthToDate && typeof d2.monthToDate === 'object' && d2.monthToDate.through ? d2.monthToDate : null;
+  const orig = ln.original ?? null;
+  const verdict = (pass, words) => h('dd', { class: ['bt-lv', pass ? 'is-pass' : 'is-fail'] }, h('span', { 'aria-hidden': 'true' }, pass ? '✓ ' : '× '), words ?? (pass ? L('pass', 'izpolnjen') : L('fail', 'ni izpolnjen')));
   const meter = (v, thr, label) => {
     const m = h('div', { class: 'bt-meter', role: 'img', 'aria-label': `${label}: ${fmt.num(v, 3)} ${L('of the required', 'od zahtevanih')} ${fmt.num(thr, 2)}` });
     const fill = h('span', { class: 'bt-meter__fill' });
@@ -254,41 +273,128 @@ function launchSection(ctx, bt) {
     m.append(fill, t);
     return m;
   };
-  const hist = p.history ?? [];
-  const histChart = hist.length
+  const labelOf = (id) => bt.gates?.find((g) => g.id === id)?.label?.[locale] ?? '';
+  const rows = [
+    ...(ln.holdoutGates ?? []).filter((g) => g.id !== 'd').map((g) => h('div', {}, h('dt', {}, L(`(${g.id}) on the holdout`, `(${g.id}) na preizkusu`), h('span', { class: 'bt-lv__k small' }, labelOf(g.id))), verdict(g.pass))),
+    d1
+      ? h(
+          'div',
+          {},
+          h('dt', {}, L('(d1) on the research window', '(d1) v raziskovalnem obdobju'), h('span', { class: 'bt-lv__k small' }, L(`DSR ${fmt.num(d1.dsrResearch, 3)}, needs ${fmt.num(d1.dsrThreshold ?? 0.95, 2)} (raw count ${fmt.num(d1.dsrResearchRaw, 3)}) · PBO ${fmt.num(d1.pbo, 3)}, bound ${fmt.num(d1.pboThreshold ?? 0.3, 1)}`, `DSR ${fmt.num(d1.dsrResearch, 3)}, potrebno ${fmt.num(d1.dsrThreshold ?? 0.95, 2)} (surovo ${fmt.num(d1.dsrResearchRaw, 3)}) · PBO ${fmt.num(d1.pbo, 3)}, meja ${fmt.num(d1.pboThreshold ?? 0.3, 1)}`))),
+          verdict(d1.pass),
+        )
+      : null,
+    d2
+      ? h(
+          'div',
+          {},
+          h('dt', {}, L('(d2) on the pooled record', '(d2) na združenem zapisu'), h('span', { class: 'bt-lv__k small' }, L(`PSR ${fmt.num(d2.psr, 3)}, needs ${fmt.num(d2.threshold ?? 0.95, 2)} · re-tested monthly`, `PSR ${fmt.num(d2.psr, 3)}, potrebno ${fmt.num(d2.threshold ?? 0.95, 2)} · preverja se mesečno`))),
+          verdict(d2.pass, d2.pass ? L(`pass${d2.firstPass ? ` since ${monthOf(d2.firstPass)}` : ''}`, `izpolnjen${d2.firstPass ? ` od ${monthOf(d2.firstPass)}` : ''}`) : L('not yet', 'še ne')),
+        )
+      : null,
+    orig
+      ? h(
+          'div',
+          { class: 'bt-lv--orig' },
+          h('dt', {}, L('(d) as first written, on the holdout', '(d) v prvotnem besedilu, na preizkusu'), h('span', { class: 'bt-lv__k small' }, L(`DSR ${fmt.num(orig.dsr, 3)}, needs 0.95 · superseded by ${ln.amendment?.id ?? 'A-1'}, result kept`, `DSR ${fmt.num(orig.dsr, 3)}, potrebno 0,95 · nadomeščeno z ${ln.amendment?.id ?? 'A-1'}, rezultat ostane objavljen`))),
+          verdict(orig.pass),
+        )
+      : null,
+  ].filter(Boolean);
+
+  const title = info.ready
+    ? L('Ready: every gate has passed.', 'Pripravljeno: vsi pogoji so izpolnjeni.')
+    : info.research
+      ? L('Back to research. SMS alerts do not launch.', 'Nazaj v raziskave. Obvestila SMS se ne zaženejo.')
+      : L('Pre-launch. SMS alerts stay off.', 'Pred zagonom. Obvestila SMS ostajajo izklopljena.');
+
+  // (d1) and (d2): the two halves of the amended gate, side by side
+  const hist = d2?.history ?? [];
+  const d2Chart = hist.length
     ? lineChart({
         dates: hist.map((r) => r.month),
         series: [
-          { key: 'dsr', label: L('Deflated Sharpe, clustered', 'Deflacionirani Sharpe, skupine'), short: L('Clustered', 'Skupine'), values: hist.map((r) => r.dsr), style: 'main', end: fmt.num(hist.at(-1).dsr, 2) },
-          { key: 'raw', label: L('Raw count of variants', 'Surovo število različic'), short: L('Raw', 'Surovo'), values: hist.map((r) => r.dsrRaw), style: 'bench', end: fmt.num(hist.at(-1).dsrRaw, 2) },
+          { key: 'psr', label: L('Probabilistic Sharpe, pooled record (d2)', 'Verjetnostni Sharpe, združen zapis (d2)'), short: 'PSR', values: hist.map((r) => r.psr), style: 'main', end: fmt.num(hist.at(-1).psr, 3) },
+          { key: 'need', label: L(`Needs ${fmt.num(d2.threshold ?? 0.95, 2)}`, `Potrebno ${fmt.num(d2.threshold ?? 0.95, 2)}`), short: L('needs', 'potrebno'), values: hist.map(() => d2.threshold ?? 0.95), style: 'bench', end: fmt.num(d2.threshold ?? 0.95, 2) },
         ],
-        yLabel: (v) => fmt.num(v, 1),
-        label: L('Pooled deflated Sharpe probability at each month-end: use the arrow keys.', 'Združena verjetnost deflacioniranega Sharpa ob vsakem koncu meseca: uporabite puščice.'),
+        yLabel: (v) => fmt.num(v, 2),
+        label: L('Gate (d2) at each month-end, pooled probabilistic Sharpe: use the arrow keys.', 'Pogoj (d2) ob vsakem koncu meseca, združeni verjetnostni Sharpe: uporabite puščice.'),
         legendLabel: L('Series', 'Serije'),
-        readout: (i) => `${hist[i].month} · ${L('months', 'mesecev')} ${hist[i].months} · DSR ${fmt.num(hist[i].dsr, 3)} · ${L('raw', 'surovo')} ${fmt.num(hist[i].dsrRaw, 3)} · Sharpe ${fmt.num(hist[i].sharpe, 2)}${hist[i].monthToDate ? L(' · month to date', ' · mesec do danes') : ''}`,
-        valueLabel: (v) => fmt.num(v, 3),
-        altCaption: L('Pooled deflated Sharpe probability at each month end', 'Združena verjetnost deflacioniranega Sharpa ob koncu vsakega meseca'),
+        readout: (i) => `${monthOf(hist[i].month)} · ${L('months', 'mesecev')} ${hist[i].months} · PSR ${fmt.num(hist[i].psr, 4)} · Sharpe ${fmt.num(hist[i].sharpe, 2)} · ${hist[i].pass ? L('pass', 'izpolnjen') : L('not yet', 'še ne')}`,
+        valueLabel: (v) => fmt.num(v, 4),
+        altCaption: L('Gate (d2): pooled probabilistic Sharpe at each month end', 'Pogoj (d2): združeni verjetnostni Sharpe ob koncu vsakega meseca'),
         dateLabel: L('Month', 'Mesec'),
         className: 'eq--dsr',
       })
     : null;
+  const dBlock = h(
+    'div',
+    { class: 'c-wide bt-pooled bt-dgates' },
+    h('p', { class: 'label' }, L(`Gate (d) as amended by ${ln.amendment?.id ?? 'A-1'}: both halves must pass`, `Pogoj (d) po dopolnilu ${ln.amendment?.id ?? 'A-1'}: izpolnjena morata biti oba dela`)),
+    h(
+      'div',
+      { class: 'bt-pooled__grid' },
+      d1
+        ? h(
+            'div',
+            { class: 'bt-pooled__m' },
+            h('p', { class: 'label' }, L(`(d1) · research window ${d1.from?.slice(0, 4) ?? ''}–${d1.to?.slice(0, 4) ?? ''} · ${d1.months} months`, `(d1) · raziskovalno obdobje ${d1.from?.slice(0, 4) ?? ''}–${d1.to?.slice(0, 4) ?? ''} · ${d1.months} mesecev`)),
+            h('p', { class: 'bt-big mono' }, fmt.num(d1.dsrResearch, 3)),
+            h('p', { class: 'small' }, L(`Deflated Sharpe probability of the research window (Sharpe ${fmt.num(d1.sharpe, 2)}), deflated for ${d1.nTrialsEff} effective independent variants. Counting all ${fmt.int(d1.nTrialsRaw)} variants as independent: ${fmt.num(d1.dsrResearchRaw, 3)}. PBO ${fmt.num(d1.pbo, 3)} (bound ${fmt.num(d1.pboThreshold ?? 0.3, 1)}).`, `Verjetnost deflacioniranega Sharpa raziskovalnega obdobja (Sharpe ${fmt.num(d1.sharpe, 2)}), deflacionirano za ${d1.nTrialsEff} dejansko neodvisnih različic. Če vseh ${fmt.int(d1.nTrialsRaw)} različic štejemo kot neodvisne: ${fmt.num(d1.dsrResearchRaw, 3)}. PBO ${fmt.num(d1.pbo, 3)} (meja ${fmt.num(d1.pboThreshold ?? 0.3, 1)}).`)),
+            meter(d1.dsrResearch, d1.dsrThreshold ?? 0.95, L('Gate (d1), research-window DSR', 'Pogoj (d1), DSR raziskovalnega obdobja')),
+            h('p', { class: ['bt-lv', d1.pass ? 'is-pass' : 'is-fail'] }, h('span', { 'aria-hidden': 'true' }, d1.pass ? '✓ ' : '× '), d1.pass ? L('Pass', 'Izpolnjen') : L('Fail: the research window is closed, so this cannot change.', 'Ni izpolnjen: raziskovalno obdobje je zaprto, zato se to ne more spremeniti.')),
+          )
+        : null,
+      d2
+        ? h(
+            'div',
+            { class: 'bt-pooled__m' },
+            h('p', { class: 'label' }, L(`(d2) · pooled ${fmt.date(p.from ?? ln.asOf)} to ${fmt.date(p.to ?? ln.asOf)} · ${d2.months} months (${d2.holdoutMonths} holdout + ${d2.sealedMonths} sealed)`, `(d2) · združeno ${fmt.date(p.from ?? ln.asOf)} do ${fmt.date(p.to ?? ln.asOf)} · ${d2.months} mesecev (${d2.holdoutMonths} preizkus + ${d2.sealedMonths} zapečaten)`)),
+            h('p', { class: 'bt-big mono' }, fmt.num(d2.psr, 3)),
+            h('p', { class: 'small' }, L(`Probabilistic Sharpe ratio: the probability that the true Sharpe of the pooled monthly excess returns is above zero (Sharpe ${fmt.num(d2.sharpe, 2)} a year). Re-tested at every month-end.`, `Verjetnostno Sharpovo razmerje: verjetnost, da je pravi Sharpe združenih mesečnih presežnih donosov nad nič (Sharpe ${fmt.num(d2.sharpe, 2)} letno). Preverja se ob koncu vsakega meseca.`)),
+            meter(d2.psr, d2.threshold ?? 0.95, L('Gate (d2), pooled PSR', 'Pogoj (d2), združeni PSR')),
+            h('p', { class: ['bt-lv', d2.pass ? 'is-pass' : 'is-fail'] }, h('span', { 'aria-hidden': 'true' }, d2.pass ? '✓ ' : '× '), d2.pass ? L(`Pass${d2.firstPass ? ` at every month-end since ${monthOf(d2.firstPass)}` : ''}.${info.research ? ` It cannot make up for ${info.failed.filter((id) => id !== 'd2').map((id) => `(${id})`).join(' or ')}.` : ''}`, `Izpolnjen${d2.firstPass ? ` ob vsakem koncu meseca od ${monthOf(d2.firstPass)}` : ''}.${info.research ? ` Ne more nadomestiti ${info.failed.filter((id) => id !== 'd2').map((id) => `(${id})`).join(' ali ')}.` : ''}`) : L('Not yet.', 'Še ne.')),
+          )
+        : null,
+    ),
+  );
+
+  const compare = Number.isFinite(p.dsr)
+    ? h(
+        'div',
+        { class: 'c-wide faq bt-compare' },
+        h(
+          'details',
+          {},
+          h('summary', {}, L('Deflated pooled figures, for comparison: not a gate', 'Deflacionirane združene številke, za primerjavo: ni pogoj')),
+          h(
+          'div',
+          { class: 'prose' },
+          h(
+            'p',
+            {},
+            L(
+              `The same pooled monthly series, deflated as gate (d) was first written: ${fmt.num(p.dsr, 3)} deflated for ${p.nTrialsEff} effective variants, ${fmt.num(p.dsrRaw, 3)} counting all ${fmt.int(p.nTrialsRaw)} (luck bars ${fmt.num(p.sr0Monthly * Math.sqrt(12), 2)} and ${fmt.num(p.sr0MonthlyRaw * Math.sqrt(12), 2)} a year; PBO ${fmt.num(p.pbo, 3)}). Under ${ln.amendment?.id ?? 'A-1'} this is published for comparison and decides nothing.`,
+              `Enaka združena mesečna serija, deflacionirana po prvotnem besedilu pogoja (d): ${fmt.num(p.dsr, 3)} ob ${p.nTrialsEff} dejansko neodvisnih različicah, ${fmt.num(p.dsrRaw, 3)} ob vseh ${fmt.int(p.nTrialsRaw)} (meji sreče ${fmt.num(p.sr0Monthly * Math.sqrt(12), 2)} in ${fmt.num(p.sr0MonthlyRaw * Math.sqrt(12), 2)} letno; PBO ${fmt.num(p.pbo, 3)}). Po ${ln.amendment?.id ?? 'A-1'} je objavljeno za primerjavo in ne odloča o ničemer.`,
+            ),
+          ),
+          ),
+        ),
+      )
+    : null;
+
   return h(
     'section',
-    { class: 'section grid rec-sec bt-sec bt-launch', id: 'launch', 'aria-labelledby': 'bt-l-h' },
+    { class: ['section grid rec-sec bt-sec bt-launch', info.research && 'is-research'], id: 'launch', 'aria-labelledby': 'bt-l-h' },
     ...sectionHead({
       index: '04',
       kicker: L(`Launch gate E · as of ${fmt.date(ln.asOf)}`, `Pogoj za zagon E · na dan ${fmt.date(ln.asOf)}`),
-      title: ready ? L('Ready: every gate has passed.', 'Pripravljeno: vsi pogoji so izpolnjeni.') : L('Pre-launch. SMS alerts stay off.', 'Pred zagonom. Obvestila SMS ostajajo izklopljena.'),
+      title,
       id: 'bt-l-h',
       size: 'd3',
     }),
-    h('p', { class: 'lede c-body' }, ln.remaining?.[locale] ?? ln.remaining?.en ?? ''),
-    h(
-      'dl',
-      { class: 'c-meta dl boxed bt-launch__gates' },
-      (ln.holdoutGates ?? []).map((g) => h('div', {}, h('dt', {}, L(`Gate (${g.id}) on the holdout`, `Pogoj (${g.id}) na preizkusu`)), h('dd', {}, g.pass ? L('✓ pass', '✓ izpolnjen') : L('× fail', '× ni izpolnjen')))),
-      h('div', {}, h('dt', {}, L('Gate (d) on the pooled record', 'Pogoj (d) na združenem zapisu')), h('dd', {}, p.pass ? L('✓ pass', '✓ izpolnjen') : L('× not yet', '× še ne'))),
-    ),
+    h('p', { class: 'lede c-body' }, ln.remaining?.[locale] ?? ln.remaining?.en ?? info.text[locale] ?? ''),
+    h('dl', { class: 'c-meta dl boxed bt-launch__gates', 'aria-label': L('The gates that decide launch', 'Pogoji, ki odločajo o zagonu') }, rows),
     ln.amendment
       ? h(
           'div',
@@ -298,47 +404,19 @@ function launchSection(ctx, bt) {
           Number.isFinite(ln.amendment.psrHoldout) ? h('p', { class: 'small muted' }, L(`Probabilistic Sharpe of the holdout before any deflation: ${fmt.num(ln.amendment.psrHoldout, 3)}.`, `Verjetnostni Sharpe preizkusnega obdobja pred deflacijo: ${fmt.num(ln.amendment.psrHoldout, 3)}.`)) : null,
         )
       : null,
-    h(
-      'div',
-      { class: 'c-wide bt-pooled' },
-      h('p', { class: 'label' }, L(`Pooled out-of-sample record · ${fmt.date(p.from)} to ${fmt.date(p.to)} · ${p.months} months (${p.holdoutMonths} holdout + ${p.sealedMonths} sealed)`, `Združen zapis zunaj vzorca · ${fmt.date(p.from)} do ${fmt.date(p.to)} · ${p.months} mesecev (${p.holdoutMonths} preizkus + ${p.sealedMonths} zapečaten)`)),
-      h(
-        'div',
-        { class: 'bt-pooled__grid' },
-        h(
-          'div',
-          { class: 'bt-pooled__m' },
-          h('p', { class: 'bt-big mono' }, fmt.num(p.dsr, 3)),
-          h('p', { class: 'small' }, L(`Deflated Sharpe probability, deflated for ${p.nTrialsEff} effective independent trials (clusters of the ${fmt.int(p.nTrialsRaw)} variants).`, `Verjetnost deflacioniranega Sharpa, deflacionirano za ${p.nTrialsEff} dejansko neodvisnih poskusov (skupin izmed ${fmt.int(p.nTrialsRaw)} različic).`)),
-          meter(p.dsr, p.dsrThreshold ?? 0.95, L('Clustered DSR', 'DSR s skupinami')),
-        ),
-        h(
-          'div',
-          { class: 'bt-pooled__m' },
-          h('p', { class: 'bt-big mono' }, fmt.num(p.dsrRaw, 3)),
-          h('p', { class: 'small' }, L(`The same test counting all ${fmt.int(p.nTrialsRaw)} variants as independent. Published beside it: the stricter reading.`, `Isti preizkus, če vseh ${fmt.int(p.nTrialsRaw)} različic štejemo kot neodvisne. Objavljeno ob strani: strožje branje.`)),
-          meter(p.dsrRaw, p.dsrThreshold ?? 0.95, L('Raw DSR', 'Surovi DSR')),
-        ),
-        h(
-          'dl',
-          { class: 'dl bt-pooled__dl' },
-          h('div', {}, h('dt', {}, L('Sharpe, annualised', 'Sharpe, letno')), h('dd', {}, fmt.num(p.sharpe, 2))),
-          h('div', {}, h('dt', {}, L('Luck bar, clustered', 'Meja sreče, skupine')), h('dd', {}, L(`${fmt.num(p.sr0Monthly * Math.sqrt(12), 2)} a year`, `${fmt.num(p.sr0Monthly * Math.sqrt(12), 2)} letno`))),
-          h('div', {}, h('dt', {}, L('Luck bar, raw', 'Meja sreče, surovo')), h('dd', {}, L(`${fmt.num(p.sr0MonthlyRaw * Math.sqrt(12), 2)} a year`, `${fmt.num(p.sr0MonthlyRaw * Math.sqrt(12), 2)} letno`))),
-          h('div', {}, h('dt', {}, 'PBO'), h('dd', {}, `${fmt.num(p.pbo, 3)} (${L('bound', 'meja')} ${fmt.num(p.pboThreshold ?? 0.3, 1)})`)),
-          p.passAt ? h('div', {}, h('dt', {}, L('At this pace, passes', 'Pri tem tempu izpolnjen')), h('dd', {}, `${p.passAt} · ${L(`${fmt.int(p.monthsToPass)} months`, `${fmt.int(p.monthsToPass)} mesecev`)}`)) : null,
-        ),
-      ),
-    ),
-    histChart,
-    h(
-      'p',
-      { class: 'c-body rec-note' },
-      L(
-        `Monthly excess returns of the follow-every-pick paper portfolio over the benchmark, net of costs: the holdout backtest from ${fmt.date(p.from)}, then the sealed record; the current month runs to ${fmt.date(p.to)}. Re-tested at every month-end with the same deflation and the same PBO bound.`,
-        `Mesečni presežni donosi papirnega portfelja vseh izbir nad merilom, po stroških: povratni test preizkusnega obdobja od ${fmt.date(p.from)}, nato zapečaten zapis; tekoči mesec teče do ${fmt.date(p.to)}. Preverjeno ob vsakem koncu meseca z enako deflacijo in enako mejo PBO.`,
-      ),
-    ),
+    dBlock,
+    d2Chart,
+    d2
+      ? h(
+          'p',
+          { class: 'c-body rec-note' },
+          L(
+            `Gate (d2) uses monthly excess returns of the follow-every-pick paper portfolio over the benchmark, net of costs: the holdout backtest from ${fmt.date(p.from ?? bt.holdout?.from)}, then the sealed record after ${fmt.date(bt.holdout?.to)}, complete months only, through ${fmt.date(p.to ?? d2.through ?? ln.asOf)}.${mtd ? ` The month to date (to ${fmt.date(mtd.through)}, probabilistic Sharpe ${fmt.num(mtd.psr, 3)}) is not a test result; it enters the test at its month-end.` : ''}`,
+            `Pogoj (d2) uporablja mesečne presežne donose papirnega portfelja vseh izbir nad merilom, po stroških: povratni test preizkusnega obdobja od ${fmt.date(p.from ?? bt.holdout?.from)}, nato zapečaten zapis po ${fmt.date(bt.holdout?.to)}, samo celi meseci, do ${fmt.date(p.to ?? d2.through ?? ln.asOf)}.${mtd ? ` Tekoči mesec (do ${fmt.date(mtd.through)}, verjetnostni Sharpe ${fmt.num(mtd.psr, 3)}) ni rezultat preizkusa; v preizkus vstopi ob koncu meseca.` : ''}`,
+          ),
+        )
+      : null,
+    compare,
   );
 }
 
@@ -347,9 +425,11 @@ function overfitSection(ctx, bt) {
   const d = bt.dsrDetail ?? {};
   const raw = d.raw ?? {};
   const k12 = Math.sqrt(12);
+  const dR = d.dsrResearch ?? bt.launch?.d1?.dsrResearch;
   const markers = [
     Number.isFinite(d.expectedMaxSharpeMonthly) ? { value: d.expectedMaxSharpeMonthly * k12, label: L(`Best of ${d.nTrials ?? '?'} clusters by luck`, `Najboljša od ${d.nTrials ?? '?'} skupin po naključju`), cls: 'is-luck' } : null,
     Number.isFinite(raw.expectedMaxSharpeMonthly) ? { value: raw.expectedMaxSharpeMonthly * k12, label: L(`Best of ${fmt.int(raw.nTrials ?? bt.variantsTried)} variants by luck`, `Najboljša od ${fmt.int(raw.nTrials ?? bt.variantsTried)} različic po naključju`), cls: 'is-luckraw' } : null,
+    Number.isFinite(bt.stats?.sharpe) ? { value: bt.stats.sharpe, label: L('Research Sharpe (d1)', 'Sharpe raziskave (d1)'), cls: 'is-research' } : null,
     Number.isFinite(bt.statsHoldout?.sharpe) ? { value: bt.statsHoldout.sharpe, label: L('Holdout Sharpe', 'Sharpe preizkusa'), cls: 'is-hold' } : null,
   ].filter(Boolean);
   return h(
@@ -372,8 +452,8 @@ function overfitSection(ctx, bt) {
         {},
         h('strong', {}, L('Deflated Sharpe ratio (DSR). ', 'Deflacionirano Sharpovo razmerje (DSR). ')),
         L(
-          `The probability that the real edge is above zero after allowing for the best-of-many luck, for short samples and for fat tails. We require at least 0.95. The holdout scores ${fmt.num(bt.dsr, 3)} when similar variants are grouped into ${d.nTrials ?? '?'} independent clusters, and ${fmt.num(raw.dsr, 3)} if all ${fmt.int(raw.nTrials ?? bt.variantsTried)} count separately.`,
-          `Verjetnost, da je resnična prednost nad nič, ko upoštevamo srečo najboljšega izmed mnogih, kratke vzorce in debele repe. Zahtevamo vsaj 0,95. Preizkusno obdobje doseže ${fmt.num(bt.dsr, 3)}, ko podobne različice združimo v ${d.nTrials ?? '?'} neodvisnih skupin, in ${fmt.num(raw.dsr, 3)}, če vseh ${fmt.int(raw.nTrials ?? bt.variantsTried)} štejemo posebej.`,
+          `The probability that the real edge is above zero after allowing for the best-of-many luck, for short samples and for fat tails. We require at least 0.95. Gate (d) as first written applied it to the holdout: ${fmt.num(bt.dsr, 3)} when similar variants are grouped into ${d.nTrials ?? '?'} independent clusters, ${fmt.num(raw.dsr, 3)} if all ${fmt.int(raw.nTrials ?? bt.variantsTried)} count separately. ${Number.isFinite(dR) ? `Amendment A-1 moved the test to the research window, where the variants were tried (gate d1): ${fmt.num(dR, 3)} with the clusters, ${fmt.num(raw.dsrResearch, 3)} counting every variant. All of them are below 0.95.` : ''}`,
+          `Verjetnost, da je resnična prednost nad nič, ko upoštevamo srečo najboljšega izmed mnogih, kratke vzorce in debele repe. Zahtevamo vsaj 0,95. Pogoj (d) v prvotnem besedilu jo je uporabil na preizkusnem obdobju: ${fmt.num(bt.dsr, 3)}, ko podobne različice združimo v ${d.nTrials ?? '?'} neodvisnih skupin, ${fmt.num(raw.dsr, 3)}, če vseh ${fmt.int(raw.nTrials ?? bt.variantsTried)} štejemo posebej. ${Number.isFinite(dR) ? `Dopolnilo A-1 je preizkus prestavilo v raziskovalno obdobje, kjer so bile različice preizkušene (pogoj d1): ${fmt.num(dR, 3)} s skupinami, ${fmt.num(raw.dsrResearch, 3)}, če štejemo vsako različico. Vse so pod 0,95.` : ''}`,
         ),
       ),
       h(
@@ -390,18 +470,18 @@ function overfitSection(ctx, bt) {
       'dl',
       { class: 'c-meta stats boxed bt-od' },
       [
-        ['DSR', fmt.num(bt.dsr, 3), L(`${d.nTrials ?? '?'} clusters · needs 0.95`, `${d.nTrials ?? '?'} skupin · potrebno 0,95`)],
-        [L('DSR, raw count', 'DSR, surovo'), fmt.num(raw.dsr, 3), L(`${fmt.int(raw.nTrials ?? bt.variantsTried)} variants`, `${fmt.int(raw.nTrials ?? bt.variantsTried)} različic`)],
+        [L('DSR, holdout', 'DSR, preizkus'), fmt.num(bt.dsr, 3), L(`${d.nTrials ?? '?'} clusters · raw ${fmt.num(raw.dsr, 3)} · gate (d) as first written`, `${d.nTrials ?? '?'} skupin · surovo ${fmt.num(raw.dsr, 3)} · pogoj (d) v prvotnem besedilu`)],
+        Number.isFinite(dR) ? [L('DSR, research window', 'DSR, raziskovalno obdobje'), fmt.num(dR, 3), L(`${d.nTrials ?? '?'} clusters · raw ${fmt.num(raw.dsrResearch, 3)} · gate (d1), needs 0.95`, `${d.nTrials ?? '?'} skupin · surovo ${fmt.num(raw.dsrResearch, 3)} · pogoj (d1), potrebno 0,95`)] : null,
         ['PBO', fmt.num(bt.pbo, 3), L('CSCV, 16 blocks · bound 0.3', 'CSCV, 16 blokov · meja 0,3')],
-      ].map(([k, v, s]) => h('div', { class: 'stat' }, h('dt', { class: 'stat__k' }, k), h('dd', { class: 'stat__v' }, v), h('dd', { class: 'stat__s' }, s))),
+      ].filter(Boolean).map(([k, v, s]) => h('div', { class: 'stat' }, h('dt', { class: 'stat__k' }, k), h('dd', { class: 'stat__v' }, v), h('dd', { class: 'stat__s' }, s))),
     ),
     (bt.variantSharpes ?? []).length ? variantHistogram(bt.variantSharpes, { markers, fmt, L }) : null,
     h(
       'p',
       { class: 'c-body figcaption' },
       L(
-        `Each bar counts variants by their annualised Sharpe ratio on the research window. The lines show what the best one would reach by luck alone, and what the chosen rule did on the untouched holdout. Clusters group variants whose returns move together; the number of clusters is chosen by how cleanly they separate.`,
-        `Vsak stolpec šteje različice po letnem Sharpovem razmerju v raziskovalnem obdobju. Črte kažejo, kaj bi najboljša dosegla zgolj po naključju, in kaj je izbrano pravilo doseglo na nedotaknjenem preizkusu. Skupine združujejo različice, katerih donosi se gibljejo skupaj; število skupin je izbrano po tem, kako čisto se ločijo.`,
+        `Each bar counts variants by their annualised Sharpe ratio on the research window. The lines show what the best one would reach by luck alone, what the chosen rule did on the research window (the figure gate d1 deflates) and what it did on the untouched holdout. Clusters group variants whose returns move together; the number of clusters is chosen by how cleanly they separate.`,
+        `Vsak stolpec šteje različice po letnem Sharpovem razmerju v raziskovalnem obdobju. Črte kažejo, kaj bi najboljša dosegla zgolj po naključju, kaj je izbrano pravilo doseglo v raziskovalnem obdobju (številka, ki jo deflacionira pogoj d1) in kaj na nedotaknjenem preizkusu. Skupine združujejo različice, katerih donosi se gibljejo skupaj; število skupin je izbrano po tem, kako čisto se ločijo.`,
       ),
     ),
   );

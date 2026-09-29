@@ -35,7 +35,7 @@ test('schema has every brief §4.5 table and ledger_entries; opening twice is id
   for (const t of BRIEF_TABLES) assert.ok(tables.includes(t), `missing table ${t}`);
   const again = openDb(':memory:');
   assert.equal(again.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, SCHEMA_VERSION);
-  assert.equal(SCHEMA_VERSION, '2');
+  assert.equal(SCHEMA_VERSION, '3');
   for (const t of ['issue_runs', 'pick_reveals', 'approver_signoffs', 'scheduler_runs', 'ops_alerts']) assert.ok(tables.includes(t), `missing table ${t}`);
   again.close();
   db.close();
@@ -119,7 +119,7 @@ test('notifications are unique per (rec_id, user_id, channel) and per idempotenc
   db.close();
 });
 
-test('a part 1 database (schema version 1) is migrated to version 2 in place', async () => {
+test('a part 1 database (schema version 1) is migrated to the current version in place', async () => {
   const { mkdtempSync, rmSync, readFileSync } = await import('node:fs');
   const { join } = await import('node:path');
   const { tmpdir } = await import('node:os');
@@ -133,19 +133,38 @@ test('a part 1 database (schema version 1) is migrated to version 2 in place', a
     raw.exec(v1);
     raw.exec("INSERT INTO schema_meta (key, value) VALUES ('schema_version', '1')");
     raw.exec("INSERT INTO users (id, email, created_at, updated_at) VALUES ('usr_old', 'old@example.si', 'x', 'x')");
+    // provider log rows written before data minimisation: a hashed phone number, a full Stripe event
+    const oldCallback = { MessageSid: 'SMold', MessageStatus: 'delivered', To: `sha256:${'a'.repeat(64)}`, From: 'QUORUM', AccountSid: 'AC1' };
+    raw.prepare("INSERT INTO delivery_events (provider, provider_sid, status, payload, received_at) VALUES ('twilio', 'SMold', 'delivered', ?, 'x')").run(JSON.stringify(oldCallback));
+    const oldEvent = {
+      id: 'evt_old',
+      type: 'checkout.session.completed',
+      created: 1,
+      data: { object: { id: 'cs_1', object: 'checkout.session', client_reference_id: 'usr_old', customer: 'cus_1', customer_email: 'old@example.si', customer_details: { name: 'Old Person', email: 'old@example.si', address: { line1: 'Street 1', city: 'Ljubljana', country: 'SI' } }, amount_total: 1900, currency: 'eur' } },
+    };
+    raw.prepare("INSERT INTO processed_events (provider, event_id, type, payload, received_at) VALUES ('stripe', 'evt_old', 'checkout.session.completed', ?, 'x')").run(JSON.stringify(oldEvent));
     raw.close();
     const db = openDb(path);
-    assert.equal(db.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, '2');
+    assert.equal(db.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, SCHEMA_VERSION);
     const cols = (t) => db.all(`PRAGMA table_info(${t})`).map((c) => c.name);
     for (const c of ['kind', 'prior_no', 'public_no', 'payload_json', 'thesis_status', 'veto_scan', 'status_reason']) assert.ok(cols('candidates').includes(c), `candidates.${c}`);
     for (const c of ['candidate_id', 'purpose', 'attempt', 'outcome', 'drafter', 'prompt', 'error']) assert.ok(cols('explanations').includes(c), `explanations.${c}`);
     assert.ok(cols('notifications').includes('expires_at'));
     assert.ok(cols('users').includes('timezone'));
+    for (const c of ['veto_scan_detail', 'news_reviewed_by', 'news_reviewed_at']) assert.ok(cols('candidates').includes(c), `candidates.${c}`);
+    assert.ok(cols('magic_links').includes('browser_sha256'));
     assert.equal(db.get("SELECT email FROM users WHERE id = 'usr_old'").email, 'old@example.si', 'data kept');
-    assert.ok(MIGRATIONS.some((m) => m.id === 2));
+    assert.ok(MIGRATIONS.some((m) => m.id === 2) && MIGRATIONS.some((m) => m.id === 3));
+    // migration 3 minimised the append-only provider logs, and they are append-only again
+    assert.deepEqual(JSON.parse(db.get('SELECT payload FROM delivery_events').payload), { MessageSid: 'SMold', MessageStatus: 'delivered', AccountSid: 'AC1' });
+    const ev = db.get('SELECT payload FROM processed_events').payload;
+    for (const gone of ['old@example.si', 'Old Person', 'Street 1']) assert.ok(!ev.includes(gone), `no ${gone}`);
+    assert.deepEqual(JSON.parse(ev).data.object, { id: 'cs_1', object: 'checkout.session', client_reference_id: 'usr_old', currency: 'eur', amount_total: 1900, customer: 'cus_1', billing_country: 'SI' });
+    assert.throws(() => db.run("UPDATE delivery_events SET status = 'x'"), /append-only/);
+    assert.throws(() => db.run("UPDATE processed_events SET type = 'x'"), /append-only/);
     db.close();
     const again = openDb(path);
-    assert.equal(again.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, '2', 'reopening does not migrate twice');
+    assert.equal(again.get("SELECT value FROM schema_meta WHERE key = 'schema_version'").value, SCHEMA_VERSION, 'reopening does not migrate twice');
     again.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -20,7 +20,8 @@ export async function pipelineApp({ now = '2025-11-03T18:00:00Z', script, config
   // Many subscribers join from one test address: per-IP join limits are raised here (tested elsewhere).
   const roomy = { capacity: 10_000, windowMs: 60_000 };
   const rateLimits = { authMagic: roomy, authMagicEmail: roomy, phoneStart: roomy, phoneStartUser: roomy, phoneCheck: roomy, api: roomy };
-  const t = await makeApp({ now, anthropic: client, engineSource, fetch, config: { anthropicApiKey: 'test-key', explainerModel: PINNED, adminToken: ADMIN, rateLimits, ...config } });
+  const globalLimits = { authEmails: roomy, verifyStarts: roomy };
+  const t = await makeApp({ now, anthropic: client, engineSource, fetch, config: { anthropicApiKey: 'test-key', explainerModel: PINNED, adminToken: ADMIN, rateLimits, globalLimits, ...config } });
   if (withLedger) await t.ctx.publisher.importLedger(day.ledger);
   return Object.assign(t, {
     day,

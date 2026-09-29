@@ -108,8 +108,10 @@ export function icSparklines(icMonthly, { families, fmt, L, name }) {
       h('span', { class: 'ic-v', role: 'cell' }, h('b', { class: 'mono' }, fmt.num(mean, 3)), h('span', { class: 'muted' }, L(`mean · ${pos} of ${vals.length} months above 0`, `povprečje · ${pos} od ${vals.length} mesecev nad 0`))),
     );
   });
-  const first = months[0];
-  const last = months[months.length - 1];
+  // months as every time axis writes them (MM.YY, like the equity curves): '2025-09' -> '09.25'
+  const mmyy = (m) => (m ? `${m.slice(5, 7)}.${m.slice(2, 4)}` : '');
+  const first = mmyy(months[0]);
+  const last = mmyy(months[months.length - 1]);
   return h(
     'div',
     { class: 'ic c-full flush', role: 'table', 'aria-label': L('Monthly rank IC by family', 'Mesečni rangovni IC po družinah') },

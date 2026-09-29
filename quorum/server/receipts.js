@@ -5,7 +5,11 @@
 //   - 21610 (recipient blocked us)            -> the user is opted out of SMS (source 'twilio')
 //   - repeated 30003 / 30005 / 30006          -> the number is marked invalid and the user is emailed
 //   - 30007 (carrier filtering) above 2 % of the SMS sent in the last 10 minutes -> the SMS channel is
-//     paused (settings.sms_paused) and on-call is paged; push and email continue
+//     paused (settings.sms_paused) and on-call is paged; push and email continue. Counted per text:
+//     the distinct texts sent in the window that came back 30007 (repeated callbacks count once, and a
+//     late receipt for a text sent before the window does not count), with at least
+//     config.receipts.spikeMinErrors of them; fewer only warn.
+// The user is found only through the text we sent (provider_sid), never through the callback's To.
 //
 //   createReceipts(ctx) -> { onStatus({ sid, status, errorCode, params }), resumeSms({ by }) }
 import { iso } from './util.js';
@@ -75,19 +79,31 @@ export function createReceipts(ctx) {
     return true;
   }
 
+  // checkSpike() -> { paused, errors, sends, ratio }: of the texts sent in the last spikeWindowMs, how
+  // many distinct ones came back with the spike code.
   function checkSpike() {
     const now = ctx.now();
     const since = iso(new Date(now.getTime() - rc.spikeWindowMs));
-    const errors = db.get('SELECT COUNT(*) AS n FROM delivery_events WHERE error_code = ? AND received_at >= ?', rc.spikeCode, since).n;
-    const sends = db.get("SELECT COUNT(*) AS n FROM notifications WHERE channel = 'sms' AND sent_at >= ?", since).n;
-    const ratio = errors / Math.max(sends, errors, 1);
+    const sends = db.get("SELECT COUNT(*) AS n FROM notifications WHERE channel = 'sms' AND sent_at >= ? AND provider_sid IS NOT NULL", since).n;
+    const errors = db.get(
+      `SELECT COUNT(DISTINCT n.provider_sid) AS n FROM notifications n
+       WHERE n.channel = 'sms' AND n.sent_at >= ? AND n.provider_sid IS NOT NULL
+         AND EXISTS (SELECT 1 FROM delivery_events d WHERE d.provider_sid = n.provider_sid AND d.error_code = ?)`,
+      since,
+      rc.spikeCode,
+    ).n;
+    const ratio = sends ? errors / sends : 0;
     const spike = errors >= rc.spikeMinErrors && ratio > rc.spikeRatio;
+    const summary = `${errors} of ${sends} texts sent in the last ${rc.spikeWindowMs / 60_000} minutes (${(ratio * 100).toFixed(1)}%, limit ${rc.spikeRatio * 100}%, at least ${rc.spikeMinErrors})`;
     if (spike && db.getSetting('sms_paused') !== '1') {
-      const reason = `${rc.spikeCode} spike: ${errors} of ${sends} texts sent in the last ${rc.spikeWindowMs / 60_000} minutes (${(ratio * 100).toFixed(1)}%, limit ${rc.spikeRatio * 100}%)`;
+      const reason = `${rc.spikeCode} spike: ${summary}`;
       db.setSetting('sms_paused', '1', iso(now));
       db.setSetting('sms_paused_reason', reason, iso(now));
       ctx.alerts?.raise('sms_30007_spike', `SMS paused: ${reason}. Push and email continue.`, { severity: 'page', dedupeKey: 'sms_30007_spike', detail: { errors, sends, ratio } });
       return { paused: true, errors, sends, ratio };
+    }
+    if (!spike && errors > 0) {
+      ctx.alerts?.raise('sms_30007', `${rc.spikeCode} (carrier filtering): ${summary}; SMS not paused`, { severity: 'warn', dedupeKey: 'sms_30007', dedupeMs: 60 * 60_000, detail: { errors, sends, ratio } });
     }
     return { paused: false, errors, sends, ratio };
   }
@@ -99,7 +115,9 @@ export function createReceipts(ctx) {
     const out = { sid, status: incoming, errorCode: code, moved: false, optedOut: false, invalid: false, spike: null };
     const row = sid ? db.get('SELECT * FROM notifications WHERE provider_sid = ?', sid) : null;
     if (row && incoming) Object.assign(out, applyStatus(row, incoming, code));
-    const userId = row?.user_id ?? (params.To ? db.get('SELECT user_id FROM phone_numbers WHERE e164 = ?', params.To)?.user_id : null);
+    // Only a text we sent names the user; an unknown SID changes nobody's account.
+    const userId = row?.user_id ?? null;
+    if (!row && code) ctx.log.warn(`[receipts] ${code} for unknown message ${sid ?? '(no sid)'}: ignored`);
     if (code === '21610' && userId) {
       const r = await ctx.optout.optOutSms(userId, { source: 'twilio', channel: 'twilio', confirm: false });
       out.optedOut = r.changed || r.alreadyOff;

@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { linear, logScale, ticks, niceStep, logTicks, domainWithZero, histogram, nearestIndex, pointsAttr } from '../../web/js/charts/scale.js';
 import { colonnadeModel, sensitivityModel } from '../../web/js/charts/colonnade.js';
-import { pathModel, HORIZON } from '../../web/js/charts/path.js';
+import { pathModel, HORIZON, endLabelYs, pathStep } from '../../web/js/charts/path.js';
 import { axisPos, HIT_DOMAIN, IC_DOMAIN } from '../../web/js/charts/scoreboard.js';
 import { stairDomain } from '../../web/js/charts/deciles.js';
 import { thin, yAxis } from '../../web/js/charts/equity.js';
@@ -60,6 +60,27 @@ test('the path: 21 trading days across rules 1–4, zero inside the domain', () 
   assert.ok(m.zero > 0 && m.zero < 1000);
   assert.equal(m.net.length, p.path.length);
   assert.equal(m.last[0], 21);
+});
+
+test('the path names its two day-0 rows: the entry at the US open, then the day-0 close', () => {
+  const p = data('picks').find((x) => x.status === 'closed');
+  const rows = pathModel(p.path).rows;
+  assert.equal(pathStep(rows, 0), 'entry');
+  assert.equal(pathStep(rows, 1), 'close0');
+  assert.equal(pathStep(rows, 2), 'day');
+  assert.equal(pathStep([[0, 0, 0], [1, 0.01, 0]], 0), 'day', 'an older one-row day 0 stays "day 0"');
+});
+
+test('the path end labels never overlap each other or sit on the zero line', () => {
+  // net +3.3% and benchmark +6.1% end close together (the 834 px collision), and a 0.0% benchmark
+  const m = pathModel([[0, 0, 0], [10, 0.05, 0.04], [21, 0.033, 0.061]]);
+  const [a, b] = endLabelYs(m, 0.033, 0.061);
+  assert.ok(Math.abs(a - b) >= 110 - 1e-9, `${a} ${b}`);
+  assert.ok(b < a, 'the higher value keeps the higher label');
+  const flat = pathModel([[0, 0, 0], [5, -0.02, 0.001], [9, -0.015, 0.00006]]);
+  const [n, z] = endLabelYs(flat, -0.015, 0.00006);
+  assert.ok(Math.abs(z - flat.zero) >= 60 - 1e-9 && Math.abs(n - flat.zero) >= 60 - 1e-9);
+  for (const y of [a, b, n, z]) assert.ok(y >= 55 && y <= 945, String(y));
 });
 
 test('the scoreboard: 50% sits on rule 3, IC zero sits on rule 3', () => {

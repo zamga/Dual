@@ -416,7 +416,15 @@ export async function render(ctx) {
         h('p', { class: 'label' }, L('Signup ends here', 'Prijava se tu konča')),
         h('p', { class: 'jn-refuse__t display d4' }, L(`Not available in ${countryName(cc, 'en')}.`, `V državi ${countryName(cc, 'sl')} ni na voljo.`)),
         ...reasons.map((r) => h('p', { class: 'jn-refuse__why' }, r[locale] ?? r.en)),
-        h('p', { class: 'small muted' }, L('We keep no record of this choice in the demo. The ledger, the issues and every closed pick stay public to everyone.', 'V demu te izbire ne hranimo. Knjiga, izdaje in vse zaprte izbire ostanejo javne za vse.')),
+        live
+          ? h(
+              'p',
+              { class: 'small muted' },
+              L('We keep this country check with your account, for the eligibility and fraud record (see ', 'To preverjanje države hranimo pri vašem računu, za evidenco upravičenosti in preprečevanja zlorab (glejte '),
+              h('a', { href: href('legal', 'privacy') }, L('Privacy', 'Zasebnost')),
+              L('). The ledger, the issues and every closed pick stay public to everyone.', '). Knjiga, izdaje in vse zaprte izbire ostanejo javne za vse.'),
+            )
+          : h('p', { class: 'small muted' }, L('We keep no record of this choice in the demo. The ledger, the issues and every closed pick stay public to everyone.', 'V demu te izbire ne hranimo. Knjiga, izdaje in vse zaprte izbire ostanejo javne za vse.')),
         h(
           'p',
           { class: 'jn-refuse__actions' },
@@ -505,7 +513,7 @@ export async function render(ctx) {
       control: input,
       hint: live
         ? L('With the country code. We check it is a mobile in your country, then text a code.', 'S klicno kodo države. Preverimo, da gre za mobilno številko v vaši državi, nato pošljemo kodo.')
-        : L('Preview: this demo never collects a real number. What you type stays in this tab’s memory and is gone when you leave. Try one ending 0000 (a landline) or 9999 (VoIP).', 'Predogled: ta demo nikoli ne zbira prave številke. Kar vpišete, ostane v pomnilniku tega zavihka in izgine, ko ga zapustite. Poskusite številko, ki se konča z 0000 (stacionarna) ali 9999 (VoIP).'),
+        : L('Preview: this demo never collects a real number. What you type stays in this tab’s memory and is cleared when you leave this page; only the masked form (+386 •• ••• 45) is kept. Try one ending 0000 (a landline) or 9999 (VoIP).', 'Predogled: ta demo nikoli ne zbira prave številke. Kar vpišete, ostane v pomnilniku tega zavihka in se izbriše, ko zapustite to stran; ostane le zakrita oblika (+386 •• ••• 45). Poskusite številko, ki se konča z 0000 (stacionarna) ali 9999 (VoIP).'),
     });
     const readout = h('p', { class: 'jn-read mono', 'aria-live': 'polite' });
     const errBox = h('div', { class: 'jn-reasons', role: 'alert' });
@@ -555,7 +563,9 @@ export async function render(ctx) {
       bar.setAttribute('title', m.label);
       cap.replaceChildren(
         pick
-          ? L(`The exact text pick #${pick.no} went out as on ${fmt.date(pick.issueDate)}, rendered here with your own stop link (qrm.si/u/${flow.token}). Every pick text has this shape.`, `Natančno besedilo, s katerim je izbira #${pick.no} izšla ${fmt.date(pick.issueDate)}, tu z vašo povezavo za odjavo (qrm.si/u/${flow.token}). Vsak SMS z izbiro ima to obliko.`)
+          ? launch.ready
+            ? L(`The exact text pick #${pick.no} went out as on ${fmt.date(pick.issueDate)}, rendered here with your own stop link (qrm.si/u/${flow.token}). Every pick text has this shape.`, `Natančno besedilo, s katerim je izbira #${pick.no} izšla ${fmt.date(pick.issueDate)}, tu z vašo povezavo za odjavo (qrm.si/u/${flow.token}). Vsak SMS z izbiro ima to obliko.`)
+            : L(`The exact text of pick #${pick.no} as written for ${fmt.date(pick.issueDate)} (before launch nothing is sent), rendered here with your own stop link (qrm.si/u/${flow.token}). Every pick text has this shape.`, `Natančno besedilo izbire #${pick.no}, kot je pripravljeno za ${fmt.date(pick.issueDate)} (pred zagonom se nič ne pošlje), tu z vašo povezavo za odjavo (qrm.si/u/${flow.token}). Vsak SMS z izbiro ima to obliko.`)
           : L('The confirmation text, rendered with your own stop link.', 'Potrditveni SMS z vašo povezavo za odjavo.'),
       );
     };
@@ -640,8 +650,10 @@ export async function render(ctx) {
         focusEl(errBox);
         return;
       }
-      if (flow.e164 && flow.e164 !== r.e164) flow.consents.sms = false; // a new number needs a new consent
-      flow.e164 = r.e164;
+      if (flow.masked && flow.masked !== maskPhone(r.e164)) flow.consents.sms = false; // a new number needs a new consent
+      // demo: only the masked form is kept once the step is done; the typed number is dropped
+      flow.e164 = null;
+      flow.phoneInput = '';
       flow.masked = maskPhone(r.e164);
       flow.done.delete('code');
       complete('phone');
@@ -855,6 +867,7 @@ export async function render(ctx) {
         token: flow.token,
         at: formatInZone(new Date(ctx.now()), LJUBLJANA).date,
         consents: { ...flow.consents },
+        preview: flow.checkout !== 'paid', // a pre-launch preview charged nothing (#account says so)
       };
       demo.token = flow.token;
       demo.prefs.sms = !!flow.consents.sms;
@@ -949,8 +962,10 @@ export async function render(ctx) {
           previewOnly
             ? launch.ready
               ? L('Nothing was charged and nothing was sent: this was the demo.', 'Nič ni bilo zaračunano in nič poslano: to je bil demo.')
-              : L('Nothing was charged. Paid SMS opens at launch; until then the sealed record runs with no subscribers, in public.', 'Nič ni bilo zaračunano. Plačljivi SMS se odpre ob zagonu; do takrat zapečateni zapis teče brez naročnikov, javno.')
-            : L('Your first text arrives with the next quorum. Most days there is none.', 'Prvi SMS prispe z naslednjim kvorumom. Večino dni ga ni.'),
+              : launch.research
+                ? L('Nothing was charged. The engine is back in research, so paid SMS has no launch date; the sealed record keeps running with no subscribers, in public.', 'Nič ni bilo zaračunano. Pogon je spet v raziskavah, zato plačljivi SMS nima datuma zagona; zapečateni zapis teče naprej brez naročnikov, javno.')
+                : L('Nothing was charged. Paid SMS opens at launch; until then the sealed record runs with no subscribers, in public.', 'Nič ni bilo zaračunano. Plačljivi SMS se odpre ob zagonu; do takrat zapečateni zapis teče brez naročnikov, javno.')
+            : L('Your first text arrives with the next BUY, RENEW or CLOSE. On many days there is none.', 'Prvi SMS prispe z naslednjim NAKUPOM, PODALJŠANJEM ali ZAPRTJEM. Veliko dni ga ni.'),
         ),
         sms
           ? h(
@@ -1057,6 +1072,10 @@ export async function render(ctx) {
     cleanup() {
       for (const id of timers) clearTimeout(id);
       timers.clear();
+      // Leaving #join forgets the typed number (the page promises it): only the masked form survives,
+      // so the flow can still resume. Live mode keeps the E.164 the server's code check needs.
+      flow.phoneInput = '';
+      if (!live) flow.e164 = null;
     },
   };
 }

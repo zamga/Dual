@@ -4,12 +4,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { redactTwilioCallback, minimizeStripeEvent } from './privacy.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const SCHEMA_PATH = join(HERE, 'schema.sql');
 // Migrations for databases created by an earlier schema.sql. A fresh database is created from the
 // current schema.sql and marked with the latest id; an older one runs every migration above its id.
-// Append here (never edit or reorder): { id: 2, sql: 'ALTER TABLE ... ADD COLUMN ...' }.
+// Append here (never edit or reorder): { id: 2, sql: 'ALTER TABLE ... ADD COLUMN ...' }; a migration
+// may also have run(raw), called after its sql inside the same transaction.
 export const MIGRATIONS = [
   {
     // Part 2: publisher, explainer, notifier, admin. New tables come from schema.sql (CREATE TABLE IF
@@ -35,6 +37,38 @@ export const MIGRATIONS = [
       ALTER TABLE staff_trade_requests ADD COLUMN instrument_type TEXT;
       ALTER TABLE staff_trade_requests ADD COLUMN reason TEXT;
     `,
+  },
+  {
+    // The news review (a candidate whose 48-hour scan did not clear needs the approver's own reading),
+    // the sign-in link's browser binding, and data minimisation of the provider logs written before
+    // server/privacy.js: phone numbers (hashed) out of delivery_events, names, emails and addresses
+    // out of processed_events. Those two tables are append-only, so their update triggers are
+    // dropped for this one rewrite and created again.
+    id: 3,
+    sql: `
+      ALTER TABLE candidates ADD COLUMN veto_scan_detail TEXT;
+      ALTER TABLE candidates ADD COLUMN news_reviewed_by INTEGER REFERENCES persons(id);
+      ALTER TABLE candidates ADD COLUMN news_reviewed_at TEXT;
+      ALTER TABLE magic_links ADD COLUMN browser_sha256 TEXT;
+    `,
+    run(raw) {
+      raw.exec('DROP TRIGGER IF EXISTS delivery_events_no_update; DROP TRIGGER IF EXISTS processed_events_no_update;');
+      const parse = (text) => {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return {};
+        }
+      };
+      const d = raw.prepare('UPDATE delivery_events SET payload = ? WHERE id = ?');
+      for (const r of raw.prepare('SELECT id, payload FROM delivery_events').all()) d.run(JSON.stringify(redactTwilioCallback(parse(r.payload))), r.id);
+      const p = raw.prepare('UPDATE processed_events SET payload = ? WHERE id = ?');
+      for (const r of raw.prepare("SELECT id, payload FROM processed_events WHERE provider = 'stripe'").all()) p.run(JSON.stringify(minimizeStripeEvent(parse(r.payload))), r.id);
+      raw.exec(`
+        CREATE TRIGGER IF NOT EXISTS delivery_events_no_update BEFORE UPDATE ON delivery_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS processed_events_no_update BEFORE UPDATE ON processed_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+      `);
+    },
   },
 ];
 export const SCHEMA_VERSION = String(Math.max(1, ...MIGRATIONS.map((m) => m.id)));
@@ -75,7 +109,8 @@ export function openDb(path = ':memory:') {
     for (const m of MIGRATIONS.filter((x) => x.id > current).sort((a, b) => a.id - b.id)) {
       raw.exec('BEGIN IMMEDIATE');
       try {
-        raw.exec(m.sql);
+        if (m.sql) raw.exec(m.sql);
+        if (m.run) m.run(raw);
         setVersion.run('schema_version', String(m.id));
         raw.exec('COMMIT');
       } catch (e) {

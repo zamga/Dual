@@ -119,7 +119,9 @@ export async function render(ctx) {
     web: issue ? L(`${fmt.int(issue.nScored ?? 0)} scored · closest ${issue.closest ?? 0}/4 · ${items ? itemWords.join(', ') : 'no quorum'}`, `${fmt.int(issue.nScored ?? 0)} ocenjenih · največ ${issue.closest ?? 0}/4 · ${items ? itemWords.join(', ') : 'brez kvoruma'}`) : '–',
     sms: paused
       ? L('Paused by the 30007 guard; queued texts wait, pick texts expire at the US open.', 'Ustavljeno zaradi varovala 30007; SMS-i čakajo, SMS z izbiro poteče ob odprtju ZDA.')
-      : st.prelaunch
+      : st.prelaunch && launch.research
+        ? L('Not launching: the engine is back in research. Sender QUORUM, SI AT DE HR IT.', 'Brez zagona: pogon je spet v raziskavah. Pošiljatelj QUORUM, SI AT DE HR IT.')
+        : st.prelaunch
         ? L('Paid SMS opens at launch. Sender QUORUM, SI AT DE HR IT.', 'Plačljivi SMS se odpre ob zagonu. Pošiljatelj QUORUM, SI AT DE HR IT.')
         : L('Sender QUORUM, 08:00–21:00 recipient time.', 'Pošiljatelj QUORUM, 08:00–21:00 po času prejemnika.'),
     push: L('Every issue item, alongside texts.', 'Vsaka postavka izdaje, ob SMS.'),

@@ -17,6 +17,7 @@ import {
   clientIp,
   createRateLimiter,
   HttpError,
+  rateKey,
 } from './http.js';
 import { createTwilio, createConsoleSms } from './vendors/twilio.js';
 import { createStripe } from './vendors/stripe.js';
@@ -41,6 +42,7 @@ import { registerAccountRoutes } from './account.js';
 import { registerDataRoutes } from './data.js';
 import { registerTwilioStatusRoute } from './twilio-status.js';
 import { createStatic } from './static.js';
+import { registerFontRoutes } from './fonts.js';
 import { createLogger } from './util.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -57,11 +59,11 @@ export function makeTransports(config, { fetch = globalThis.fetch, log, clock } 
           verifyServiceSid: config.twilio.verifyServiceSid,
           fetch,
         })
-      : createConsoleSms({ log, clock, authToken: config.twilio.authToken || 'console-auth-token' });
+      : createConsoleSms({ log, clock, authToken: config.twilio.authToken || '' });
   const email = makeEmail(config, { fetch, log, clock });
   const push =
     config.pushTransport === 'webpush'
-      ? createWebPush({ vapid: config.vapid, fetch, clock })
+      ? createWebPush({ vapid: config.vapid, fetch, clock, timeoutMs: config.push.timeoutMs })
       : createConsolePush({ log, clock, publicKey: config.vapid.publicKey || null });
   const stripe = createStripe({
     secretKey: config.stripe.secretKey,
@@ -97,6 +99,16 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
   ctx.alerts = createAlerts(ctx, {
     pager: transports.pager ?? (config.pagerWebhookUrl ? createWebhookPager({ url: config.pagerWebhookUrl, fetch, log }) : createConsolePager({ log })),
   });
+  // budget(name) -> { ok, retryAfterSec }: one of the global budgets (config.globalLimits), shared by
+  // every client. The first request past a budget pages on-call (once per 30 minutes).
+  ctx.budget = (name) => {
+    const r = ctx.rateLimiter.take(`global:${name}`, '*', config.globalLimits[name]);
+    if (!r.ok) {
+      const { capacity, windowMs } = config.globalLimits[name];
+      ctx.alerts.raise('global_budget', `Global budget ${name} exhausted (${capacity} per ${windowMs / 60_000} min): possible abuse`, { severity: 'page', dedupeKey: `budget:${name}` });
+    }
+    return r;
+  };
   ctx.messaging = createMessaging(ctx);
   ctx.optout = createOptOut(ctx);
   ctx.auth = createAuth(ctx);
@@ -129,6 +141,7 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
   registerPushRoutes(router, ctx);
   registerAdminRoutes(router, ctx);
   registerStatusRoute(router, ctx);
+  registerFontRoutes(router, ctx);
   ctx.data = registerDataRoutes(router, ctx, join(root, 'data'));
   // Short links used in texts and emails (qrm.si/p/0417, qrm.si/help, qrm.si/account) land on the
   // hash routes of the single-page site.
@@ -163,14 +176,17 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
       const { route, params } = match;
       const opts = route.opts;
 
-      // Rate limits: the route's own bucket, plus the general API bucket.
+      // Rate limits: the route's own bucket, plus the general API bucket, keyed per IPv4 address or
+      // IPv6 prefix (http.js rateKey).
       const buckets = new Set();
       if (opts.rate) buckets.add(opts.rate);
       if (isApi && opts.rate !== 'webhook') buckets.add('api');
       for (const bucket of buckets) {
-        const r = ctx.rateLimiter.take(bucket, ip, config.rateLimits[bucket]);
+        const key = rateKey(ip, config.rateLimitV6Prefix[bucket] ?? config.rateLimitV6Prefix.default);
+        const r = ctx.rateLimiter.take(bucket, key, config.rateLimits[bucket]);
         if (!r.ok) throw new HttpError(429, 'rate_limited', 'Too many requests. Try again shortly.', { retryAfterSec: r.retryAfterSec });
       }
+      if (match.badParams) throw new HttpError(400, 'bad_request', 'Malformed percent-encoding in the path');
 
       let raw = Buffer.alloc(0);
       let body = {};
@@ -221,6 +237,11 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
   function startOutbox() {
     if (timer || !config.outboxIntervalMs) return;
     timer = setInterval(() => {
+      try {
+        ctx.messaging.recoverStuck();
+      } catch (e) {
+        log.error(`[outbox] ${e.message}`);
+      }
       ctx.messaging.dispatchDue().catch((e) => log.error(`[outbox] ${e.message}`));
     }, config.outboxIntervalMs);
     timer.unref();
@@ -237,6 +258,8 @@ export function createApp({ db, config, transports = {}, clock, fetch = globalTh
         server.once('error', reject);
         server.listen(port, host, () => {
           server.off('error', reject);
+          // Rows a previous process left 'sending' (it stopped mid-send) are settled before anything else.
+          ctx.messaging.recoverStuck({ olderThanMs: 0 });
           startOutbox();
           ctx.scheduler.start();
           const a = server.address();
@@ -274,11 +297,25 @@ function checkOrigin(req, baseOrigin) {
   if (o.origin !== baseOrigin && o.host !== req.headers.host) throw new HttpError(403, 'bad_origin', 'Request origin refused');
 }
 
+// productionProblems(config) -> string[]: what makes this configuration unsafe to run with
+// NODE_ENV=production (main() refuses to start while the list is not empty).
+export function productionProblems(config) {
+  if (!config.production) return [];
+  const out = [];
+  if (config.sessionSecretGenerated) out.push('SESSION_SECRET is required');
+  else if (Buffer.byteLength(config.sessionSecret) < 32) out.push('SESSION_SECRET must be at least 32 bytes (32+ random bytes)');
+  if (config.adminToken && config.adminToken.length < 32) out.push('ADMIN_TOKEN must be at least 32 characters (32+ random bytes), or empty to turn the console off');
+  if (!config.publicBaseUrl.startsWith('https://')) out.push('PUBLIC_BASE_URL must be https:// (Secure cookies, HSTS, the Twilio signature URL)');
+  if (config.smsTransport !== 'twilio' && !config.allowConsoleSms) out.push('SMS_TRANSPORT=twilio is required (set ALLOW_CONSOLE_SMS=1 only on a staging host)');
+  return out;
+}
+
 async function main() {
   const config = loadConfig();
   const log = createLogger();
-  if (config.production && config.sessionSecretGenerated) {
-    log.error('SESSION_SECRET is required when NODE_ENV=production');
+  const problems = productionProblems(config);
+  if (problems.length) {
+    for (const p of problems) log.error(`NODE_ENV=production: ${p}`);
     process.exit(1);
   }
   if (config.smsTransport === 'twilio' && (!config.twilio.accountSid || !config.twilio.authToken)) {

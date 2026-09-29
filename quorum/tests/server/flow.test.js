@@ -274,6 +274,22 @@ test('export returns every row about the user; delete anonymises and keeps the c
     assert.ok(t.fake.requests.some((r) => r.method === 'DELETE'));
     assert.equal(t.db.get("SELECT active_until <= ? AS ended FROM entitlements WHERE feature = 'picks'", t.ctx.now().toISOString()).ended, 1);
     assert.equal(smsTo(t, PHONE, 'OPT_OUT').length, 0, 'no confirmation text on deletion');
+    // Nothing left anywhere names or reaches the person: no email, no phone number (in clear or
+    // hashed), no session IP address or user agent. What stays is listed in the answer.
+    assert.equal(t.db.get('SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?', user.id).n, 0);
+    const digits = PHONE.slice(1);
+    const { createHash } = await import('node:crypto');
+    const phoneHash = createHash('sha256').update(PHONE).digest('hex');
+    const leaks = [];
+    for (const table of t.db.tables()) {
+      for (const row of t.db.all(`SELECT * FROM ${table}`)) {
+        const text = JSON.stringify(row);
+        if (text.includes('ana@example.si') || text.includes(digits) || text.includes(phoneHash)) leaks.push(table);
+      }
+    }
+    assert.deepEqual([...new Set(leaks)], [], 'no personal data left behind');
+    assert.ok(del.body.retained.some((r) => /no phone number/.test(r.data)));
+    assert.ok(del.body.retained.some((r) => /no name, email or address/.test(r.data)));
     // The same email can start over as a new account.
     await t.client().post('/api/auth/magic', { email: 'ana@example.si' });
     assert.equal(t.db.get("SELECT COUNT(*) AS n FROM users WHERE email = 'ana@example.si'").n, 1);
@@ -282,7 +298,7 @@ test('export returns every row about the user; delete anonymises and keeps the c
   }
 });
 
-test('Twilio status callback stub: signature checked, raw event stored with the number hashed', async () => {
+test('Twilio status callback stub: signature checked, event stored without the phone number', async () => {
   const t = await makeApp({ webRoot: root });
   try {
     const params = { MessageSid: 'SM123', MessageStatus: 'delivered', To: PHONE, From: 'QUORUM', AccountSid: 'AC1' };
@@ -300,7 +316,7 @@ test('Twilio status callback stub: signature checked, raw event stored with the 
     assert.equal(row.provider_sid, 'SM123');
     assert.equal(row.status, 'delivered');
     assert.doesNotMatch(row.payload, /38641234545/);
-    assert.match(row.payload, /sha256:[0-9a-f]{64}/);
+    assert.deepEqual(JSON.parse(row.payload), { MessageSid: 'SM123', MessageStatus: 'delivered', AccountSid: 'AC1' }, 'no To or From, not even hashed');
     assert.equal(seen[0].sid, 'SM123');
     const json = await c.post('/api/webhooks/twilio/status', params);
     assert.equal(json.status, 415);

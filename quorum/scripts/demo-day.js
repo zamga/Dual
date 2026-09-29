@@ -131,6 +131,9 @@ const config = loadConfig(
     stripe: { secretKey: 'sk_test_demo', webhookSecret: WHSEC, prices: PRICES },
     vapid: { publicKey: vapid.publicKey, privateKey: vapid.privateKey, subject: 'mailto:ops@qrm.si' },
     fanout: { smsPerSecond: 2 }, // slow on purpose, so the pacing shows in the timeline
+    // A handful of texts: one 30007 is enough to show the automatic pause (production needs at least
+    // 5 distinct filtered texts, SPIKE_30007_MIN, and more than 2% of the texts sent in 10 minutes).
+    receipts: { spikeMinErrors: 1 },
     anchor: { otsCalendars: [], rfc3161Url: '' }, // offline: the Merkle root is computed and stored, not submitted
   },
 );
@@ -247,8 +250,8 @@ function describe(slotName, detail) {
     return detail;
   }
   if (slotName === 'candidates') return `${j.written} candidates written (${Object.entries(j.statuses).map(([k, v]) => `${k} ${v}`).join(', ')}); access logged`;
-  if (slotName === 'explain') return `${j.scanned} news scans (${j.flagged} flagged), ${j.drafted} theses drafted, ${j.handoff} handed to the approver`;
-  if (slotName === 'review') return `signed off by ${j.approver ?? 'nobody'}; unissued (no approver) ${j.noApprover}; removed for lack of a thesis ${j.noThesis}`;
+  if (slotName === 'explain') return `${j.scanned} news scans (${j.flagged} flagged, ${j.needsReview ?? 0} left for the approver to read), ${j.drafted} theses drafted, ${j.handoff} handed to the approver`;
+  if (slotName === 'review') return `signed off by ${j.approver ?? 'nobody'}; unissued (no approver) ${j.noApprover}; removed with the news unread ${j.newsUnreviewed ?? 0}; removed for lack of a thesis ${j.noThesis}`;
   if (slotName === 'seal') return j.sealed.map((x) => `${x.kind} #${x.no} seq ${x.seq} commit ${x.commit.slice(0, 12)}… produced ${x.producedAt}`).join('; ') || 'nothing to seal';
   if (slotName === 'publish') return `ISSUE #${j.issueNo}: ${j.items} items; SMS ${JSON.stringify(j.delivery?.sms ?? {})}`;
   if (slotName === 'marks') return `${j.entries} entry price(s); ${j.closes.map((c) => `CLOSE #${c.no} ${c.written ? `written (excess ${(c.excess * 100).toFixed(2)}%)` : c.reason}`).join('; ')}`;
@@ -302,7 +305,8 @@ try {
     if (i === 0) await webhook(byType['invoice.paid'], 'Stripe retries the same event');
     if (p.pushDevice) {
       const k = generateVapidKeys(); // stands in for the browser's own P-256 key pair
-      const r = await req('POST', '/api/push/subscribe', { json: { endpoint: `https://push.example.net/wpush/${p.key}`, keys: { p256dh: k.publicKey, auth: Buffer.alloc(16, i + 1).toString('base64url') } } });
+      // An endpoint on a real push service host (only those are accepted); the console transport sends nothing.
+      const r = await req('POST', '/api/push/subscribe', { json: { endpoint: `https://fcm.googleapis.com/fcm/send/demo-${p.key}`, keys: { p256dh: k.publicKey, auth: Buffer.alloc(16, i + 1).toString('base64url') } } });
       expect(r.status === 200, `push subscribe ${p.name}`);
     }
     if (p.timeZone) {
@@ -384,7 +388,7 @@ try {
     await receipt(m, 'sent'); // a late duplicate: status never moves backwards
   }
   const delivered = ctx.db.get("SELECT COUNT(*) AS n FROM notifications WHERE channel = 'sms' AND status = 'delivered' AND rec_id IS NOT NULL").n;
-  step('twilio', `${ctx.db.get('SELECT COUNT(*) AS n FROM delivery_events').n} signed receipts stored (numbers hashed)`, `${delivered} delivered; late 'sent' duplicates after 'delivered' ignored (status only moves forward)`);
+  step('twilio', `${ctx.db.get('SELECT COUNT(*) AS n FROM delivery_events').n} signed receipts stored (no phone numbers; repeats once)`, `${delivered} delivered; late 'sent' duplicates after 'delivered' ignored (status only moves forward)`);
   const martaOff = ctx.db.get("SELECT source FROM opt_outs WHERE user_id = ? ORDER BY id DESC LIMIT 1", ids.marta);
   step('twilio', `21610 for ${PEOPLE[2].name}`, `opted out of all SMS (source ${martaOff?.source}); no confirmation text to a number that blocked us`);
   step('twilio', '30007 (carrier filtering) on one text', `SMS paused: ${ctx.db.getSetting('sms_paused') === '1'}; on-call paged: ${pager.pages.map((x) => x.kind).join(', ')}; push and email continue`);
@@ -450,7 +454,7 @@ try {
     }
     out.push('');
     out.push(`Ledger entries of ${DATE} (chain ${chain.ok ? 'verified' : 'BROKEN'}, ${chain.checked} entries)`);
-    for (const e of today) out.push(`  #${e.seq} ${e.type.padEnd(6)} ${e.at}  ${e.hash.slice(0, 16)}…  ${e.type === 'ISSUE' ? `buys ${e.body.buys.join(',') || '-'} closes ${e.body.closes.join(',') || '-'} vetoes ${JSON.stringify(e.body.vetoes)}` : e.type === 'CLOSE' ? `reveals #${e.body.no} ${e.body.reveal.ticker}, excess ${(e.body.excess * 100).toFixed(2)}%` : `#${e.body.no} commit ${e.body.commit.slice(0, 16)}…`}`);
+    for (const e of today) out.push(`  #${e.seq} ${e.type.padEnd(6)} ${e.at}  ${e.hash.slice(0, 16)}…  ${e.type === 'ISSUE' ? `buys ${e.body.buys.join(',') || '-'} closes ${e.body.closes.join(',') || '-'} vetoes ${JSON.stringify(e.body.vetoes)} news scan ${JSON.stringify(e.body.newsScan ?? {})}` : e.type === 'CLOSE' ? `reveals #${e.body.no} ${e.body.reveal.ticker}, excess ${(e.body.excess * 100).toFixed(2)}%` : `#${e.body.no} commit ${e.body.commit.slice(0, 16)}…`}`);
     out.push('');
     out.push(`SMS outbox (${texts.length})`);
     for (const x of texts) out.push(`  ${x.sid} ${formatInZone(new Date(x.at), LJUBLJANA).date.slice(5)} ${formatInZone(new Date(x.at), LJUBLJANA).time} ${x.to}  ${x.encoding} ${x.septets}/160${x.valid ? '' : '  INVALID'}\n    ${x.body}`);

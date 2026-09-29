@@ -1,7 +1,9 @@
 // Static files from web/. index.html gets <meta name="quorum-mode" content="live"> so the site
-// calls /api instead of running the demo. web/data is never served from here (see data.js).
+// calls /api instead of running the demo, and its Google Fonts links are swapped for the fonts this
+// server hosts itself (server/fonts.js). web/data is never served from here (see data.js).
 import { readFile, stat } from 'node:fs/promises';
 import { extname, normalize, resolve, sep } from 'node:path';
+import { selfHostFonts } from './fonts.js';
 
 export const LIVE_META = '<meta name="quorum-mode" content="live" />';
 
@@ -63,7 +65,7 @@ export function createStatic(root, { live = true } = {}) {
     if (p === 'index.html') {
       if (!indexCache || indexCache.mtimeMs !== s.mtimeMs) {
         const html = await readFile(file, 'utf8');
-        indexCache = { mtimeMs: s.mtimeMs, body: Buffer.from(live ? injectLiveMode(html) : html) };
+        indexCache = { mtimeMs: s.mtimeMs, body: Buffer.from(live ? selfHostFonts(injectLiveMode(html)) : html) };
       }
       body = indexCache.body;
     } else {

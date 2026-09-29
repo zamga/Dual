@@ -91,3 +91,85 @@ export function contrast() {
   }
   return out;
 }
+
+// A column rule must never strike through a number. For every digit-bearing text run in a table cell,
+// definition value or headline stat, find a rule x inside its box; the rule is visible there unless the
+// nearest opaque ancestor inside the view hides it (a `.ruled` surface redraws the rules above its own
+// background, so it does not count). DESIGN.md §4: tables either end their columns on the rules or have
+// opaque cells.
+export function ruleStrike() {
+  const xs = [...document.querySelectorAll('.rules > i')].map((r) => r.getBoundingClientRect().left).filter((x) => x > 0.5);
+  if (!xs.length) return [];
+  const view = document.querySelector('#view');
+  const opaque = (el) => {
+    const c = String(getComputedStyle(el).backgroundColor);
+    const f = c.match(/^color\([a-z0-9-]+\s+[^/)]+(?:\/\s*([\d.]+))?\)/); // color-mix() computes to color(srgb r g b / a)
+    if (f) return f[1] === undefined || Number(f[1]) >= 0.99;
+    const m = c.match(/rgba?\(([^)]+)\)/);
+    if (!m) return false;
+    const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+    return p.length < 4 || p[3] >= 0.99;
+  };
+  const coveredAt = (el) => {
+    for (let e = el; e && e !== view; e = e.parentElement) if (opaque(e)) return !e.classList.contains('ruled');
+    return false;
+  };
+  const out = [];
+  const seen = new Set();
+  for (const el of document.querySelectorAll('#view :is(td, th, dd, .stat__v)')) {
+    if (!/\d/.test(el.textContent) || el.closest('.visually-hidden, [aria-hidden="true"], .lv')) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    while (w.nextNode()) {
+      const node = w.currentNode;
+      // numbers, not prose: a short run with a digit (prose that crosses a rule is §4's business, not this check's)
+      if (!/\d/.test(node.textContent) || node.textContent.trim().length > 28) continue;
+      const host = node.parentElement;
+      if (seen.has(host) || host.closest('.visually-hidden, [aria-hidden="true"]')) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const r of range.getClientRects()) {
+        if (r.width < 2 || r.height < 2) continue;
+        const x = xs.find((v) => v > r.left + 1.5 && v < r.right - 1.5);
+        if (x === undefined || coveredAt(host)) continue;
+        seen.add(host);
+        out.push(`rule at x=${Math.round(x)} strikes "${node.textContent.trim().slice(0, 30)}" (${host.tagName.toLowerCase()}.${String(host.className).split(/\s+/)[0]})`);
+        break;
+      }
+      if (out.length >= 8) return out;
+    }
+  }
+  return out;
+}
+
+// Copy that must hold on every page (passed launchReady: backtest.json launch.status === 'ready').
+// - The demo bar carries the whole disclaimer at every width (ARCHITECTURE.md §5), advice line included.
+// - Before launch nothing may say a text was delivered: there are no subscribers.
+// - The pooled deflated figures are not a gate: no "passes at this pace" launch date.
+// - No stray "null" / "undefined" printed by a DOM call.
+export function copyChecks(launchReady) {
+  const out = [];
+  const bar = document.querySelector('#demo-bar .demo-bar__text');
+  const barText = bar ? bar.innerText : '';
+  if (!/not investment advice|ni investicijski nasvet/i.test(barText)) out.push(`demo bar lacks the advice disclaimer: "${barText.trim().slice(0, 80)}"`);
+  const view = document.querySelector('#view');
+  const text = view ? view.innerText : '';
+  if (!launchReady) {
+    // a sentence that says a text was delivered, unless it says the opposite ("no text went out")
+    const claims = text.match(/[^.\n]*\b(texted|went out|as sent|readers got|subscribers saw|poslano naročnikom|so ta SMS dobili|je šel ven)\b[^.\n]*/gi) ?? [];
+    const m = claims.find((c) => !/\b(no|not|nothing|none|never|ni|nič|noben)\b/i.test(c));
+    if (m) out.push(`pre-launch page claims a delivery: "${m.trim().slice(0, 100)}"`);
+  }
+  const pace = text.match(/[^.\n]*(at this pace|pri tem tempu)[^.\n]*/i);
+  if (pace) out.push(`a launch date is implied: "${pace[0].trim().slice(0, 80)}"`);
+  const w = document.createTreeWalker(view ?? document.body, NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) {
+    const s = w.currentNode.textContent.trim();
+    if (s === 'null' || s === 'undefined' || s === 'NaN') {
+      out.push(`a stray "${s}" is printed in ${w.currentNode.parentElement?.className || w.currentNode.parentElement?.tagName}`);
+      break;
+    }
+  }
+  return out;
+}

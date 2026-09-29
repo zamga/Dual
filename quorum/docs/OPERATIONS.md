@@ -4,7 +4,9 @@ How to configure, run and look after the server (`server/`). The product rules l
 
 ## 1. What runs
 
-One Node process (`node server/index.js`, Node >= 22.13) with one SQLite database (`node:sqlite`, WAL mode). It serves the site from `web/` in live mode, the public data files under `/data/*.json` (redacted by entitlement), the JSON API under `/api/*`, the one-tap opt-out page `/u/<token>`, and the short links `/p/<no>`, `/help`, `/account` used in texts. Node prints an `ExperimentalWarning` for SQLite at start; that is expected.
+One Node process (`node server/index.js`, Node >= 22.13) with one SQLite database (`node:sqlite`, WAL mode). It serves the site from `web/` in live mode, the public data files under `/data/*.json` (redacted by entitlement; each variant serialised once per file version, with a strong `ETag` and `304` answers), the ledger as CSV at `/api/ledger.csv` (the same entries as `/data/ledger.json`), the JSON API under `/api/*`, the one-tap opt-out page `/u/<token>`, and the short links `/p/<no>`, `/help`, `/account` used in texts. Node prints an `ExperimentalWarning` for SQLite at start; that is expected.
+
+**Nothing from third parties in live mode.** `web/index.html` loads its fonts from Google Fonts (the static Artifact build needs that, docs/ARCHITECTURE.md §5); the live server rewrites those links to `/fonts/fonts.css`, which it serves itself from `server/fonts/` (Archivo, Newsreader, Martian Mono: variable woff2, Latin and Latin Extended, SIL Open Font License, licence texts next to them). The opt-out and sign-in pages use the same file, the approver console system fonts. The CSP allows styles and fonts from this origin only, so no visitor's IP address goes to a font service.
 
 Transports: SMS through Twilio (`SMS_TRANSPORT=twilio`) or the console twin (default); email through Postmark (`EMAIL_TRANSPORT=postmark`) or the console transport (logs every message, including sign-in links); Web Push through VAPID (`PUSH_TRANSPORT=webpush`) or the console twin. Stripe is always the real REST API when `STRIPE_SECRET_KEY` is set; without it checkout answers 503.
 
@@ -21,7 +23,8 @@ node server/scheduler.js 2026-10-27  # print a day's slot times in Ljubljana and
 
 | Variable | Default | Notes |
 |---|---|---|
-| `NODE_ENV` | | `production` makes `SESSION_SECRET` mandatory and turns `GEO_REQUIRE_IP` on by default |
+| `NODE_ENV` | | `production` turns `GEO_REQUIRE_IP` on by default, and the server refuses to start unless `SESSION_SECRET` has 32+ bytes, `ADMIN_TOKEN` is empty or 32+ characters, `PUBLIC_BASE_URL` is `https://` and `SMS_TRANSPORT=twilio` |
+| `ALLOW_CONSOLE_SMS` | off | `1` lets a production-mode staging host run the console SMS twin |
 | `PORT` / `HOST` | `8787` / `127.0.0.1` | Use `HOST=0.0.0.0` behind a proxy or in a container |
 | `DB_PATH` | `quorum.db` | SQLite file. `:memory:` for throwaway runs |
 | `PUBLIC_BASE_URL` | `http://localhost:$PORT` | The exact public origin. Used for sign-in links, Checkout return URLs, the Twilio status-callback URL **and its signature check** (Twilio signs the URL it called). `https://` turns on HSTS and `Secure` cookies |
@@ -32,8 +35,10 @@ node server/scheduler.js 2026-10-27  # print a day's slot times in Ljubljana and
 | `POSTMARK_SERVER_TOKEN`, `POSTMARK_MESSAGE_STREAM`, `POSTMARK_BASE_URL` | none, `outbound`, `https://api.postmarkapp.com` | Server token of the transactional stream; plain text, no open or link tracking |
 | `PUSH_TRANSPORT` | `console` | `webpush` sends Web Push (VAPID, aes128gcm) |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | none, none, `mailto:support@qrm.si` | base64url P-256 key pair (65-byte public, 32-byte private); the public key is served at `GET /api/push/key` |
+| `PUSH_HOSTS` | `fcm.googleapis.com,android.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,*.push.apple.com,*.notify.windows.com` | The only hosts a push subscription endpoint may name (https, port 443, no credentials); anything else is refused with 400. Add a host only after checking it is a browser push service |
+| `PUSH_TIMEOUT_MS`, `PUSH_MAX_PER_USER` | `10000`, `5` | Deadline of one push request (headers and body); live devices per user (a new one revokes the oldest) |
 | `EMAIL_FROM`, `SUPPORT_EMAIL` | `Quorum <hello@qrm.si>`, `support@qrm.si` | |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | | Basic auth for REST and the key for `X-Twilio-Signature` |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | | Basic auth for REST and the key for `X-Twilio-Signature`. Without `TWILIO_AUTH_TOKEN` every status callback is refused (403): there is no built-in key |
 | `TWILIO_MESSAGING_SERVICE_SID` | | `MG…`; the service holds the `QUORUM` sender |
 | `TWILIO_VERIFY_SERVICE_SID` | | `VA…` |
 | `TWILIO_PUMPING_RISK_MAX` | `75` | Lookup `sms_pumping_risk_score` at or above this is refused (category `high` and blocked numbers always are) |
@@ -43,22 +48,23 @@ node server/scheduler.js 2026-10-27  # print a day's slot times in Ljubljana and
 | `STRIPE_PRICE_RESEARCH_M`, `STRIPE_PRICE_RESEARCH_Y` | | €39 / €390. Leave empty until Gate R passes |
 | `RESEARCH_TIER` | on | `off` refuses Research checkouts |
 | `ANTHROPIC_API_KEY`, `EXPLAINER_MODEL` | none | The explainer (Claude, Anthropic) runs only when both are set. `EXPLAINER_MODEL` is the pinned model id, written nowhere else; change it only with a methodology changelog entry. Without them every candidate goes to the approver to write |
-| `SESSION_SECRET` | random per process | HMAC key for session cookies. 32+ random bytes. Changing it signs everyone out |
+| `SESSION_SECRET` | random per process | HMAC key for session cookies. 32+ random bytes (checked in production). Changing it signs everyone out |
 | `SESSION_TTL_DAYS`, `MAGIC_LINK_TTL_MIN` | `30`, `15` | |
-| `ADMIN_TOKEN` | | Approver console `/admin` and `/api/admin/*`. Empty means the console is off (404). 32+ random bytes |
+| `ADMIN_TOKEN` | | Approver console `/admin` and `/api/admin/*`. Empty means the console is off (404). 32+ random bytes (checked in production) |
 | `SMS_COUNTRIES` | `SI,AT,DE,HR,IT` | Countries whose mobile numbers may receive texts |
 | `SCHEDULER` | `off` | `on` runs the daily timetable (section 5) in this process. Run exactly one instance with it on |
 | `ENGINE_DAY_DIR` | none | Where the engine drops `<YYYY-MM-DD>.json` (the day's output, engine or publisher shape) before 06:00 and optionally `<YYYY-MM-DD>.market.json` (US opens) before the open |
 | `SMS_MPS` | `10` | Texts per second in the 14:00 fan-out (the Messaging Service's confirmed throughput, UNVERIFIED). The fan-out must end in 600 s: `SMS_MPS` >= texts / 600, e.g. 5,000 subscribers x 4 items needs 34 |
 | `PUSH_CONCURRENCY`, `EMAIL_CONCURRENCY` | `8`, `4` | Parallel push and email sends during the fan-out |
 | `INVALID_NUMBER_AFTER` | `2` | Consecutive 30003/30005/30006 failures that mark a number invalid |
-| `SPIKE_30007_RATIO`, `SPIKE_30007_MIN` | `0.02`, `1` | 30007 share of the texts sent in 10 minutes above which SMS pauses (and at least this many 30007s) |
+| `SPIKE_30007_RATIO`, `SPIKE_30007_MIN` | `0.02`, `5` | SMS pauses when, of the texts sent in the last 10 minutes, more than this share and at least this many distinct ones came back 30007 (fewer only warn: `sms_30007`) |
+| `AUTH_EMAILS_PER_MINUTE`, `VERIFY_STARTS_PER_MINUTE` | `120`, `30` | Global budgets (all clients together) for sign-in emails and Verify codes; past one the route answers 429 and on-call is paged (`global_budget`) |
 | `OTS_CALENDARS` | the a/b OpenTimestamps pools and Eternity Wall | Comma-separated https calendar URLs; `off` disables |
 | `RFC3161_URL` | none | RFC 3161 time-stamping authority (a qualified eIDAS TSA is the target; UNVERIFIED which) |
 | `PAGER_WEBHOOK_URL` | none | On-call pages are POSTed here as JSON (and always logged and stored in `ops_alerts`) |
 | `IP_COUNTRY_HEADER` | empty | Request header a **trusted** edge sets with the client country, e.g. `cf-ipcountry`. Empty means the IP country is unknown |
 | `GEO_REQUIRE_IP` | `true` in production | Refuse signups whose IP country is unknown |
-| `TRUST_PROXY` | `0` | Number of proxies whose `X-Forwarded-For` entry is trusted for the client IP (rate limits, consent records) |
+| `TRUST_PROXY` | `0` | Number of proxies whose `X-Forwarded-For` entry is trusted for the client IP (rate limits, consent records). Rate limits key an IPv4 client per address and an IPv6 client per /64 (per /56 for sign-in emails, Verify starts and opt-out links) |
 | `OUTBOX_INTERVAL_MS` | `30000` | How often queued texts and emails that are due (quiet-hours holds, retries) are sent |
 
 Only the edge may set `IP_COUNTRY_HEADER`; strip it from client requests at the proxy, or the geofence can be spoofed.
@@ -73,7 +79,7 @@ Only the edge may set `IP_COUNTRY_HEADER`; strip it from client requests at the 
 4. **Messaging Service.** Sender pool: `QUORUM` only. Status callback: set per message by the server (`PUBLIC_BASE_URL/api/webhooks/twilio/status`). Keep Twilio link shortening off so links go out exactly as written; register `qrm.si` as the service's link domain and list it as the only URL in carrier registrations ("qrm.si whitelisted"). The validity period (3,600 s) is sent with every message. Put the SID in `TWILIO_MESSAGING_SERVICE_SID`.
 5. **Verify service.** Code length 6, SMS channel only (voice, email and WhatsApp off). Turn **Fraud Guard** on (maximum protection). **Geo permissions**: allow SMS to SI, AT, DE, HR and IT only. The server passes `Locale=sl|en`. Put the SID in `TWILIO_VERIFY_SERVICE_SID`.
 6. **Lookup v2.** Enable the Line Type Intelligence and SMS Pumping Risk packages (both billed per lookup). The server refuses landlines, fixed and non-fixed VoIP, other non-mobile types, blocked numbers, category `high`, and scores at or above `TWILIO_PUMPING_RISK_MAX`.
-7. **Opt-outs.** Twilio's opt-out list cannot be queried; our `opt_outs` and `consent_events` tables are the source of truth. Error 21610 on a status callback marks the user opted out (`server/receipts.js`).
+7. **Opt-outs.** Twilio's opt-out list cannot be queried; our `opt_outs` and `consent_events` tables are the source of truth. Error 21610 on a status callback marks the user opted out (`server/receipts.js`). A callback reaches an account only through the message SID of a text we sent, never through its `To` number; callbacks are stored without `To`/`From` and once per (SID, status, error code).
 8. **Prices.** Pull Slovenian and neighbouring SMS prices from the Pricing API and get a written quote (UNVERIFIED).
 
 ### Stripe (Checkout, Billing, Customer Portal, Tax)
@@ -96,6 +102,7 @@ Only the edge may set `IP_COUNTRY_HEADER`; strip it from client requests at the 
 2. **Pinning.** Set `EXPLAINER_MODEL` to the pinned model id; the code has no default and no id of its own. Changing it is a methodology change (changelog entry, ledger METHODOLOGY record). Requests use structured output (Zod schema), adaptive thinking, effort `medium`, `max_tokens` 8000 and the server-side fallback beta (`fallbacks: "default"`), through `client.beta.messages.parse` of the installed `@anthropic-ai/sdk`.
 3. **Logging.** Every prompt (system + input JSON) and output is stored in `explanations` with `prompt_sha256`, `output_sha256`, `llm_model`, `validator_passed`, `outcome` (passed, validator_failed, refused, parse_failed, rate_limited, api_error, flagged, clear) and the approver who approved it.
 4. **Failure handling.** A draft that fails `core/numeric-validator.js` or the wording check (no "you"/"should", advice, targets or predictions) is regenerated once, then handed to the approver. A refusal (`stop_reason: "refusal"`, `stop_details` logged) counts as a failed draft. SDK errors are caught by class (`RateLimitError`, `APIConnectionError`, `APIError`, ...): the SDK has already retried, so the candidate goes straight to the approver.
+5. **The news veto fails closed.** News items are third-party text (press releases, wire copy): the system prompt tells the model they are untrusted data, never instructions; at most 30 items per candidate are sent, headlines cut at 300 and summaries at 1,500 characters. Under the model sits a deterministic floor: material-event terms (auditor, restatement, investigation, going concern, guidance cut, downgrade, recall, covenant, default, insolvency, fraud, litigation, departures, failed deals, ...) and instruction-like text. A candidate passes untouched only when the scan comes back `clear` (no items, or the model found nothing and the floor did not fire). `flagged` removes it (`vetoed_llm`). `needs_review` (the floor fired, or items over the cap) and `unavailable` (explainer off, API error, refusal) leave it for the approver, who must read the items in the console and record the review, or it is removed at 13:40 (`news_unreviewed`). No thesis is told a check passed that did not: the factor JSON's `llm_48h` is `pass: null` until the scan clears or the approver's review is recorded.
 
 ### Web Push (VAPID)
 
@@ -103,7 +110,7 @@ Generate the key pair once and keep the private key secret (rotating it invalida
 ```sh
 node --input-type=module -e "import { generateVapidKeys } from './server/vendors/push.js'; console.log(generateVapidKeys())"
 ```
-Set `PUSH_TRANSPORT=webpush`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (a `mailto:` the push services can reach). The PWA reads the public key from `GET /api/push/key` and posts its `PushSubscription` to `POST /api/push/subscribe`. Push messages carry TTL 3600 (the SMS validity); a 404/410 from the push service revokes that subscription.
+Set `PUSH_TRANSPORT=webpush`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (a `mailto:` the push services can reach). The PWA reads the public key from `GET /api/push/key` and posts its `PushSubscription` to `POST /api/push/subscribe`, which accepts only endpoints on `PUSH_HOSTS` and keeps at most `PUSH_MAX_PER_USER` live devices per user. Before each send the endpoint's host must resolve to public addresses only (never loopback, private, link-local or the metadata address); every request has a `PUSH_TIMEOUT_MS` deadline and a user's devices are sent to in parallel, so a slow or dead endpoint cannot hold a fan-out worker. Push messages carry TTL 3600 (the SMS validity); a 404/410 from the push service revokes that subscription.
 
 ### Postmark (email, EU)
 
@@ -120,11 +127,13 @@ Terminate TLS at the edge, set `PUBLIC_BASE_URL=https://…`, `TRUST_PROXY=1`, `
 ## 4. How the backbone behaves
 
 - **Join:** magic link (15 min, single use, only the SHA-256 stored) → `POST /api/join/geo` (IP + declared country) → `POST /api/phone/start` (Lookup, then Verify in the user's locale) → `POST /api/phone/check` → consents (`POST /api/consent`, hash recomputed from `core/consent-texts.js`) → `POST /api/checkout` → webhooks grant the entitlement.
+- **Sign-in links are bound to the browser that asked.** `POST /api/auth/magic` sets a 15-minute HttpOnly `qrm_login` cookie (path `/api/auth`) whose hash is stored with the link. `GET /api/auth/callback` signs in directly only when that cookie comes back; any other browser (a second device, a mail scanner, a victim sent someone else's link) gets a page that changes nothing and asks "Sign in as a***@example.si?", whose button POSTs the token (same-origin only). A scanner therefore no longer uses a link up.
 - **Entitlement** = paid invoice seen, then `current_period_end` + 3 days (no grace after `cancel_at_period_end`); suspended 7 days after the first failed payment; revoked at once by `customer.subscription.deleted`, a dispute, a withdrawal or a card-country mismatch. Every webhook re-fetches the subscription and is deduplicated on `event.id`.
 - **Texts:** every text is a `notifications` row with a unique idempotency key, written before the provider call. Sends only 08:00–21:00 recipient-local; outside that window a text waits (`not_before`). The opt-in text goes out once per SMS consent grant when the user is entitled, consented and verified. An opt-out cancels queued texts at once.
 - **Pick fan-out:** at 14:00 every entitled user gets each BUY, CLOSE and RENEW by email and push, and by SMS when consent is granted, the channel is on, the phone is verified and valid, the number is in an SMS country and it is 08:00–21:00 where the recipient is (the zone the user set in their account, else the phone's country). A text outside those hours is recorded `cancelled / quiet_hours` and never sent later; pick texts expire at the US open of the issue day (`expires_at`). Content and the publish time are identical for every tier.
 - **Withdrawal button** (`POST /api/withdraw`, 14 days from the first payment): `withdrawals` row, access ends, Stripe refund (full on the first subscription, pro rata otherwise), immediate cancellation, confirmation email.
-- **Account deletion** cancels billing, opts out, deletes identity rows and scrubs message bodies and addresses; `consent_events`, `opt_outs`, `processed_events`, `delivery_events`, `access_log`, subscriptions and withdrawals stay (append-only or required by law) and point at an anonymised user id.
+- **Account deletion** cancels billing, opts out, deletes identity rows and sessions (with their IP address and user agent) and scrubs message bodies and addresses; `consent_events`, `opt_outs`, `processed_events`, `delivery_events`, `access_log`, subscriptions and withdrawals stay (append-only or required by law) and point at an anonymised user id. The deletion answer lists exactly what stays.
+- **Data minimisation of the provider logs.** `delivery_events` and `processed_events` are append-only, so nothing personal is written into them (`server/privacy.js`): a Twilio callback is stored without `To`/`From` (a hash of a phone number is no protection: a country's mobile ranges are enumerated in seconds), a Stripe event as ids, amounts, dates, statuses and billing country only (no name, email, phone, address or hosted-invoice link). Schema migration 3 rewrote the rows written before, then restored the append-only triggers.
 
 ## 5. The daily runbook (Europe/Ljubljana, US trading days)
 
@@ -133,16 +142,16 @@ The scheduler (`SCHEDULER=on`) runs each slot once (`scheduler_runs`, unique per
 | Time | Slot | What happens | What to check |
 |---|---|---|---|
 | 06:00 | `candidates` | `ENGINE_DAY_DIR/<date>.json` becomes `candidates` rows (every read and write in `access_log`) | Page `engine_output_missing`: the slot retries every 5 minutes until 13:40 |
-| 11:30 | `explain` | Claude: 48-hour news scan (a flag removes the candidate, `vetoed_llm`), EN/SL thesis drafts, validator, one regeneration | `explanations.outcome`; candidates with `thesis_status = handoff` need the approver |
-| 12:00–13:40 | approver | `/admin`: the named approver (or the deputy) reads each candidate, its thesis and news, removes with a written reason, writes any handed-off thesis, and **signs off** | Nothing is issued without a sign-off |
-| 13:40 | `review` | Review closes: no sign-off → every candidate "no_approver"; no validated thesis → removed and counted | |
+| 11:30 | `explain` | Claude: 48-hour news scan (a flag removes the candidate, `vetoed_llm`; a scan that does not clear leaves it for the approver), EN/SL thesis drafts, validator, one regeneration | `explanations.outcome`; candidates with `thesis_status = handoff` or "news review needed" need the approver |
+| 12:00–13:40 | approver | `/admin`: the named approver (or the deputy) reads each candidate, its thesis and its news (every item in full, with the scan's reason and red flags), removes with a written reason, records the news review of any candidate the scan did not clear, writes any handed-off thesis, and **signs off** | Nothing is issued without a sign-off |
+| 13:40 | `review` | Review closes: no sign-off → every candidate "no_approver"; news not cleared and not reviewed → removed (`news_unreviewed`); no validated thesis → removed; all counted | The ISSUE entry's `newsScan` counts clear / flagged / reviewed / unreviewed |
 | 13:45 | `seal` | BUY/RENEW ledger entries: canonical JSON (RFC 8785), SHA-256, previous hash, `producedAt`, the commit of a salted reveal | `/api/status`, `ledger_entries` |
 | 14:00:00 | `publish` | ISSUE entry, `recommendations` (production and dissemination times, price with source and time), notifications written, then paced SMS with push and email in parallel | Fan-out must end by 14:10: `issue_runs.delivery_json`, `/api/status` |
 | US open + 1 min | `marks` | Entry opens; exits: CLOSE entries reveal the sealed pick (checked against its commit), `outcomes` | Page `reveal_mismatch` never happens silently |
 | 23:59 UTC | `anchor` | Merkle root → `ledger_anchors`, OpenTimestamps, RFC 3161 | Alert `anchor_failed` |
 | Sunday 18:00 | `weekly` | Weekly Ledger email to every verified reader (no SMS) | |
 
-**The approver's steps.** Open `https://<host>/admin`, sign in with the admin token, choose the issue date and "Acting as" (your own name), read every candidate, remove any with a written reason (removal only: there is no add and no substitute), write the thesis of any candidate marked `handoff` (the numeric validator and the wording check apply), and press **Sign off the review** before 13:40. Every view is logged. The JSON API does the same with `Authorization: Bearer <ADMIN_TOKEN>`: `GET /api/admin/candidates`, `POST /api/admin/veto {candidateId, reason, personId}`, `POST /api/admin/thesis {candidateId, en, sl, personId}`, `POST /api/admin/signoff {personId}`.
+**The approver's steps.** Open `https://<host>/admin`, sign in with the admin token, choose the issue date and "Acting as" (your own name), read every candidate and its 48-hour news, remove any with a written reason (removal only: there is no add and no substitute), and for every candidate marked **News review needed** read each item and either remove the candidate (material news) or tick "I have read every item above: nothing is material" and press **Record news review** (logged with your name; without it the candidate is removed at 13:40). Write the thesis of any candidate marked `handoff` (the numeric validator and the wording check apply), and press **Sign off the review** before 13:40. Every view is logged. The JSON API does the same with `Authorization: Bearer <ADMIN_TOKEN>`: `GET /api/admin/candidates` (each candidate with `news` in full, `scan`, `needsNewsReview`, `newsReview`), `POST /api/admin/veto {candidateId, reason, personId}`, `POST /api/admin/news-review {candidateId, personId, note?}`, `POST /api/admin/thesis {candidateId, en, sl, personId}`, `POST /api/admin/signoff {personId}`.
 
 **Staff pre-clearance** (brief §2.9): staff, founders and families trade funds and ETFs only. Every intended trade is logged in the console ("Staff pre-clearance") or `POST /api/admin/preclearance {personId, instrument, instrumentType, side}`: funds and ETFs are cleared, single stocks refused, every request kept in `staff_trade_requests` and `access_log`.
 
@@ -152,9 +161,9 @@ The scheduler (`SCHEDULER=on`) runs each slot once (`scheduler_runs`, unique per
 
 **Approver absent.** The deputy signs in to `/admin` as themselves (never on someone else's behalf: every action is attributed) and signs off. If neither the approver nor the deputy can review by 13:40, do nothing: the candidates are logged "unissued (no approver)", RENEW candidates close their pick instead, and the issue still publishes at 14:00 with `unissued` counted in the ISSUE entry. A missed approval means no pick, never an unapproved one.
 
-**Explainer down or refusing.** Candidates arrive in the console with `thesis_status = handoff` (and `veto_scan = unavailable` when the scan failed: read the news yourself). Write the theses by hand or remove the candidates. Check `explanations.outcome` and `error` for the reason (rate limit, connection, refusal with `stop_details`). Do not switch `EXPLAINER_MODEL` during the day.
+**Explainer down or refusing.** Candidates arrive in the console with `thesis_status = handoff` and, when they have news, `veto_scan = unavailable` and "News review needed": read every item shown and record the review (or remove the candidate); an unreviewed one is removed at 13:40. Write the theses by hand or remove the candidates. Check `explanations.outcome` and `error` for the reason (rate limit, connection, refusal with `stop_details`). Do not switch `EXPLAINER_MODEL` during the day.
 
-**Twilio 30007 spike** (carrier filtering). The server pauses SMS by itself when 30007s exceed 2 % of the texts sent in the last 10 minutes and pages on-call (`sms_30007_spike`); push and email continue; queued texts wait. Then: (1) check Twilio's error log and the Messaging Service insights for the affected country and carrier; (2) compare the texts with the LOA and registered samples (a template change, a new link or a new sender are the usual causes); (3) open a Twilio support case with the error samples; (4) resume only when the cause is known, from the console ("Resume SMS") or `POST /api/admin/sms {"paused": false}`. Pick texts still queued after the US open are cancelled as `expired`, never sent late. If a carrier keeps filtering, stop SMS for that country (`SMS_COUNTRIES`) and use the Infobip failover (brief §2.6, UNVERIFIED).
+**Twilio 30007 spike** (carrier filtering). The server pauses SMS by itself when, of the texts sent in the last 10 minutes, at least 5 distinct ones came back 30007 and they are more than 2 % of them, and pages on-call (`sms_30007_spike`); push and email continue; queued texts wait. Repeated callbacks count once, and a late receipt for a text sent before the window does not count; fewer filtered texts raise a warning (`sms_30007`) without pausing. Then: (1) check Twilio's error log and the Messaging Service insights for the affected country and carrier; (2) compare the texts with the LOA and registered samples (a template change, a new link or a new sender are the usual causes); (3) open a Twilio support case with the error samples; (4) resume only when the cause is known, from the console ("Resume SMS") or `POST /api/admin/sms {"paused": false}`. Pick texts still queued after the US open are cancelled as `expired`, never sent late. If a carrier keeps filtering, stop SMS for that country (`SMS_COUNTRIES`) and use the Infobip failover (brief §2.6, UNVERIFIED).
 
 **21610 and invalid numbers.** 21610 opts the user out of SMS at once (`opt_outs.source = twilio`, no confirmation text). Two consecutive 30003/30005/30006 failures mark the number invalid and email the user; they fix it by verifying a number again in the account.
 
@@ -162,7 +171,7 @@ The scheduler (`SCHEDULER=on`) runs each slot once (`scheduler_runs`, unique per
 
 **Clock and DST.** The host clock must be NTP-synchronised (the 14:00:00 publish, Stripe's 300 s signature tolerance, the 13:40 review cut-off). Slot times are computed per day from IANA zones (`Europe/Ljubljana`, `America/New_York`) in Node's ICU data, not from the host time zone: after an OS or Node update run `node server/scheduler.js <dates>` around the next clock changes and compare with section 5 (EU: last Sundays of March and October; US: second Sunday of March, first Sunday of November). A clock that jumps forward past a slot is handled like downtime (below); a clock that jumps back never runs a slot twice.
 
-**Server down over a slot (never caught up into a text).** When the process comes back, each slot that passed is handled once: candidates and explain run late until 13:40; a missed seal (after 13:59:59) seals nothing and the day's candidates are logged unissued; a missed publish (after 14:10) publishes the web issue with its real time and `late: true` and sends **no** texts, push or email (`issue_late` is paged); marks and the anchor run late. Decide by hand whether subscribers need an email about a late issue; never send a pick text after the slot.
+**Server down over a slot (never caught up into a text).** When the process comes back, every notification it left `sending` is settled first: push and email are queued again, a text is marked `failed / interrupted` (it may have gone out; check the Twilio log, never resend by hand without checking) and `send_interrupted` is raised; the outbox does the same for any row stuck `sending` for 5 minutes. Then each slot that passed is handled once: candidates and explain run late until 13:40; a missed seal (after 13:59:59) seals nothing and the day's candidates are logged unissued; a missed publish (after 14:10) publishes the web issue with its real time and `late: true` and sends **no** texts, push or email (`issue_late` is paged); marks and the anchor run late. Decide by hand whether subscribers need an email about a late issue; never send a pick text after the slot.
 
 **Engine output missing.** Paged at 06:00 (`engine_output_missing`), retried every 5 minutes. If it never arrives, the issue publishes at 14:00 with no picks and `engineOutput: "missing"` in the ISSUE entry.
 
@@ -196,6 +205,8 @@ INSERT INTO settings (key, value, updated_at) VALUES ('sms_paused', '1', datetim
 ```
 Queued texts wait; push and email continue. Resume from the console; the outbox sends what is still due and cancels pick texts past their validity (`expired`).
 
+**Opt-out links.** New unsubscribe tokens have 8 base62 characters (62^8); tokens of 6 or 7 characters issued earlier stay valid, because they are in texts already delivered and a stop link must keep working. `/u/<token>` is no validity oracle: GET answers the same bilingual page for every token, POST answers an unknown token exactly like a known one whose texts are already off. Unknown tokens count against a global budget (200 per 10 minutes) that pages on-call (`global_budget`) when someone scans for valid ones.
+
 **Opt-out by email or support.** Record it with the same code path the link uses:
 ```sh
 node --input-type=module -e "
@@ -218,5 +229,5 @@ await app.close();" someone@example.com
 - OpenTimestamps proofs are stored as the calendars' pending answers; upgrading them to Bitcoin-confirmed proofs is done offline with the `ots` client on the stored `.ots` file. RFC 3161 replies are checked for status, imprint and nonce, not for the TSA's CMS signature (verify with `openssl ts -verify`).
 - Postmark calls go one message per request at `EMAIL_CONCURRENCY`; above a few thousand subscribers per issue switch the fan-out to Postmark's batch endpoint.
 - The weekly email's statistics cover what this server published (its `outcomes`), not the engine's full sealed record.
-- Rate limits are in memory per process; run one instance (the scheduler must also run in exactly one).
-- The sign-in callback is a GET that consumes the link; aggressive email link scanners can burn it (the user asks for a new link).
+- Rate limits are in memory per process; run one instance (the scheduler must also run in exactly one). The limiter keeps at most 100,000 buckets (least recently used evicted), so address churn cannot exhaust memory, but an evicted client starts with a full bucket: the global budgets are the backstop.
+- The push-host check resolves the endpoint's host before the request, and `fetch` resolves it again: a DNS answer that changes in between is not caught (the host allow-list is the main defence).

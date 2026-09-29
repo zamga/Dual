@@ -4,9 +4,13 @@
 //
 //   GET  /admin                        console page (sign-in form without a valid admin cookie)
 //   POST /admin/login  /admin/logout   form: token -> HMAC-signed, SameSite=Strict cookie
-//   POST /admin/veto /admin/thesis /admin/signoff /admin/preclearance /admin/sms   (forms, 303 back)
+//   POST /admin/veto /admin/news-review /admin/thesis /admin/signoff /admin/preclearance /admin/sms   (forms, 303 back)
+// Every candidate is shown with its 48-hour news items in full (headline, source, time, summary),
+// the scan's outcome and reason, and the keyword red flags, so the approver reads the news itself.
 //   GET  /api/admin/candidates?date=   today's candidates (logs every access)
 //   POST /api/admin/veto {candidateId, reason, reasonSl?, personId}   removal only, reason mandatory
+//   POST /api/admin/news-review {candidateId, personId, note?}         "news read, nothing material" for a
+//                                                                      candidate whose 48-hour scan did not clear
 //   POST /api/admin/thesis {candidateId, en, sl, personId}            approver-written thesis (validated)
 //   POST /api/admin/signoff {personId}                                 the approver's review of the day
 //   GET|POST /api/admin/preclearance {personId, instrument, instrumentType, side}  funds and ETFs only
@@ -16,7 +20,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { formatInZone, LJUBLJANA } from '../core/calendar.js';
 import { HttpError, sendHtml, redirect, parseCookies, serializeCookie, appendHeader, signValue, verifySignedValue } from './http.js';
-import { PipelineError, PIPELINE_TIMES, pipelineInstant } from './publisher.js';
+import { PipelineError, PIPELINE_TIMES, pipelineInstant, NEWS_REVIEW_NEEDED } from './publisher.js';
 import { escapeHtml, iso } from './util.js';
 
 const COOKIE = 'qadm';
@@ -40,6 +44,7 @@ const HTTP_FOR = {
   thesis_invalid: 400,
   review_closed: 409,
   not_open: 409,
+  review_not_needed: 409,
   already_sealed: 409,
 };
 
@@ -82,6 +87,8 @@ export function registerAdminRoutes(router, ctx) {
       approver: db.get('SELECT p.public_id FROM approver_signoffs s JOIN persons p ON p.id = s.person_id WHERE s.issue_date = ? ORDER BY s.id LIMIT 1', date)?.public_id ?? null,
       candidates: rows.map((c) => {
         const t = publisher().thesisOf(c.id);
+        const scan = parseJson(c.veto_scan_detail) ?? {};
+        const reviewer = c.news_reviewed_by ? db.get('SELECT public_id FROM persons WHERE id = ?', c.news_reviewed_by)?.public_id ?? null : null;
         return {
           id: c.id,
           kind: c.kind,
@@ -99,6 +106,13 @@ export function registerAdminRoutes(router, ctx) {
           thesisStatus: c.thesis_status,
           thesis: t ? { en: t.en, sl: t.sl, drafter: t.drafter } : null,
           newsItems: (c.payload.news ?? []).length,
+          // The items in full: the approver reads them (third-party text, escaped in the page).
+          news: (c.payload.news ?? []).map((x, i) => ({ id: String(x.id ?? i + 1), at: x.at ?? null, source: x.source ?? null, headline: x.headline ?? '', summary: x.summary ?? null })),
+          scan: c.veto_scan_detail
+            ? { status: scan.status ?? c.veto_scan, category: scan.category ?? null, reason: scan.reason ?? null, itemIds: scan.itemIds ?? [], redFlags: scan.redFlags ?? [], unscanned: scan.unscanned ?? 0 }
+            : null,
+          newsReview: c.news_reviewed_at ? { by: reviewer, at: c.news_reviewed_at, note: scan.review?.note ?? null } : null,
+          needsNewsReview: c.status === 'candidate' && NEWS_REVIEW_NEEDED.includes(c.veto_scan),
         };
       }),
     };
@@ -172,6 +186,7 @@ export function registerAdminRoutes(router, ctx) {
       { accepts: ['json'], rate: 'admin' },
     );
   post('/api/admin/veto', (b, { ip }) => publisher().veto(pick(b.date) ?? today(), b.candidateId, { personId: b.personId, reason: b.reason, reasonSl: b.reasonSl, ip }));
+  post('/api/admin/news-review', (b, { ip }) => publisher().reviewNews(pick(b.date) ?? today(), b.candidateId, { personId: b.personId, note: b.note ?? null, ip }));
   post('/api/admin/thesis', (b, { ip }) => publisher().writeThesis(pick(b.date) ?? today(), b.candidateId, { personId: b.personId, en: String(b.en ?? ''), sl: String(b.sl ?? ''), ip }));
   post('/api/admin/signoff', (b, { ip }) => publisher().signOff(pick(b.date) ?? today(), { personId: b.personId, ip }));
   post('/api/admin/preclearance', (b, { req, ip }) => preclear({ ...b, deciderId: b.deciderId ?? null, ip, actor: actorOf(req, b.personId) }));
@@ -256,6 +271,11 @@ export function registerAdminRoutes(router, ctx) {
     publisher().veto(b.date ?? today(), b.candidateId, { personId: b.personId, reason: b.reason, reasonSl: b.reasonSl, ip });
     return { message: `Candidate ${b.candidateId} removed` };
   });
+  form('/admin/news-review', (b, { ip }) => {
+    if (b.confirm !== '1') throw new HttpError(400, 'confirm_required', 'Tick the box to confirm you have read every item.');
+    publisher().reviewNews(b.date ?? today(), b.candidateId, { personId: b.personId, note: b.note ?? null, ip });
+    return { message: `News review recorded for candidate ${b.candidateId}` };
+  });
   form('/admin/thesis', (b, { ip }) => {
     publisher().writeThesis(b.date ?? today(), b.candidateId, { personId: b.personId, en: b.en ?? '', sl: b.sl ?? '', ip });
     return { message: `Thesis saved for candidate ${b.candidateId}` };
@@ -272,6 +292,14 @@ export function registerAdminRoutes(router, ctx) {
     setSms(b.paused === '1', actorOf(req, b.personId));
     return { message: b.paused === '1' ? 'SMS paused' : 'SMS resumed' };
   });
+}
+
+function parseJson(text) {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
 }
 
 // ------------------------------------------------------------------ pages
@@ -292,6 +320,9 @@ input,select,textarea{border:1px solid var(--hairline);background:#fff;padding:6
 button{background:var(--graphite);color:var(--karst);border:0;padding:8px 12px;cursor:pointer}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--graphite);outline-offset:2px}
 details{margin-top:6px}.box{background:var(--paper);border:1px solid var(--hairline);padding:12px;margin:8px 0}
+.news{list-style:none;margin:6px 0;padding:0}.news li{border-left:2px solid var(--hairline);padding:2px 0 2px 8px;margin:6px 0}
+.news li.flag{border-left-color:var(--loss)}.news .src{font-size:12px;color:var(--slate)}
+.warn{color:var(--loss);font-weight:600}
 `;
 
 function shell(title, body) {
@@ -307,6 +338,25 @@ function loginPage(error) {
   );
 }
 
+// newsCell(candidate) -> the 48-hour news block: the scan's outcome and reason, then every item in
+// full (third-party text, escaped), items with a red flag marked, beside the model's reason.
+function newsCell(c) {
+  const e = escapeHtml;
+  const flags = new Map((c.scan?.redFlags ?? []).map((f) => [f.id, f]));
+  const cited = new Set(c.scan?.itemIds ?? []);
+  const items = (c.news ?? [])
+    .map((x) => {
+      const f = flags.get(x.id);
+      const marks = [f ? `red flag: ${[...f.terms, ...(f.instructionLike ? ['instruction-like text'] : [])].join(', ')}` : null, cited.has(x.id) ? 'cited by the scan' : null].filter(Boolean);
+      return `<li class="${f ? 'flag' : ''}"><strong>${e(x.headline)}</strong>${x.summary ? `<br>${e(x.summary)}` : ''}<br><span class="src">${e(x.source ?? 'unknown source')} · <span class="mono">${e(x.at ?? 'no time')}</span> · item ${e(x.id)}${marks.length ? ` · <span class="warn">${e(marks.join('; '))}</span>` : ''}</span></li>`;
+    })
+    .join('');
+  const review = c.newsReview ? `<br>news reviewed by <strong>${e(c.newsReview.by ?? '?')}</strong> <span class="mono">${e(c.newsReview.at)}</span>${c.newsReview.note ? `: ${e(c.newsReview.note)}` : ''}` : '';
+  const reason = c.scan?.reason ? `<br><span class="muted">scan: ${e(c.scan.category ?? '')}${c.scan.category ? ': ' : ''}${e(c.scan.reason)}</span>` : '';
+  const unscanned = c.scan?.unscanned && c.scan.status !== 'unavailable' ? `<br><span class="warn">${c.scan.unscanned} item(s) not scanned (over the cap)</span>` : '';
+  return `news scan: <strong>${e(c.vetoScan ?? '-')}</strong> (${c.newsItems} ${c.newsItems === 1 ? 'item' : 'items'})${reason}${unscanned}${review}${items ? `<details${c.needsNewsReview ? ' open' : ''}><summary>48-hour news (${c.newsItems})</summary><ul class="news">${items}</ul></details>` : ''}`;
+}
+
 function consolePage({ ctx, view, person, preclear, msg, err }) {
   const e = escapeHtml;
   const approvers = ctx.db.all("SELECT public_id, full_name, job_title, role, fictional FROM persons ORDER BY public_id");
@@ -316,6 +366,14 @@ function consolePage({ ctx, view, person, preclear, msg, err }) {
   const open = view.stage && !['reviewed', 'sealed', 'published', 'marked', 'anchored'].includes(view.stage);
   const rows = view.candidates
     .map((c) => {
+      const newsReview =
+        open && person && c.needsNewsReview
+          ? `<form method="post" action="/admin/news-review" class="box">${dateField}${personField}<input type="hidden" name="candidateId" value="${c.id}">
+               <p class="warn">News review needed: the automated scan did not clear this candidate. Without a review it is removed at 13:40.</p>
+               <label><input type="checkbox" name="confirm" value="1" required> I have read every item above: nothing is material negative news.</label>
+               <br><label class="muted" for="nr${c.id}">Note (optional)</label><textarea id="nr${c.id}" name="note"></textarea>
+               <button type="submit">Record news review</button> <span class="muted">Material news: remove the candidate instead.</span></form>`
+          : '';
       const actions =
         open && c.status === 'candidate' && person
           ? `<form method="post" action="/admin/veto" class="inline">${dateField}${personField}<input type="hidden" name="candidateId" value="${c.id}">
@@ -327,7 +385,7 @@ function consolePage({ ctx, view, person, preclear, msg, err }) {
         <td><strong class="mono">${e(c.ticker)}</strong><br>${e(c.name ?? '')}<br><span class="muted">${e(c.sector ?? '')}</span></td>
         <td class="mono">${c.agreement ?? ''}/4 ${e((c.agreeing ?? []).join(''))}</td>
         <td>${e(c.status)}${c.statusReason ? `<br><span class="muted">${e(c.statusReason)}</span>` : ''}</td>
-        <td>news scan: ${e(c.vetoScan ?? '-')} (${c.newsItems} items)<br>thesis: ${e(c.thesisStatus ?? '-')}${c.thesis ? `<details><summary>Read (${e(c.thesis.drafter)})</summary><p>${e(c.thesis.en)}</p><p lang="sl">${e(c.thesis.sl)}</p></details>` : ''}</td>
+        <td>${newsCell(c)}${newsReview}thesis: ${e(c.thesisStatus ?? '-')}${c.thesis ? `<details><summary>Read (${e(c.thesis.drafter)})</summary><p>${e(c.thesis.en)}</p><p lang="sl">${e(c.thesis.sl)}</p></details>` : ''}</td>
         <td>${actions}</td></tr>`;
     })
     .join('');
@@ -341,7 +399,7 @@ function consolePage({ ctx, view, person, preclear, msg, err }) {
        <button type="submit">Show</button></form>
      <p>Stage: <strong>${e(view.stage ?? 'no candidates')}</strong>${view.reviewClosesAt ? ` · review closes <span class="mono">${e(view.reviewClosesAt)}</span>` : ''} · signed off by: <strong>${e(view.approver ?? 'nobody yet')}</strong></p>
      <table><thead><tr><th>Id</th><th>Kind</th><th>Stock</th><th>Models</th><th>Status</th><th>Checks</th><th>Action</th></tr></thead><tbody>${rows || '<tr><td colspan="7">No candidates.</td></tr>'}</tbody></table>
-     ${open && person ? `<form method="post" action="/admin/signoff" class="box">${dateField}${personField}<p>Sign off: I have reviewed today's candidates and their news. Without a sign-off by 13:40 nothing is issued ("no approver").</p><button type="submit">Sign off the review</button></form>` : ''}
+     ${open && person ? `<form method="post" action="/admin/signoff" class="box">${dateField}${personField}<p>Sign off: I have reviewed today's candidates and their news. Without a sign-off by 13:40 nothing is issued ("no approver"). A candidate marked "news review needed" is removed at 13:40 unless its news review is recorded.</p><button type="submit">Sign off the review</button></form>` : ''}
      <h2>SMS channel</h2><form method="post" action="/admin/sms" class="inline box">${dateField}${personField}<span>${paused ? `<strong class="err">Paused</strong> <span class="muted">${e(ctx.db.getSetting('sms_paused_reason') ?? '')}</span>` : 'Sending'}</span>
        <input type="hidden" name="paused" value="${paused ? '0' : '1'}"><button type="submit">${paused ? 'Resume SMS' : 'Pause SMS'}</button></form>
      <h2>Staff pre-clearance (funds and ETFs only)</h2>

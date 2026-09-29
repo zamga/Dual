@@ -43,28 +43,32 @@ export function createShell(app) {
   let lastFocus = null;
 
   // ---- demo bar -----------------------------------------------------------------------------------
+  // The complete disclaimer at every width (ARCHITECTURE.md §5): it wraps on narrow screens rather than
+  // switching to a shorter string. View-as is a demo control only; live mode shows the locale alone.
   function renderDemo() {
     const tiers = ['free', 'signal', 'research'];
-    const seg = h(
-      'div',
-      { class: 'seg', role: 'group', 'aria-labelledby': 'viewas-label' },
-      tiers.map((id) =>
-        h('button', { type: 'button', 'aria-pressed': String(app.tier === id), onclick: () => app.setTier(id), title: t('demo.viewAsHint') }, t(`tier.${id}`)),
-      ),
-    );
-    const sel = h(
-      'select',
-      { class: 'demo-bar__select', 'aria-label': t('demo.viewAs'), onchange: (e) => app.setTier(e.target.value) },
-      tiers.map((id) => h('option', { value: id, selected: app.tier === id }, `${t(`tier.${id}`)} ▾`)),
-    );
+    const live = app.mode === 'live';
+    const seg = live
+      ? null
+      : h(
+          'div',
+          { class: 'seg', role: 'group', 'aria-labelledby': 'viewas-label' },
+          tiers.map((id) =>
+            h('button', { type: 'button', 'aria-pressed': String(app.tier === id), dataset: { tier: id }, onclick: () => app.setTier(id), title: t('demo.viewAsHint') }, t(`tier.${id}`)),
+          ),
+        );
+    const sel = live
+      ? null
+      : h(
+          'select',
+          { class: 'demo-bar__select', 'aria-label': t('demo.viewAs'), onchange: (e) => app.setTier(e.target.value) },
+          tiers.map((id) => h('option', { value: id, selected: app.tier === id }, `${t(`tier.${id}`)} ▾`)),
+        );
+    demo.setAttribute('aria-label', t('demo.region'));
+    demo.classList.toggle('is-live', live);
     demo.replaceChildren(
-      h(
-        'p',
-        { class: 'demo-bar__text label' },
-        h('span', { class: 'demo-bar__long' }, t('demo.notice')),
-        h('span', { class: 'demo-bar__short' }, t('demo.short')),
-      ),
-      h('div', { class: 'demo-bar__tier' }, h('span', { class: 'label', id: 'viewas-label' }, t('demo.viewAs')), seg, sel, localeButton()),
+      h('p', { class: 'demo-bar__text label' }, t('demo.notice')),
+      h('div', { class: 'demo-bar__tier' }, live ? null : h('span', { class: 'label', id: 'viewas-label' }, t('demo.viewAs')), seg, sel, localeButton()),
     );
   }
 
@@ -121,7 +125,10 @@ export function createShell(app) {
     let title;
     if (st.kind === 'result') {
       state = st.quorum ? 'quorum' : 'none';
-      parts = [h('span', { class: 'pill__main' }, st.quorum ? tp('pill.quorum', st.picks) : t('pill.noQuorum'))];
+      // "No quorum" only when no stock reached the rule; a day whose qualifying stocks were all held,
+      // capped or cooling down has no new pick, which is a different statement.
+      const met = (st.issue?.closest ?? 0) >= (app.meta?.rule?.minAgree ?? 3) && (st.issue?.reached ?? 0) > 0;
+      parts = [h('span', { class: 'pill__main' }, st.quorum ? tp('pill.quorum', st.picks) : met ? t('pill.noPick') : t('pill.noQuorum'))];
       title = t('pill.title.result', { tz: st.tz });
       pillEl.href = href('issue', st.date);
     } else {
@@ -146,10 +153,16 @@ export function createShell(app) {
     } else {
       pillEl.replaceChildren(h('span', { class: 'pill__dot', 'aria-hidden': 'true' }), h('span', { class: 'pill__text' }, ...parts));
     }
+    // The demo clock pins itself when the next issue slot arrives while the page is open: time-derived
+    // page text (#app, #status) must follow once, so the page never contradicts the pill.
+    const flipped = pillEl.dataset.mode === 'live' && mode === 'pinned';
     pillEl.dataset.state = state;
     pillEl.dataset.mode = mode;
+    if (flipped) app.onClockPinned?.();
     pillEl.title = title;
-    pillEl.setAttribute('aria-label', `${pillEl.textContent.replace(/\s+/g, ' ').trim()}. ${title}`);
+    // The accessible name is built from the parts (the visible lines run together as text nodes).
+    const spoken = st.kind === 'result' ? parts[0].textContent : `${t('pill.next')}${mode === 'pinned' ? ` (${t('pill.pinned')})` : ''}: 14:00, ${st.left.text}`;
+    pillEl.setAttribute('aria-label', `${spoken}. ${title}`);
     clearTimeout(pillTimer);
     pillTimer = setTimeout(updatePill, msToNextMinute(now));
   }
@@ -244,7 +257,7 @@ export function createShell(app) {
     footer.replaceChildren(
       h(
         'nav',
-        { class: 'footer-nav', 'aria-label': 'Footer' },
+        { class: 'footer-nav', 'aria-label': t('footer.label') },
         col(t('nav.q.how'), [[href('how-it-works'), t('nav.howItWorks')], [href('methodology'), t('nav.methodology')], [href('methodology-changelog'), t('nav.changelog')]]),
         col(t('nav.q.proof'), [[href('ledger'), t('nav.ledger')], [href('backtest'), t('nav.backtest')], [href('disclosures'), t('nav.disclosures')], [href('disclosures', null, 'list'), t('footer.all12m')]]),
         col(t('nav.q.get'), [[href('pricing'), t('nav.pricing')], [href('join'), t('nav.join')], [href('help'), t('nav.help')], [href('status'), t('nav.status')]]),
@@ -264,7 +277,7 @@ export function createShell(app) {
         h('p', {}, t('footer.company')),
         h('p', {}, t('footer.p1')),
         h('p', {}, t('footer.p2')),
-        h('p', {}, t('footer.p3')),
+        h('p', {}, t(app.mode === 'live' ? 'footer.p3' : 'footer.p3demo')),
         h('p', {}, t('footer.p4')),
       ),
       h(
@@ -344,6 +357,7 @@ export function createShell(app) {
     tip.classList.add('is-on');
     rules.forEach((el, k) => el.classList.toggle('is-lit', k === i));
     qsa('.plinth', plinths).forEach((el, k) => el.classList.toggle('is-lit', k === i));
+    plinths.classList.add('is-lit');
     tipFor = i;
   }
 
@@ -351,6 +365,7 @@ export function createShell(app) {
     tip.classList.remove('is-on');
     rules.forEach((el) => el.classList.remove('is-lit'));
     qsa('.plinth', plinths).forEach((el) => el.classList.remove('is-lit'));
+    plinths.classList.remove('is-lit');
     tipFor = -1;
   }
 
@@ -362,6 +377,7 @@ export function createShell(app) {
   let near = -1;
   let raf = 0;
   let lastEv = null;
+  document.documentElement.addEventListener('pointerleave', () => plinths.classList.remove('is-near'));
   document.addEventListener(
     'pointermove',
     (e) => {
@@ -371,6 +387,8 @@ export function createShell(app) {
       raf = requestAnimationFrame(() => {
         raf = 0;
         const ev = lastEv;
+        // the plinths show only while the pointer is near the bottom edge, where they stand
+        plinths.classList.toggle('is-near', ev.clientY >= window.innerHeight - 48);
         if (!ruleXs.length) measureRules();
         const i = ruleXs.findIndex((x) => Math.abs(ev.clientX - x) <= 5);
         const onUi = ev.target.closest?.('a, button, input, select, textarea, summary, .ts, .hash, canvas, .no-rule-tip');

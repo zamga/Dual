@@ -150,7 +150,9 @@ export function createTwilio({
 // Console twin. Lookup is derived from the number so every rejection path can be exercised:
 // national numbers ending 0000 are landlines, 9999 non-fixed VoIP, 6666 high SMS-pumping risk,
 // 5555 invalid. Verify codes are random and logged (lastCode(e164) returns them for tests).
-export function createConsoleSms({ log = console, authToken = 'console-auth-token', idPrefix = 'SMconsole', clock = () => new Date() } = {}) {
+// Status callbacks validate only against a configured authToken: without one, none is accepted
+// (there is no built-in token anyone could sign with).
+export function createConsoleSms({ log = console, authToken = '', idPrefix = 'SMconsole', clock = () => new Date() } = {}) {
   const codes = new Map();
   const outbox = [];
   let n = 0;

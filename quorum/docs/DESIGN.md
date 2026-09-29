@@ -15,8 +15,9 @@ This is the system the web lead built in `web/`. Follow it exactly and new pages
 | `web/css/base.css` | Reset, type classes, the grid and the rules, focus ring, reduced motion, scroll-driven reveals, View Transitions. |
 | `web/css/components.css` | Shell and shared components (§7). |
 | `web/css/pages.css` | Page layouts: The Level, home sections, long-form pages, pricing, about, legal, 404. Add your page's block here with a banner comment. |
-| `web/js/app.js` | Boot, hash router, View Transitions, data loader + cache, demo clock, locale, view-as tier. |
-| `web/js/router.js` | Route table (pure). **Add routes here.** |
+| `web/js/app.js` | Boot, hash router, View Transitions, data loader + cache, demo clock, locale, view-as tier (demo) or the viewer's tier from `GET /api/me` (live), `ctx.launch()`. |
+| `web/js/router.js` | Route table (pure). **Add routes here.** Links are built with `href(name, param?, section?)`: `href('ledger', null, 'scoreboard')` → `#ledger~scoreboard` (a section is `~id` after the flat token, never `?key=value`). |
+| `web/js/launch.js` | `launchInfo(backtest)` (pure): the launch status under amendment A-1, gates (a)(b)(c)(e) + (d1) + (d2); `research` when a gate that cannot recover failed. Every page asks `ctx.launch()` before it says a text was sent. |
 | `web/js/shell.js` | Demo bar, header, pill, menu sheet, footer, rule labels, header surface detection. |
 | `web/js/clock.js` | Demo clock and pill state (pure, tested). |
 | `web/js/i18n.js` | Shared EN/SL strings, `t()`, `tp()` (plurals), `pickL()`, `formatters()`. |
@@ -24,7 +25,7 @@ This is the system the web lead built in `web/`. Follow it exactly and new pages
 | `web/js/ui.js` | Components with behaviour: `hashChip`, `timestamp`, `signed`, `quorumBadge`, `sectionHead`, `statStrip`, `trackRecordLabel`, `phone`, `familyName`, `familyDef`. |
 | `web/js/pages/_content.js` | Long-form template: `masthead`, `contentSections`, `toc`, `table`, `page`, `toNode`. |
 | `web/js/hero/level.js`, `level-data.js` | The Level (home hero) and its pure helpers. |
-| `web/js/charts/silence-calendar.js` | The Silence Calendar. Put new charts in `web/js/charts/`. |
+| `web/js/charts/silence-calendar.js` | The Silence Calendar. Put new charts in `web/js/charts/` (`quorum-example.js` is the small real quorum used on home and #how-it-works). |
 | `web/js/pages/*.js` | One module per route. Stubs (`export { render } from './_pending.js'`) mark routes still to build: replace the file. |
 
 ## 2. Palette and surfaces
@@ -88,7 +89,9 @@ desktop(1024+):  BAY = min(25%, 460px), M = 1fr each (1440 → rules at 180/540/
 - Nested alignment: `display: grid; grid-template-columns: subgrid` on a child spanning `full-start / full-end` keeps the line names (used by the nav, footer, scoreboard, families row, hero axes).
 - Opaque full-width surfaces (Chamber sections, the hero stage, the footer) add `.ruled`: two pseudo-elements redraw the rules in `--rule` (Mist at 17% on Chamber), so the colonnade continues through dark sections.
 - Charts put their axes on the rules. Examples: the hero's four percentile axes; the scoreboard's 10–90% hit-rate axis across r2→r4 so **50% is rule 3**; the pick note's 21 trading days across r1→r4 (7 days a bay); three pricing tiers on three bays; four responsible persons on four rules.
-- **Rule labels.** Hovering within 5 px of a rule for 220 ms lights it and shows a tip (`.rule-tip`): "Column A · Trend · definition" from `meta.families`. Keyboard and screen readers get the four `.plinth` buttons (A–D) fixed at the rule bases, hidden over the hero (whose axes carry the labels) and below 1024 px.
+- **Rule labels.** Hovering within 5 px of a rule for 220 ms lights it and shows a tip (`.rule-tip`): "Column A · Trend · definition" from `meta.families`. Keyboard and screen readers get the four `.plinth` buttons (A–D) fixed at the rule bases, hidden over the hero (whose axes carry the labels) and below 1024 px. The plinths never sit on content: they are transparent and let clicks through until the pointer comes within 48 px of the viewport's bottom (`.is-near`), a rule is lit, or a keyboard user tabs to one (`:focus-within`).
+- **Rules pass behind data, never through it.** A column rule must not strike a digit (`tests/e2e/checks.js ruleStrike`). Either lay the columns out on the rules (the ledger's record table, marked `.table--on-rules`), or let the rules pass behind: every other `.table` has opaque cells (`--bg`) and `.dl` terms and values are opaque, so the colonnade stops at the data and resumes after it. Stat strips (`dl.stats`) stand on the colonnade: one stat per bay from 640 px, one per half-bay from 1280 px, text inset from the rule, and each `.stat` is a row subgrid so values share one baseline. On phones (<640) prose, ledes and theses are opaque inside the inset (`background-clip: content-box`), so rules 2 and 3 stop at each paragraph and rules 1 and 4 stay.
+- **Below 1024 px** a 2 × 2 of four things (the home families, the pick drivers below 1280) uses two equal halves between rule 1 and rule 4, never two bays beside one.
 
 ## 5. Space and rhythm
 
@@ -106,7 +109,7 @@ desktop(1024+):  BAY = min(25%, 460px), M = 1fr each (1440 → rules at 180/540/
 
 ## 7. Components (class names are the contract)
 
-**Shell.** `.demo-bar` (Graphite strip: disclaimer, view-as `.seg`, locale `.locale-btn`; a `<select>` on phones) · `.site-header` (sticky, hides on scroll down, shows on scroll up and on focus; `data-surface` follows the section under it) · `.mark` (lintel glyph + wordmark) · `.nav > .nav__group` (three questions in three bays: `.nav__q` label, `.nav__links`; `aria-current="page"` gets a 2 px underline) · `.pill` (issue pill: `data-state="countdown|quorum|none"`, `data-mode="live|pinned|override"`; two lines between 1200 and 1599 px) · `.menu-btn` + `.sheet` (full-height Chamber menu by the three questions; focus trapped; Escape closes) · `.site-footer` (four link columns on the rules, brief §7 disclosure, data line, wordmark).
+**Shell.** `.demo-bar` (Graphite strip: the whole disclaimer "Simulated market · fictional companies · demo — not a real service, not investment advice" at every width, wrapping on narrow screens; view-as `.seg` (demo only, never in live mode), locale `.locale-btn`; a `<select>` on phones) · `.site-header` (sticky, hides on scroll down, shows on scroll up and on focus; `data-surface` follows the section under it) · `.mark` (lintel glyph + wordmark) · `.nav > .nav__group` (three questions in three bays: `.nav__q` label, `.nav__links`; `aria-current="page"` gets a 2 px underline) · `.pill` (issue pill: `data-state="countdown|quorum|none"`, `data-mode="live|pinned|override"`; two lines between 1200 and 1599 px) · `.menu-btn` + `.sheet` (full-height Chamber menu by the three questions; focus trapped; Escape closes) · `.site-footer` (four link columns on the rules, brief §7 disclosure, data line, wordmark).
 
 **Actions.** `.btn` (Graphite fill; hover inverts; Mist on Chamber) · `.btn--ghost` · `.arrow-link` (text + `→` in `.btn__arrow`, underline rule) · `.seg` / `.seg--light` (segmented control with `aria-pressed`).
 
@@ -117,13 +120,14 @@ desktop(1024+):  BAY = min(25%, 460px), M = 1fr each (1440 → rules at 180/540/
 - `timestamp([{ at, kind }])` → `span.ts` (focusable): shows `14:00 CEST`; hover or focus reveals `.ts__pop` with ISO-8601 with offset, UTC, and the kind: `produced` (production completed), `disseminated` (first disseminated), `sealed`, `published`. Pass both rows on a pick page.
 - `signed(x)` → `span.signed.gain|loss|flat` with arrow and sign (`+3.4%`, `−2.0%`, true minus). Gain/Loss colour never appears without both.
 - `quorumBadge(n)` / `.badge-quorum` (ultramarine, `3/4` or `4/4` only) · `.tag` (hairline mono tag: `fictional`, `anchored`, `pass`) · `.ticker`.
-- `statStrip(summary)` → `dl.stats`: the headline statistics **in the brief §2.8 order** (picks + live since, hit rate with CI, median excess, mean excess, worst pick, max drawdown, median alert gap). `.stat__v` is capped at 2 rem: never the largest element, never animated. Pair it with `trackRecordLabel(locale)`.
+- `statStrip(summary, { counts })` → `dl.stats`: the headline statistics **in the brief §2.8 order** (recommendations + live since, split into new picks and renewals; hit rate with CI, median excess, mean excess, worst pick, max drawdown, median alert gap). `.stat__v` is capped at 2 rem: never the largest element, never animated. Pair it with `trackRecordLabel(locale)` wherever a record figure appears (ledger, home, pricing).
+- `CONTACT` + `contactHtml(addr)` (ui.js): one set of addresses; an address is selectable mono text with a Copy button (`button[data-copy]`, one delegated handler in app.js). In copy strings write `{{contact:support}}`; `_content.js toNode` fills it. Never `mailto:`.
 
 **Reading.** `.prose` lists use hairline dashes and mono counters · `.table` (hairline rules, Graphite head and foot rule, `.num` columns right-aligned in mono, `th scope="row"` first column) via `table({ head, rows, numCols })` · `.dl` definition rows · `.faq details` · `.note-box` · `.draft-banner` ("Draft for counsel review") · `.toc` (numbered, scrolls without re-rendering, updates `?s=` with `replaceState`).
 
 **SMS.** `phone({ text, at, locale })` → a hairline device with a Paper screen and the ultramarine `.sms` bubble (links underlined) · `.sms-plain` (mono, ultramarine rule) for templates in prose.
 
-**States.** `.state` (error: data file named, Try again) · `pages/not-found.js` (four hollow columns under a dashed lintel: "Nothing stands here.") · `_pending.js` (same room, "This room is still being built").
+**States.** `.state` (error: data file named, Try again; a render error shows a generic sentence, never the exception) · `pages/not-found.js` (four hollow columns under a dashed lintel: "Nothing stands here.") · `_pending.js` (same room, "This room is still being built").
 
 ## 8. Chart conventions
 
@@ -134,6 +138,10 @@ desktop(1024+):  BAY = min(25%, 460px), M = 1fr each (1440 → rules at 180/540/
 5. Text alternative always: a caption (`.figcaption`) plus a visually hidden table or an `aria-label` summary. Interactive cells use a roving tabindex with arrow keys (see the Silence Calendar).
 6. Numbers in mono, tabular, true minus. Dates `28.09.26`; times `14:00 CEST` with the ISO on focus.
 7. No gradients, no glow, no 3D, no shadows except the hairline. Low-alpha Mist fills are allowed for bands (the top-decile band).
+8. **No label across a line.** A tick that falls on a rule is written beside it (`.sb__tick.is-start|is-mid|is-end`), never centred on it; ticks inside a plot (below 1024 px) sit above their line on an opaque `--bg` ground; end labels are stacked apart and kept clear of the zero line (`path.js endLabelYs`) on an opaque ground; a band label never sits under the lintel (below 1024 px it goes under it, centred in bay 1). Phones show fewer ticks (`.is-minor` hidden) and put notes like "coin flip" on their own line.
+9. One format per axis kind: months `MM.YY` (like dates `28.09.26`), multipliers `1× 2× 5× 10×` on ticks (`2.34×` in readouts), axis words uppercase like `.label` (`DAY 0`).
+10. A number that rounds to `0.0%` is flat: no arrow colour (`i18n.js signClassAt`, used by `fmt.signed`).
+11. Hypothetical figures shown outside #backtest (the ledger's holdout view) are labelled "Hypothetical backtest", hatched (`hatchLayer`) and drawn in Graphite: a backtest's quorum rows are not quorum marks.
 
 ## 9. The page-module contract
 
@@ -151,19 +159,28 @@ export async function render(ctx) {
 }
 ```
 
-`ctx`: `route` (`{ path, module, group, params, query, pathname }`), `params`, `query`, `locale` (`'en'|'sl'`), `t(key, vars)`, `tp(key, n, vars)`, `L(en, sl)` (inline copy), `fmt` (`formatters(locale)`: `int num pct pct0 rank bps eur date dm long signed`), `tier` (`'free'|'signal'|'research'`), `mode` (`'demo'|'live'`), `flags` (page query: `gl`, `now`, `motion`, `locale`, `tier`), `clock` (`now()`, `mode`, `pinnedInstant`), `now()`, `data(name)`, `signal` (AbortSignal, aborted when the page is left), `navigate(hash)`, `announce(msg)`, `reload()`, `reducedMotion`.
+`ctx`: `route` (`{ path, module, group, params, query, pathname, section }`), `params`, `query`, `locale` (`'en'|'sl'`), `t(key, vars)`, `tp(key, n, vars)`, `L(en, sl)` (inline copy), `fmt` (`formatters(locale)`: `int num pct pct0 rank bps eur date dm long signed`), `tier` (`'free'|'signal'|'research'`), `mode` (`'demo'|'live'`), `flags` (page query: `gl`, `now`, `motion`, `locale`, `tier`), `clock` (`now()`, `mode`, `pinnedInstant`), `now()`, `data(name)`, `launch()` (→ `launchInfo`: `ready`, `prelaunch`, `research`, `failed`, `lead`, `text`; unknown counts as pre-launch), `me` (live: the `/api/me` answer), `signal` (AbortSignal, aborted when the page is left), `navigate(hash)`, `announce(msg)`, `reload()` (live: asks `/api/me` again first and drops the cached data files if the tier changed), `href`, `reducedMotion`.
+
+**Links.** Build every link with `href(name, param?, section?)`. A section of a page is `~id` after the token (`#backtest~launch`, `#ledger~scoreboard`, `#issue-2026-09-28~r421`); the app scrolls to it without re-rendering.
 
 The app does the rest: scroll to top (or to `?s=<id>`), focus the page's `h1` (give it no tabindex; the app adds `-1`), announce the title, mark `aria-current`, run the View Transition, render errors (a thrown error with `.file` shows the data-error state). Exactly one `h1` per page.
 
 **Copy.** Shared UI strings live in `i18n.js` (both locales, same keys; `tests/web/i18n.test.js` fails otherwise). Page copy lives in the module as `const COPY = { en: {...}, sl: {...} }`. Every Slovene string is a first draft: say so in a comment at the top of the module ("SL: first draft, needs native review").
 
-**Tier (demo "view as").** `free` hides the ticker, name, thesis and reveal of *open* picks (show number, time, commit `hashChip`, `sealed`) and gates the Research explorer; `signal` and `research` see everything published at 14:00. Tiers never change timing. Read only fields defined in ARCHITECTURE.md §3.
+**Tier (demo "view as").** `free` hides the ticker, name, thesis and reveal of *open* picks (show number, time, commit `hashChip`, `sealed`) and gates the Research explorer; `signal` and `research` see everything published at 14:00. The paid tiers never differ in timing; Free sees open picks sealed until they close. Read only fields defined in ARCHITECTURE.md §3. **Live mode** has no view-as: the tier comes from `/api/me` entitlements and is `free` until it answers, and a record the server redacted (`sealed: true`, no ticker) is sealed for every tier (`_records.js isSealedFor`).
+
+**Launch and delivery copy.** Before launch (`ctx.launch().prelaunch`) nothing says a text was sent, delivered or received: write "the text as written for 14:00", "a text was due", "once SMS alerts launch". When a gate that cannot recover failed (`research`), the launch line says the engine is back in research and paid SMS has no launch date (`launchBox`). The pooled deflated figures are comparison only: never a gate, never a pass date.
+
+**Quorum words.** "No quorum today" only when no stock reached the rule (`closest` below the required agreement). A day on which stocks met the rule but none could be issued (already open, capped, cooling down, removed) is "No new pick today", and says which (`_records.js issueCounts`). The quorum colour marks only stocks that met the rule with no veto.
+
+**Class prefixes (page blocks in `pages.css`).** Stage 1: `lv-` (the Level, written `lv__`), `home-`, `how-`, `sc-` (Silence Calendar), `hw-` (#how-it-works figures), `content-` (long-form). Stage 2, record pages: `rec-` (shared), `pk-` (pick), `lg-` (ledger), `cb-` (chain blocks), `is-` (issue; the same letters as the `.is-*` state modifiers, so issue blocks always carry a noun: `.is-cards`, `.is-funnel`), `st-` under `.stock` (stock), `dc-` (disclosures), `bt-` (backtest); charts `eq-` (equity), `path-`, `col-` (colonnade), `sb-` (scoreboard), `ic-`, `ds-` (deciles), `vh-` (variant histogram). Stage 3, member pages: `m-` (shared: forms, switches, consent boxes, phone thread, copy panels, confirmations, the launch line), `jn-` (join), `us-` (stop link), `st-` under `.st` (status; scope new status classes as `.st .st-*`), `app-` (app), `acc-` (account), `rx-` (research). A new page takes a new two- or three-letter prefix and a banner comment.
 
 **Adding a page.** Replace the stub file for its route (or add a route to `ROUTES` and a file). Use `masthead` + `contentSections` for long-form pages, `sectionHead` + `.section.grid` for composed pages, `.chamber.ruled` for data spectacles. Add layout CSS to `pages.css` under a banner comment. Run `node --test "tests/web/**/*.test.js"` and `node scripts/e2e.js`.
 
 ## 10. Page templates
 
-- **Home** (`#/`): The Level (Chamber, 400svh sticky stage, pulls up under the demo bar and header), 01 Silence Calendar, 02 How a pick happens (a timetable on rule 1; the families on all four rules; a real colonnade example), 03 Sealed ledger (Chamber: chain, Verify in your browser, headline statistics), 04 Scoreboard teaser, 05 Pricing teaser, footer.
+- **Home** (`#/`): The Level (Chamber, 400svh sticky stage, pulls up under the demo bar and header), 01 Silence Calendar, 02 How a pick happens (a timetable on rule 1; the families on all four rules; a real colonnade example), 03 Sealed ledger (Chamber: chain, Verify in your browser, headline statistics), 04 Scoreboard teaser (with the computed answer: holdout gate (b) and the sealed record), 05 Pricing teaser, footer.
+- **#how-it-works** uses the long-form template with figures (`contentSections` `figure`: a `.content-fig` subgrid under the text): the real quorum in §02, the sealed record's veto funnel in §03, the cadence as a timetable on rule 1 in §04.
 - **Long-form** (how it works, methodology, help, legal, about, pricing): `masthead` (kicker, `h1.d1`, lede in r1→r3, table of contents or controls in the meta strip), then numbered `content-sec` sections: index in the margin, `h2` on rule 1, `.prose` r1→r3, notes in the strip. Wide tables may take r1→r4 (the methodology model table does).
 - **Legal**: masthead with `.draft-banner` ("Draft for counsel review"), the other legal documents in the strip, placeholders in [brackets].
 
@@ -171,11 +188,13 @@ The app does the rest: scroll to top (or to `?s=<id>`), focus the page's `h1` (g
 
 States by scroll progress `p` of the tall section (native scroll): **0 load** (900 ms: lines settle from noise, columns rise, the pick's polyline locks into the lintel at the 90th percentile; only after the engine is ready) → **1** `p .07–.30` every other line falls (gravity in the vertex shader, staggered by a per-line seed) → **2** `p .36–.62` the lintel travels into the phone and becomes the baseline of the real SMS; the bubble grows from it → **3** `p .68–.95` the phone screen scales into the pick note; the lintel extends 21 trading days as the excess path, Gain or Loss with sign and arrow. Caption: "Our latest closed pick. Whatever happened."
 
-Engines: first paint is an inline SVG (300-line deterministic subsample, `level-data.subsample`); after two frames and idle time, raw WebGL1 (every line as anti-aliased quads, additive blending, DPR ≤ 2) on capable GPUs, a 2D canvas with the same 300 lines on software renderers, low core counts or without WebGL, and SVG only for `?gl=0` and reduced motion. Force with `?gl=webgl|canvas|0`. Rendering stops off-screen (IntersectionObserver) and when nothing changes; style writes are cached. On phones the headline yields to the caption from state 1 so the phone and note get the stage. Data: `hero.json` only (plus `picks.json` lazily for the Slovene SMS).
+Every in-between frame reads: the phone rises fully opaque behind a mask (never a half-transparent device), the SMS bubble grows one whole line at a time, the note's blocks appear whole one after another (never an ultramarine badge at partial opacity), and the path starts drawing as soon as the note is in place. On phones the note starts under the moved caption and keeps its "Not personal advice" line; below 1200 px the in-plot result label sits on the side of the end point away from the lintel (phones print it only in the result row).
+
+Engines: first paint is an inline SVG (300-line deterministic subsample, `level-data.subsample`); after two frames and idle time, raw WebGL1 (every line as anti-aliased quads, additive blending, DPR ≤ 2) on capable GPUs, a 2D canvas with the same 300 lines on software renderers, low core counts or without WebGL, and SVG only for `?gl=0` and reduced motion. Force with `?gl=webgl|canvas|0`. Rendering stops off-screen (IntersectionObserver) and when nothing changes; style writes are cached. On phones the headline yields to the caption from state 1 so the phone and note get the stage. Data: `hero.json` only (it carries the SMS in both languages, `sms` and `smsSl`, and `pick.kind`/`priorNo`: a RENEW hero is labelled "RENEW of #NNNN"). Before launch the captions say the text was published with the issue, not sent.
 
 ## 12. Demo clock and pill
 
-If the real time is before the first issue slot after `meta.asOf` 22:30, the pill counts down live ("Next issue 14:00 · 15h 24m"); after that the clock is pinned to `asOf` 22:30 and the pill adds "demo clock". From 14:00 to 22:15 on an issue day it shows that issue's result ("No quorum today" or "Quorum: 1 pick" with an ultramarine dot) only if the data contains that issue. `?now=2026-09-28T13:59:00+02:00` overrides the clock for testing.
+If the real time is before the first issue slot after `meta.asOf` 22:30, the pill counts down live ("Next issue 14:00 · 15h 24m"); after that the clock is pinned to `asOf` 22:30 and the pill adds "demo clock". A page left open across that slot pins itself too: `now()` stops at the pinned instant and the route re-renders once (`app.onClockPinned`). A result state says "No quorum today" or "No new pick today" by the issue's counts. From 14:00 to 22:15 on an issue day it shows that issue's result ("No quorum today" or "Quorum: 1 pick" with an ultramarine dot) only if the data contains that issue. `?now=2026-09-28T13:59:00+02:00` overrides the clock for testing.
 
 ## 13. Accessibility
 
@@ -183,11 +202,11 @@ WCAG 2.2 AA. Skip link (moves focus to the page `h1`). 2 px focus ring, Graphite
 
 ## 14. Do and don't
 
-**Do** align every edge to a rule or the inset line · use one idea per viewport and real data as the spectacle · show the worst pick and every interval · keep headline stats small and in order · write "Not personal advice" where a pick appears · label every person and company in data as fictional · give every chart a caption and a text alternative · test at 1440×900, 1920×1080, 834×1194, 390×844 and 360×780.
+**Do** say "would be texted", "a text was due" or "once SMS alerts launch" before launch, and compute every launch or gate sentence from `backtest.json` · align every edge to a rule or the inset line · use one idea per viewport and real data as the spectacle · show the worst pick and every interval · keep headline stats small and in order · write "Not personal advice" where a pick appears · label every person and company in data as fictional · give every chart a caption and a text alternative · test at 1440×900, 1920×1080, 834×1194, 390×844 and 360×780.
 
 **Don't** use ultramarine for anything but a quorum · add colours, gradients, glows, glass, shadows, purple · use stock imagery or bulls, coins, robots, sparkles · animate numbers or loop animations · hijack scroll or smooth-scroll the page · centre body text or exceed 68ch · write `style=""` in templates or add external JS · show a real company name or a well-known real ticker · present a backtest outside the Backtest page · promise returns, urgency or scarcity.
 
 ## 15. Tests
 
 - `node --test "tests/web/**/*.test.js"` — i18n parity and plurals, router, clock and pill states, hero data helpers, calendar layout, fixture contract and non-overwrite rule, page-module contract, design-system guards (palette, no stray hex, no gradients, ultramarine allowlist, font URL, no inline script, contrast of token pairs), and the `web/js/core` copy.
-- `node scripts/e2e.js` — Playwright: every route at 390×844, 834×1194 and 1440×900; fails on console errors, horizontal overflow, missing names, duplicate ids, one-h1, and text contrast below AA; plus the keyboard path, the three hero engines and reduced motion. `--sizes 360x780,1920x1080` adds sizes; `--base URL` tests a running server. Behind an intercepting proxy set `E2E_SPKI` to the proxy CA's SPKI hash so Google Fonts load.
+- `node scripts/e2e.js` — Playwright: every route at 390×844, 834×1194 and 1440×900; fails on console errors, horizontal overflow, missing names, duplicate ids, one-h1, text contrast below AA, a rule striking a number (`ruleStrike`), and copy that breaks a contract (`copyChecks`: the demo bar's advice line at every width, no delivery claim before launch, no implied launch date, no stray "null"); plus the keyboard path, the three hero engines, reduced motion, and a live-mode tour through the Node server as an anonymous visitor (`tests/e2e/live.js`: no crash, no open ticker, no view-as; `--no-live` skips it). `node tests/e2e/member-run.js` covers the member pages' interactive states. `--sizes 360x780,1920x1080` adds sizes; `--base URL` tests a running server. Behind an intercepting proxy set `E2E_SPKI` to the proxy CA's SPKI hash so Google Fonts load.

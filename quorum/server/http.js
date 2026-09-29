@@ -39,11 +39,19 @@ export function createRouter() {
         if (!m) continue;
         pathMatched = true;
         if (r.method !== method && !(method === 'HEAD' && r.method === 'GET')) continue;
+        // A malformed %-escape in a parameter is the client's error (400 after the rate limits), not
+        // an exception: the caller checks `badParams` once the route's buckets have been charged.
         const params = {};
+        let badParams = false;
         r.keys.forEach((k, i) => {
-          params[k] = decodeURIComponent(m[i + 1]);
+          try {
+            params[k] = decodeURIComponent(m[i + 1]);
+          } catch {
+            params[k] = null;
+            badParams = true;
+          }
         });
-        return { route: r, params };
+        return { route: r, params, badParams };
       }
       return pathMatched ? { methodNotAllowed: true } : null;
     },
@@ -210,12 +218,14 @@ export function safeEqual(a, b) {
 }
 
 // ------------------------------------------------------------------ security headers
+// Live pages load nothing from third parties: the fonts are served from this origin (/fonts/, see
+// server/fonts.js), so no visitor's IP address goes to a font service.
 export const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  // Inline style attributes are used by the web renderer; styles still load only from self and Google Fonts.
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  // Inline style attributes are used by the web renderer; stylesheets load only from this origin.
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' data: blob:",
   "connect-src 'self'",
   "manifest-src 'self'",
@@ -259,16 +269,59 @@ function normalizeIp(ip) {
   return String(ip).replace(/^::ffff:/, '');
 }
 
+// ipv6Groups('2001:db8::1') -> [0x2001, 0xdb8, 0, 0, 0, 0, 0, 1] | null (not an IPv6 address)
+export function ipv6Groups(ip) {
+  let s = String(ip ?? '').split('%')[0].toLowerCase();
+  if (s.startsWith('[') && s.endsWith(']')) s = s.slice(1, -1);
+  if (!s.includes(':')) return null;
+  const v4 = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (v4) {
+    const b = v4.slice(1).map(Number);
+    if (b.some((x) => x > 255)) return null;
+    s = `${s.slice(0, v4.index)}${((b[0] << 8) | b[1]).toString(16)}:${((b[2] << 8) | b[3]).toString(16)}`;
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  if (fill < 0) return null;
+  const groups = [...head, ...Array(fill).fill('0'), ...tail];
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.map((g) => Number.parseInt(g, 16));
+}
+
+// rateKey(ip, v6Prefix = 64) -> the key an address is rate-limited under. One IPv6 host usually
+// holds a whole /64 (often a /56 or /48), so limits keyed per full IPv6 address are no limit at
+// all: IPv6 is keyed by its /64 (or the shorter prefix a costly route asks for), IPv4 per address.
+export function rateKey(ip, v6Prefix = 64) {
+  const g = ipv6Groups(ip);
+  if (!g) return String(ip ?? '');
+  const keep = [];
+  for (let i = 0; i < 8; i++) {
+    const from = i * 16;
+    if (from >= v6Prefix) break;
+    const take = Math.min(16, v6Prefix - from);
+    keep.push((g[i] & (0xffff << (16 - take)) & 0xffff).toString(16));
+  }
+  return `${keep.join(':')}::/${v6Prefix}`;
+}
+
 // ------------------------------------------------------------------ rate limits
-// createRateLimiter({ clock }) -> { take(bucket, key, {capacity, windowMs}) -> {ok, retryAfterSec, remaining}, reset() }
+// createRateLimiter({ clock, maxKeys }) -> { take(bucket, key, {capacity, windowMs}) -> {ok, retryAfterSec, remaining}, reset(), size() }
 // Token bucket: `capacity` tokens, refilled continuously so the bucket is full again after windowMs.
-export function createRateLimiter({ clock = () => new Date() } = {}) {
+// The map is kept in least-recently-used order and never holds more than maxKeys buckets, so a
+// client churning through addresses cannot grow it without bound (the oldest idle buckets go first).
+export function createRateLimiter({ clock = () => new Date(), maxKeys = 100_000 } = {}) {
   const buckets = new Map();
   let lastSweep = 0;
   function sweep(now) {
-    if (now - lastSweep < 60_000 && buckets.size < 50_000) return;
-    lastSweep = now;
-    for (const [k, b] of buckets) if (now - b.t > b.windowMs) buckets.delete(k);
+    if (now - lastSweep >= 60_000) {
+      lastSweep = now;
+      for (const [k, b] of buckets) if (now - b.t > b.windowMs) buckets.delete(k);
+    }
+    // Full of live buckets: evict the least recently used (the first in the map's order).
+    while (buckets.size >= maxKeys) buckets.delete(buckets.keys().next().value);
   }
   return {
     take(bucket, key, { capacity, windowMs }) {
@@ -278,8 +331,10 @@ export function createRateLimiter({ clock = () => new Date() } = {}) {
       let b = buckets.get(id);
       if (!b) {
         b = { tokens: capacity, t: now, windowMs };
-        buckets.set(id, b);
+      } else {
+        buckets.delete(id); // re-inserted below: most recently used last
       }
+      buckets.set(id, b);
       const rate = capacity / windowMs; // tokens per ms
       b.tokens = Math.min(capacity, b.tokens + (now - b.t) * rate);
       b.t = now;

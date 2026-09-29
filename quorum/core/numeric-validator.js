@@ -25,6 +25,16 @@ function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// An allowed literal is removed only where it stands on its own: a literal that starts or ends with a
+// letter or digit must not continue a longer word or number (the unit "t" never eats the "t" of "95th",
+// "12" never the "12" of "2012").
+function literalRe(s) {
+  const edge = /^[\p{L}\p{N}]/u;
+  const head = edge.test(s) ? '(?<![\\p{L}\\p{N}])' : '';
+  const tail = edge.test(s.slice(-1)) ? '(?![\\p{L}\\p{N}])' : '';
+  return new RegExp(`${head}${escapeRe(s)}${tail}`, 'gu');
+}
+
 /**
  * Numeric tokens as written, after removing any allowed literal strings.
  * @returns {{raw: string, value: number, decimals: number, signed: boolean, unit: '%'|'bps'|'ord'|''}[]}
@@ -32,17 +42,18 @@ function escapeRe(s) {
 export function extractNumbers(text, { locale = 'en', allowStrings = [] } = {}) {
   let rest = String(text);
   for (const s of [...allowStrings].sort((a, b) => b.length - a.length)) {
-    if (s) rest = rest.replace(new RegExp(escapeRe(String(s)), 'g'), ' ');
+    if (s) rest = rest.replace(literalRe(String(s)), ' ');
   }
   const out = [];
   for (const m of rest.matchAll(NUM_RE)) {
     const raw = m[0];
-    const after = rest.slice(m.index + raw.length, m.index + raw.length + 6);
+    const trimmed = raw.replace(/[.,]+$/, '');
+    // the unit follows the number itself, so the ordinal dot of "96. percentil" is part of it
+    const after = rest.slice(m.index + trimmed.length, m.index + trimmed.length + 12);
     let unit = '';
     if (/^\s?%/.test(after) || /^\s?odstot/i.test(after)) unit = '%';
     else if (/^\s?(bps|bp\b|b\.t\.)/i.test(after)) unit = 'bps';
     else if (/^(th|st|nd|rd)\b/.test(after) || /^\.\s?percentil/i.test(after)) unit = 'ord';
-    const trimmed = raw.replace(/[.,]+$/, '');
     if (!/\d/.test(trimmed)) continue;
     out.push({ raw: trimmed, ...parseToken(trimmed, locale), unit });
   }
@@ -56,6 +67,9 @@ function roundTo(x, d) {
 
 function matches(token, source) {
   if (typeof source !== 'number' || !Number.isFinite(source)) return false;
+  // A percentile rank written as an ordinal ("94th", "94. percentil") is truncated, not rounded
+  // (core/format.js pctRank): 0.9486 is written as the 94th percentile, never the 95th.
+  if (token.unit === 'ord' && token.decimals === 0 && !token.signed && source >= 0 && source <= 1 && Math.min(99, Math.floor(source * 100 + 1e-9)) === token.value) return true;
   const scales = token.unit === 'bps' ? [1, 10000] : token.unit === '%' || token.unit === 'ord' ? [100, 1] : [1, 100];
   for (const k of scales) {
     const cand = roundTo(source * k, token.decimals);

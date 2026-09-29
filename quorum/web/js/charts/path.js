@@ -10,6 +10,38 @@ import { fmtUsd } from '../core/format.js';
 
 export const HORIZON = 21;
 
+// Pure (tested): where the two end labels go, in plot units (0–1000, top to bottom). Each starts at its
+// series' last value, keeps clear of the zero line (the label goes to the side of zero its value is on)
+// and of the other label, and stays inside the plot. gap is about one label height at the usual sizes.
+export function endLabelYs(m, net, bench, { gap = 110, zeroGap = 60 } = {}) {
+  const clampY = (y) => Math.min(1000 - gap / 2, Math.max(gap / 2, y));
+  const off = (v) => {
+    let y = m.y(v);
+    if (Math.abs(y - m.zero) < zeroGap) y = v >= 0 ? m.zero - zeroGap : m.zero + zeroGap;
+    return clampY(y);
+  };
+  let a = off(net);
+  let b = off(bench);
+  if (Math.abs(a - b) < gap) {
+    const mid = (a + b) / 2;
+    const netUp = a < b || (a === b && net >= bench);
+    const up = clampY(mid - gap / 2);
+    const down = clampY(up + gap);
+    [a, b] = netUp ? [up, down] : [down, up];
+    if (Math.abs(a - b) < gap) [a, b] = netUp ? [down - gap, down] : [down, down - gap];
+  }
+  return [a, b];
+}
+
+// Pure (tested): what row i of a path is. The published path opens with two day-0 rows, the entry at the
+// US open (net of costs) and then that day's close; an older one-row day 0 is just "day 0".
+export function pathStep(rows, i) {
+  const d = rows[i]?.[0];
+  if (d !== 0) return 'day';
+  if (i === 0) return rows[1]?.[0] === 0 ? 'entry' : 'day';
+  return 'close0';
+}
+
 // Pure geometry (tested): x of a day on 0–1000, y domain with zero, and the points of both series.
 export function pathModel(path, horizon = HORIZON) {
   const rows = (path ?? []).filter((r) => Array.isArray(r) && Number.isFinite(r[0]));
@@ -51,7 +83,8 @@ export function pathChart(pick, { fmt, L, final, locale = 'en' }) {
   );
   plot.append(s);
   for (const v of yTicks) {
-    const tk = h('span', { class: ['path-tick', v === 0 && 'is-zero'] }, v === 0 ? '0' : fmt.pct(v, { digits: Math.abs(v) < 0.1 ? 1 : 0, sign: true }));
+    // below 1024 the ticks sit inside the plot, just above their line (just below it near the top edge)
+    const tk = h('span', { class: ['path-tick', v === 0 && 'is-zero', m.y(v) < 90 && 'is-top'] }, v === 0 ? '0' : fmt.pct(v, { digits: Math.abs(v) < 0.1 ? 1 : 0, sign: true }));
     tk.style.setProperty('--y', `${m.y(v) / 10}%`);
     plot.append(tk);
   }
@@ -73,16 +106,9 @@ export function pathChart(pick, { fmt, L, final, locale = 'en' }) {
   // end labels (text wears text tokens; the signed value carries sign and arrow)
   const endNet = h('span', { class: 'path-end is-net' }, h('span', { class: 'label' }, L('Net', 'Neto')), ' ', signed(m.last[1], { fmt }));
   const endBench = h('span', { class: 'path-end is-bench' }, h('span', { class: 'label' }, L('S&P 500 TR', 'S&P 500 TR')), ' ', signed(m.last[2], { fmt }));
-  const place = (el, v) => el.style.setProperty('--y', `${m.y(v) / 10}%`);
-  place(endNet, m.last[1]);
-  place(endBench, m.last[2]);
-  const gap = Math.abs(m.y(m.last[1]) - m.y(m.last[2]));
-  if (gap < 70) {
-    // keep the two end labels apart
-    const up = m.last[1] >= m.last[2] ? endNet : endBench;
-    up.classList.add('is-up');
-    (up === endNet ? endBench : endNet).classList.add('is-down');
-  }
+  const [yNet, yBench] = endLabelYs(m, m.last[1], m.last[2]);
+  endNet.style.setProperty('--y', `${yNet / 10}%`);
+  endBench.style.setProperty('--y', `${yBench / 10}%`);
   endNet.style.setProperty('--x', `${m.x(m.last[0]) / 10}%`);
   endBench.style.setProperty('--x', `${m.x(m.last[0]) / 10}%`);
   plot.append(endNet, endBench);
@@ -90,15 +116,23 @@ export function pathChart(pick, { fmt, L, final, locale = 'en' }) {
   const readout = h('p', { class: 'path-readout mono' });
   const xs = m.rows.map((r) => m.x(r[0]));
   const dayLabel = (d) => fmt.date(addTradingDays(entryDate, d));
+  const stepName = (i, d, cap) => {
+    const k = pathStep(m.rows, i);
+    const en = k === 'entry' ? 'entry · US open' : k === 'close0' ? 'day-0 close' : `day ${d}`;
+    const sl = k === 'entry' ? 'vstop · odprtje ZDA' : k === 'close0' ? 'zaprtje dneva 0' : `dan ${d}`;
+    const up = (t) => (cap ? t[0].toUpperCase() + t.slice(1) : t);
+    return { en: up(en), sl: up(sl) };
+  };
   crosshair(plot, {
     xs,
     readout,
     label: L('Path of the pick: use the arrow keys to read each trading day.', 'Pot izbire: s puščicami preberete vsak trgovalni dan.'),
     render: (i) => {
       const [d, net, bench] = m.rows[i];
+      const what = stepName(i, d, true);
       return L(
-        `Day ${d} · ${dayLabel(d)} · net ${fmt.pct(net, { sign: true })} · benchmark ${fmt.pct(bench, { sign: true })} · excess ${fmt.pct(net - bench, { sign: true })}`,
-        `Dan ${d} · ${dayLabel(d)} · neto ${fmt.pct(net, { sign: true })} · merilo ${fmt.pct(bench, { sign: true })} · presežek ${fmt.pct(net - bench, { sign: true })}`,
+        `${what.en} · ${dayLabel(d)} · net ${fmt.pct(net, { sign: true })} · benchmark ${fmt.pct(bench, { sign: true })} · excess ${fmt.pct(net - bench, { sign: true })}`,
+        `${what.sl} · ${dayLabel(d)} · neto ${fmt.pct(net, { sign: true })} · merilo ${fmt.pct(bench, { sign: true })} · presežek ${fmt.pct(net - bench, { sign: true })}`,
       );
     },
   });
@@ -132,11 +166,11 @@ export function pathChart(pick, { fmt, L, final, locale = 'en' }) {
       h(
         'tbody',
         {},
-        m.rows.map(([d, n, b]) =>
+        m.rows.map(([d, n, b], i) =>
           h(
             'tr',
             {},
-            h('th', { scope: 'row' }, String(d)),
+            h('th', { scope: 'row' }, pathStep(m.rows, i) === 'day' ? String(d) : L(stepName(i, d).en, stepName(i, d).sl)),
             h('td', {}, dayLabel(d)),
             h('td', {}, fmt.pct(n, { sign: true })),
             h('td', {}, fmt.pct(b, { sign: true })),

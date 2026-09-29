@@ -312,6 +312,7 @@ a:hover {
   letter-spacing: -0.012em;
   text-wrap: balance;
   margin-left: -0.04em; /* optical: stems sit on the inset line, not the side bearing */
+  overflow-wrap: break-word; /* a single word wider than a 360 px phone (fallback font) wraps, never scrolls */
 }
 
 .d-hero {
@@ -388,6 +389,16 @@ a:hover {
 
 .prose {
   max-width: 68ch;
+}
+
+/* Phones: body text spans r1→r4, so rules 2 and 3 would run through every line. The colonnade is
+   interrupted behind text instead: the text box (inside the inset, so rules 1 and 4 stay) is opaque,
+   and the rules resume in the gaps between paragraphs. */
+@media (max-width: 639.98px) {
+  #view :is(.prose > p, .prose > ul, .prose > ol, .prose > dl, p.lede, p.prose, .masthead__lede, dl:not(.stats) dd) {
+    background: var(--bg);
+    background-clip: content-box;
+  }
 }
 
 .prose > * + * {

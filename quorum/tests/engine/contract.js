@@ -94,7 +94,7 @@ export const SPECS = {
     counts: { issues: 'int', quorumDays: 'int', picks: 'int', renews: 'int', closed: 'int', open: 'int' },
   },
   summary: {
-    simulated: true, liveSince: 'date', label: en_sl, nPicks: 'int', nClosed: 'int', hitRate: 'frac', hitCI: { $tuple: ['frac', 'frac'] },
+    simulated: true, liveSince: 'date', label: en_sl, nPicks: 'int', nRenews: 'int', nRecords: 'int', nClosed: 'int', hitRate: 'frac', hitCI: { $tuple: ['frac', 'frac'] },
     medianExcess: 'number', meanExcess: 'number',
     worstPick: { no: 'no4', ticker: nul('string'), excess: 'number' }, bestPick: { no: 'no4', ticker: nul('string'), excess: 'number' },
     maxDrawdown: 'number', medianAlertGapBps: 'number', alertGapNote: en_sl, cumulative: { follow: 'number', bench: 'number' }, vetoes: vetoCounts,
@@ -140,7 +140,7 @@ export const SPECS = {
   deciles: { simulated: true, sealed: decileSet, holdout: decileSet },
   hero: {
     simulated: true, issueDate: 'date', issueNo: 'int', nScored: 'int', quorumCount: 'int',
-    pick: { no: 'no4', ticker: 'string', name: 'string', agreeing: ['string'], index: 'int' },
+    pick: { no: 'no4', kind: { $in: ['BUY', 'RENEW'] }, priorNo: nul('no4'), ticker: 'string', name: 'string', agreeing: ['string'], index: 'int' },
     p: ['int'], sms: 'string', smsAt: 'instant',
     outcome: { excess: 'number', net: 'number', bench: 'number', exitDate: 'date' },
     path: [{ $tuple: ['int', nul('number'), nul('number')] }],
@@ -159,10 +159,14 @@ export const SPECS = {
     annual: [{ year: 'int', quorum: 'number', bench: 'number', n: 'int' }],
     stats: { picksPerMonth: 'number', hitRate: 'frac', medianExcess: 'number', meanExcess: 'number', sharpe: 'number', maxDrawdown: 'number' },
     crashSwitchPeriods: [{ $tuple: ['date', 'date'] }],
+    llmVetoShadow: { appliedFrom: 'date', research: { candidates: 'int', renewals: 'int' }, holdout: { candidates: 'int', renewals: 'int' }, basis: 'string' },
     launch: {
       status: { $in: ['pre-launch', 'ready'] }, asOf: 'date',
       holdoutGates: [{ id: { $in: ['a', 'b', 'c', 'd', 'e'] }, pass: 'boolean' }],
       amendment: { id: { $in: ['A-1'] }, date: 'date', text: en_sl },
+      original: { dsr: 'frac', pass: 'boolean' },
+      d1: { dsrResearch: 'frac', pbo: 'frac', pass: 'boolean' },
+      d2: { psr: 'frac', months: 'int', sharpe: 'number', pass: 'boolean', monthToDate: nul({ month: /^\d{4}-\d{2}$/, through: 'date', months: 'int', psr: 'frac' }) },
       pooled: { from: 'date', to: 'date', months: 'int', sharpe: 'number', dsr: 'frac', dsrRaw: 'frac', nTrialsRaw: 'int', nTrialsEff: 'int', pass: 'boolean' },
       remaining: en_sl,
     },

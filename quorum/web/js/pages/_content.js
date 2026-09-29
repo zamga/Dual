@@ -2,6 +2,7 @@
 // with the heading on rule 1, the text between rules 1 and 3, and notes in the metadata strip.
 import { h, html, raw } from '../dom.js';
 import { href } from '../router.js';
+import { CONTACT, contactHtml } from '../ui.js';
 
 export function masthead({ kicker, title, lede, meta, draft, id = 'page-h', size = 'd1' }) {
   return h(
@@ -15,7 +16,8 @@ export function masthead({ kicker, title, lede, meta, draft, id = 'page-h', size
   );
 }
 
-// sections: [{ id, title, body: Node|string(html), aside?: Node|string(html) }]
+// sections: [{ id, title, body: Node|string(html), aside?: Node|string(html), figure?: Node }]
+// A figure (a chart, a timetable) spans the page on the rules under the text (.content-fig, a subgrid).
 export function contentSections(sections) {
   return sections.map((s, i) =>
     h(
@@ -25,15 +27,21 @@ export function contentSections(sections) {
       h('h2', { class: 'c-head', id: `${s.id}-h` }, s.title),
       h('div', { class: 'prose c-body' }, toNode(s.body)),
       s.aside ? h('aside', { class: 'c-meta content-aside' }, toNode(s.aside)) : null,
+      s.figure ? h('div', { class: 'content-fig c-full flush' }, s.figure) : null,
     ),
   );
+}
+
+// {{contact:support}} in copy becomes the shared address with its Copy button (ui.js CONTACT).
+export function fillContacts(str, locale = globalThis.document?.documentElement?.lang) {
+  return String(str).replace(/\{\{contact:(\w+)\}\}/g, (m, k) => (CONTACT[k] ? contactHtml(CONTACT[k], locale === 'sl' ? 'sl' : 'en') : m));
 }
 
 export function toNode(x) {
   if (x == null) return null;
   if (x instanceof Node) return x;
   if (Array.isArray(x)) return x.map(toNode);
-  return html`${raw(x)}`;
+  return html`${raw(fillContacts(x))}`;
 }
 
 // "On this page" links that scroll without re-rendering the route (#methodology~validation).

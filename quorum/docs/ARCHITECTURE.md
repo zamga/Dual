@@ -89,7 +89,7 @@ Worked examples that tests must pin: `addTradingDays('2026-09-28', 21) === '2026
     - CLOSE sl: `QUORUM #0417 ZAPRTJE ACME ob odprtju ZDA 27.10.26 (pravilo 21 dni ob vstopu). Rezultat: qrm.si/p/0417 Ni osebni nasvet. Odjava: qrm.si/u/7Kq2xZ`
     - RENEW sl: `QUORUM #0431 PODALJSANJE ACME 27.10.26 14:00 CET. Se vedno 3/4 modelov. Nov izstop: 25.11. Ni osebni nasvet: qrm.si/p/0431 Odjava: qrm.si/u/7Kq2xZ`
     - OPT_OUT sl: `QUORUM: SMS obvestila IZKLOPLJENA. Ni vec SMS. Narocnina ostaja nespremenjena: qrm.si/account`
-- `validateSms(text) → { ok, errors: string[], analysis }`. Errors when: not GSM-7 basic set; more than 160 septets (one segment); a forbidden word appears as a whole word, case-insensitive (`now`, `act`, `hurry`, `urgent`, `last chance`, `guaranteed`, `for you`, `today only`, `limited`); a currency sign or code appears (`$`, `€`, `USD`, `EUR`); any link-like token (`\b[\w-]+(\.[\w-]+)+\/\S*`) is not on `qrm.si`.
+- `validateSms(text) → { ok, errors: string[], analysis }`. Errors when: not GSM-7 basic set; more than 160 septets (one segment); a forbidden word appears as a whole word, case-insensitive (urgency: `now`, `act`, `hurry`, `urgent`, `last chance`, `guaranteed`, `for you`, `today only`, `limited`, `immediately`, `today`, `fast`; targets and return claims: `target(s)`, `upside`, `return(s)`, `gain(s)`, `profit(s)`, `profitable`, `sure(ly)`; and the Slovene ASCII equivalents); a currency sign or code appears (`$`, `€`, `USD`, `EUR`); a price-like decimal number appears once dates (`28.09.26`, `28.09.`, `28.9.`) and links are set aside (`123.45`, `12,5`); a `%` or a `!` appears; any link-like token (`\b[\w-]+(\.[\w-]+)+\/\S*`) is not on `qrm.si`. The server's send gate (messaging, notifier) relies on it.
 - `worstCase(kind, locale) → string` renders with a 5-char ticker, a 5-digit number and the longest date forms; used by `scripts/check-sms-templates.js` and tests to prove every template is one segment.
 
 ### core/consent-texts.js
@@ -113,6 +113,7 @@ Entry shape: `{ seq, type, issueDate, at, body, prevHash, hash }`.
   - `RENEW`: `{ no, priorNo, commit, horizon: 21, exitPlanned, agreement, methodology, modelVersion, producedAt }`
   - `CLOSE`: `{ no, reveal, entry: {date, open}, exit: {date, open}, net, bench, excess }` (reveals the sealed pick)
   - `ISSUE`: `{ issueNo, nScored, closest, buys: [no], renews: [no], closes: [no], vetoes: {rule, llm, human, capped}, methodology }`
+    The live server's ISSUE body also carries `humanVetoes` (codes include `news_unreviewed`: removed at 13:40 because the scan did not clear and no approver read the news), `unissued` and `newsScan: {clear, flagged, reviewed, unreviewed}`.
   - `CORRECTION`: `{ refSeq, field, was, now, reason }`
   - Order within one issue date: BUY/RENEW entries (sealed 13:45, `at` = sealAt), then the ISSUE entry (`at` = publishAt, announcing that day's BUYs, RENEWs and CLOSEs), then the CLOSE entries one minute after the US open (`at` = open + 1 min), because the exit price exists only then.
 
@@ -132,19 +133,19 @@ Entry shape: `{ seq, type, issueDate, at, body, prevHash, hash }`.
 
 ### core/numeric-validator.js
 - `extractNumbers(text) → string[]` (numbers as written, including `+1.8%`, `0.96`, `96th`, `3/4`).
-- `validateNumbers(text, sourceNumbers: number[], {tolerance}) → { ok, unknown: string[] }`: every number in the text must match a source number after normalisation (percent ↔ fraction, rounding to the precision written). Dates and pick numbers are allowed when present in `sourceNumbers` as strings.
+- `validateNumbers(text, sourceNumbers: number[], {tolerance}) → { ok, unknown: string[] }`: every number in the text must match a source number after normalisation (percent ↔ fraction, rounding to the precision written; a percentile ordinal such as `94th` or `94. percentil` may also be the truncated rank, as `fmtPctRank` writes it). Dates and pick numbers are allowed when present in `sourceNumbers` as strings.
 
 ### core/format.js
-`fmtPct(x, {sign, digits}) → '+1.8%'` (uses the real minus sign U+2212 on web only via `fmtPctHtml`; plain ASCII hyphen in SMS), `fmtBps(x)`, `fmtUsd(x)`, `fmtEur(x)`, `fmtInt(n, locale)` (1,384 / 1.384), `fmtPctRank(p) → '96'`, `arrow(x) → '↑'|'↓'|'→'`.
+`fmtPct(x, {sign, digits}) → '+1.8%'` (uses the real minus sign U+2212 on web only via `fmtPctHtml`; plain ASCII hyphen in SMS), `fmtBps(x)`, `fmtUsd(x)`, `fmtEur(x)`, `fmtInt(n, locale)` (1,384 / 1.384), `fmtPctRank(p) → '96'` and `pctRank(p) → 96` (truncated, never rounded, capped at 99: 0.9486 → 94, so a displayed 95 always means the score is at or above the 0.95 rule line), `arrow(x) → '↑'|'↓'|'→'`.
 
 ## 2. engine/
 
 Deterministic from a seed (default `20260928`). `node engine/cli.js run` must finish in under 6 minutes on 4 CPUs and write `web/data/*.json` byte-identically on repeated runs (no wall-clock timestamps in the output).
 
 - `engine/sim/` — the simulated market: ~1,900 fictional companies ever listed, ~1,300–1,450 eligible on a given date (price > $5, mcap > $2B, ADV60 > $25M), listings and delistings (with delisting returns), 11 GICS sectors, daily open/close, volume, market cap, quarterly fundamentals with SEC-style filing dates (no look-ahead), bi-monthly short interest (days to cover), earnings dates, pending M&A flags, fictional negative news events (for the LLM veto stand-in), a benchmark total-return index ("S&P 500 TR (simulated)") and sector indices, EURUSD. The hidden return process gives each family a realistic, time-varying rank IC of about 0.02–0.05 at 21 days, momentum crashes in rebounds (2009-like), partial independence between families (family correlations about 0.1–0.4), and a small nonlinear interaction the GBDT can find. Consensus picks must land at a live hit rate of roughly 53–60%; above 60% sustained is a bug.
-- Fictional names and tickers: generated, never a well-known real ticker (keep a blocklist of the ~200 most recognisable US tickers). ISINs use the user-assigned `ZZ` prefix with a valid check digit; FIGIs are `SIM` + 9 chars.
+- Fictional names and tickers: generated, never a real US ticker. Tickers are 2-4 letters and are screened against `engine/sim/us-symbols.txt` (about 22,000 root symbols of every security listed on a US exchange since 2015, ETFs included, from the exchange symbol directories) and the hand blocklist of `engine/sim/blocklist.js` (the most recognisable names and famous symbols of 2008-2014). The screen draws from its own random stream, so it never changes the simulated market. ISINs use the user-assigned `ZZ` prefix with a valid check digit; FIGIs are `SIM` + 9 chars.
 - `engine/families/` — A trend (residual 12-1 momentum, vol-scaled, crash switch), B fundamental momentum (SUE by filing date, YoY gross-profitability change), C quality/value (GP/A, EV/EBIT, FCF yield, intangibles-adjusted B/M), D ML ranker (`engine/ml/gbdt.js`: histogram GBDT, depth 3–6, rank-transformed features in [-1, 1], missing = 0, target = sector-relative rank of 21-day forward return, averaged over seeds, annual walk-forward retraining).
-- Vetoes: top days-to-cover decile, top idio-vol decile, earnings within 3 trading days, pending M&A, and the LLM 48-hour negative-news veto (in the simulation a deterministic stand-in classifies the fictional headlines; it is labelled as a stand-in everywhere it appears).
+- Vetoes: top days-to-cover decile, top idio-vol decile, earnings within 3 trading days, pending M&A, and the LLM 48-hour negative-news veto (in the simulation a deterministic stand-in classifies the fictional headlines; it is labelled as a stand-in everywhere it appears). The LLM veto is never backtested (brief §3.3): it applies from the first issue of the sealed record (`meta.sealedSince`), and the research window, the calibration, the variant matrix, the holdout, the comparison sets and the ship gates run without it. What the stand-in would have blocked there is published apart (`backtest.llmVetoShadow`).
 - Validation: purged k-fold with 21-day purge and 1-month embargo for hyperparameters; every configuration tried is logged (`experiments`), DSR and PBO computed over them; ship gates (a)–(e) evaluated once on the holdout.
 - Sealed record: day-by-day from 2025-10-01 with the frozen models; caps, cooldown, crash switch, RENEW/CLOSE at day 21; a named approver may remove (never add) — a few human vetoes are simulated and counted; theses written by `engine/thesis.js` (template writer, EN and SL, every number from the factor JSON, checked with `core/numeric-validator.js`; `drafter: 'template'`). Outcomes: entry at the US open of the issue day, exit at the open 21 trading days later, costs 10 bps one way above $10B mcap and 25 bps for $2–10B, excess vs the benchmark TR, EUR return, alert gap (dissemination price = previous close vs entry open, in bps), 5-day and 63-day outcomes where available.
 - `engine/export.js` writes the data contract below.
@@ -169,13 +170,14 @@ All numbers are plain JSON numbers (fractions, not percent: `0.018` = 1.8%). Dat
 **summary.json** — headline statistics in the brief's fixed order, for the sealed record:
 ```json
 { "simulated": true, "liveSince": "2025-10-01", "label": {"en": "Pre-launch sealed record (no subscribers)", "sl": "..."},
-  "nPicks": 55, "nClosed": 51, "hitRate": 0.56, "hitCI": [0.43, 0.69], "medianExcess": 0.011, "meanExcess": 0.008,
+  "nPicks": 55, "nRenews": 4, "nRecords": 59, "nClosed": 51, "hitRate": 0.56, "hitCI": [0.43, 0.69], "medianExcess": 0.011, "meanExcess": 0.008,
   "worstPick": {"no": "0023", "ticker": "…", "excess": -0.143}, "bestPick": {"no": "…", "ticker": "…", "excess": 0.21},
   "maxDrawdown": -0.12, "medianAlertGapBps": 11, "cumulative": {"follow": 0.14, "bench": 0.09},
   "vetoes": {"rule": 38, "llm": 6, "human": 3, "capped": 9},
   "equity": [["2025-10-01", 1, 1], ["2025-10-02", 1.001, 0.998]] }
 ```
 `equity` = daily index of an equal-weight "follow every pick" paper portfolio (net of costs) vs the benchmark TR.
+`nPicks` = BUY records (new picks, `meta.counts.picks`); `nRenews` = RENEW records (a held position continued for a new 21-day window); `nRecords` = both. `nClosed`, the hit rate, its interval and the excess statistics count 21-day windows that have ended, BUY and RENEW records alike.
 
 **issues.json** — one row per issue, ascending:
 ```json
@@ -212,7 +214,7 @@ All numbers are plain JSON numbers (fractions, not percent: `0.018` = 1.8%). Dat
    "seq": 610, "commit": "…", "reveal": {"no": "0055", "ticker": "…", "figi": "…", "issueDate": "…", "agreeing": ["A","B","D"], "salt": "…"},
    "history12m": ["0012"] }]
 ```
-`path` = `[tradingDayIndex, netReturn, benchReturn]` per day from entry to exit (or to today). In the demo the reveal of open picks is included so the "view as subscriber" mode can show it; "view as free visitor" hides ticker, name and reveal until close.
+`path` = `[tradingDayIndex, netReturn, benchReturn]`, where the index is trading days after the entry date: the first row is the entry at the US open (index 0, net = the round trip if sold at that price, so −2c before any move; bench 0), then the close of every trading day from the entry day itself (index 0 again) to index 20, and for a closed record the exit at the open of index 21 (23 rows). An open record runs to today's close. Every row's net is the return if sold at that price, net of both legs' costs. In the demo the reveal of open picks is included so the "view as subscriber" mode can show it; "view as free visitor" hides ticker, name and reveal until close.
 
 **scoreboard.json** — sealed record plus holdout, each with uncertainty:
 ```json
@@ -235,7 +237,7 @@ All numbers are plain JSON numbers (fractions, not percent: `0.018` = 1.8%). Dat
   "p": [962, 911, 450, 977], "sms": "…", "smsAt": "2026-08-21T14:00:00+02:00",
   "outcome": {"excess": 0.034, "net": 0.041, "bench": 0.007, "exitDate": "…"}, "path": [[0, 0, 0]] }
 ```
-`p` is flat `[A0,B0,C0,D0, A1,B1,…]`, percentiles as integers 0–1000 for every scored stock in that issue (−1 = not scored by that family). `pick.index` is the pick's row.
+`p` is flat `[A0,B0,C0,D0, A1,B1,…]`, percentiles as integer permille 0–999, truncated (`floor(x * 1000)`, so 950 or more exactly when the family is at or above the 0.95 line), for every scored stock in that issue (−1 = not scored by that family). Family percentiles in picks.json and universe.json are truncated to 4 decimals the same way. `pick.index` is the pick's row.
 
 **universe.json** — the Research-tier dataset for the latest issue (demo preview):
 ```json
@@ -251,6 +253,7 @@ All numbers are plain JSON numbers (fractions, not percent: `0.018` = 1.8%). Dat
   "annual": [{"year": 2009, "quorum": 0.1, "bench": 0.2, "n": 50}],
   "stats": {"picksPerMonth": 4.4, "hitRate": 0.56, "medianExcess": 0.01, "meanExcess": 0.008, "sharpe": 0.9, "maxDrawdown": -0.2},
   "crashSwitchPeriods": [["2009-03-09", "2009-06-30"]],
+  "llmVetoShadow": {"appliedFrom": "2025-10-01", "research": {"candidates": 23, "renewals": 5}, "holdout": {"candidates": 5, "renewals": 1}, "basis": "…"},
   "launch": {
     "status": "pre-launch | ready", "asOf": "2026-09-28",
     "holdoutGates": [{"id": "d", "pass": false}],
@@ -258,9 +261,11 @@ All numbers are plain JSON numbers (fractions, not percent: `0.018` = 1.8%). Dat
     "pooled": {"from": "2022-10-03", "to": "2026-09-28", "months": 48, "sharpe": 0.9, "dsr": 0.9, "dsrRaw": 0.3, "nTrialsRaw": 480, "nTrialsEff": 12, "pass": false},
     "remaining": {"en": "…", "sl": "…"} } }
 ```
+The follow-every-pick portfolio (`equity`, `annual`, the Sharpe and DSR inputs) holds every record. The research window's last picks have exits in the holdout, which the research run may not read: they carry no outcome and stay out of the per-pick statistics, but they stay in the research portfolio, marked to the research window's last close (never cash at the seam), and in `equity` they are held to their exit. The comparison sets are treated the same way.
+
 Launch gate E needs all five ship gates. **Amendment A-1** (adopted 2025-09-30, after the holdout was opened; disclosed in full on the site, with the original wording's result published beside it) corrects a misapplication in gate (d) as first written. The Deflated Sharpe Ratio corrects for selection among trials, and that selection happened in the research window, where the variants were run. On the holdout a single pre-committed configuration was tested, so there is nothing to deflate there, and 36 months cannot reach 95% confidence at the brief's own expected edge (a Sharpe near 1 gives a probabilistic Sharpe near 0.93, before any deflation). A-1 splits (d) into:
 - **(d1)** clustered DSR >= 0.95 on the research window, where the variants were tried, and PBO < 0.3 across the variants;
-- **(d2)** probabilistic Sharpe ratio PSR(SR > 0) >= 0.95 on the pooled out-of-sample record (holdout + sealed forward record, monthly net excess returns of the follow-every-pick paper portfolio), re-tested monthly.
+- **(d2)** probabilistic Sharpe ratio PSR(SR > 0) >= 0.95 on the pooled out-of-sample record (holdout + sealed forward record, monthly net excess returns of the follow-every-pick paper portfolio), re-tested monthly. The test counts complete months only: when `asOf` is not its month's last trading day, that month to date is published apart (`d2.monthToDate`, `pooled.monthToDate`) and enters the test at its month-end.
 `launch` exports `original {dsr, pass}` (the first wording, on the holdout), `d1 {dsrResearch, pbo, pass}`, `d2 {psr, months, sharpe, pass}` and keeps `pooled` for the deflated pooled figures. `launch.status` is `ready` only when (a), (b), (c), (e) pass on the holdout and d1 and d2 both pass; otherwise `pre-launch`, and `remaining` says in one computed sentence what must still happen. The DSR deflates by the **effective** number of independent trials (clustered variants); the raw-count figure is published beside it. The rule threshold is `meta.rule.topPct` (0.95 after calibration: "top 5%"); no copy may hard-code "top decile".
 
 ## 4. server/
@@ -273,7 +278,7 @@ Launch gate E needs all five ship gates. **Amendment A-1** (adopted 2025-09-30, 
 - Publisher, notifier, scheduler, admin: as brief §4.3–§4.4.
 
 API (JSON; POSTs require `Content-Type: application/json` and the session cookie; SameSite=Lax):
-`GET /api/health` · `GET /api/me` · `POST /api/auth/magic {email, locale}` · `GET /api/auth/callback?token=` · `POST /api/auth/logout` · `POST /api/join/geo {declaredCountry}` · `POST /api/phone/start {e164, locale}` · `POST /api/phone/check {e164, code}` · `POST /api/consent {kind, action, version, sha256, pageUrl, locale}` (server recomputes the hash from `core/consent-texts.js` and rejects a mismatch) · `POST /api/checkout {tier, interval}` → `{url}` · `POST /api/webhooks/stripe` · `POST /api/webhooks/twilio/status` · `GET /u/:token` (confirm page, no state change) · `POST /u/:token` (opt-out, one tap) · `POST /api/prefs {sms, push, email}` · `POST /api/withdraw` · `GET /api/export` · `POST /api/account/delete` · `GET /api/status` · `GET /api/admin/candidates` (logs access) · `POST /api/admin/veto {candidateId, reason}` · `GET /data/:file.json` (public data; `picks.json` and `universe.json` redacted to the viewer's entitlement: no ticker/name/reveal for open picks without `picks`; no universe without `research_data`).
+`GET /api/health` · `GET /api/me` · `POST /api/auth/magic {email, locale}` · `GET /api/auth/callback?token=` (signs in directly only in the browser that asked, by the `qrm_login` cookie) · `POST /api/auth/callback {token}` (the same-origin confirm button for any other browser) · `POST /api/auth/logout` · `POST /api/join/geo {declaredCountry}` · `POST /api/phone/start {e164, locale}` · `POST /api/phone/check {e164, code}` · `POST /api/consent {kind, action, version, sha256, pageUrl, locale}` (server recomputes the hash from `core/consent-texts.js` and rejects a mismatch) · `POST /api/checkout {tier, interval}` → `{url}` · `POST /api/webhooks/stripe` · `POST /api/webhooks/twilio/status` · `GET /u/:token` (confirm page, no state change) · `POST /u/:token` (opt-out, one tap) · `POST /api/prefs {sms, push, email}` · `POST /api/withdraw` · `GET /api/export` · `POST /api/account/delete` · `GET /api/status` · `GET /api/admin/candidates` (logs access) · `POST /api/admin/veto {candidateId, reason}` · `POST /api/admin/news-review {date, candidateId, personId, note}` (the approver records "news reviewed, nothing material" for a candidate whose scan did not clear) · `GET /fonts/:file` (live mode's self-hosted fonts; see §5) · `GET /data/:file.json` (public data; `picks.json` and `universe.json` redacted to the viewer's entitlement: no ticker/name/reveal for open picks without `picks`; no universe without `research_data`).
 
 ## 5. web/
 

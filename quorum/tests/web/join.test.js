@@ -110,24 +110,50 @@ test('prices: brief §6, VAT included, annual is ten months', () => {
   assert.equal(price('ledger'), null);
 });
 
-test('launch line: read from backtest.json launch, defensively', () => {
+test('launch line: read from backtest.json launch under A-1, never from the pooled comparison figures', () => {
   const bt = data('backtest');
   const info = launchInfo(bt);
   if (bt.launch) {
     assert.equal(info.known, true);
     assert.equal(info.ready, bt.launch.status === 'ready');
-    assert.equal(info.passed, bt.launch.holdoutGates.filter((g) => g.pass).length);
-    assert.match(info.text.en, /Launch gate E/);
-    assert.match(info.text.sl, /Pogoj za zagon E/);
+    assert.equal(info.prelaunch, !info.ready);
+    // the applied gates: (a), (b), (c), (e) on the holdout plus (d1) and (d2); gate (d) as first written is not one
+    assert.ok(!info.holdout.some((g) => g.id === 'd'));
+    if (bt.launch.d1) assert.equal(info.gateD1.dsr, bt.launch.d1.dsrResearch);
+    if (bt.launch.d2) assert.equal(info.gateD2.psr, bt.launch.d2.psr);
+    if (bt.launch.remaining?.en && !info.ready) assert.equal(info.text.en, bt.launch.remaining.en);
+    if (bt.launch.pooled?.gate === false) {
+      // the pooled DSR is published for comparison only: it never appears as a gate in the line
+      for (const loc of ['en', 'sl']) {
+        assert.doesNotMatch(info.text[loc], /pooled record: 0[.,]94|združenem zapisu: 0[.,]94/);
+        assert.ok(!info.text[loc].includes(bt.launch.pooled.passAt ?? '§'));
+      }
+    }
   }
   const none = launchInfo({});
   assert.equal(none.known, false);
   assert.equal(none.ready, false);
+  assert.equal(none.prelaunch, true);
   assert.equal(none.status, 'pre-launch');
   assert.equal(launchInfo(null).known, false);
-  const ready = launchInfo({ launch: { status: 'ready', holdoutGates: [{ pass: true }], pooled: { dsr: 0.96, dsrThreshold: 0.95, pass: true } } });
+  const gates = (fail) => ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, pass: !fail.includes(id) }));
+  const ready = launchInfo({ launch: { status: 'ready', holdoutGates: gates([]), d1: { dsrResearch: 0.97, pass: true }, d2: { psr: 0.99, threshold: 0.95, pass: true }, pooled: { dsr: 0.5, pass: false, gate: false } } });
   assert.equal(ready.ready, true);
+  assert.equal(ready.research, false);
   assert.match(ready.text.en, /has passed/);
+  assert.match(ready.lead.en, /open/);
+  // (b) and (d1) failed: back to research, whatever d2 or the pooled figures say
+  const back = launchInfo({ launch: { status: 'pre-launch', holdoutGates: gates(['b', 'd']), d1: { dsrResearch: 0.53, dsrThreshold: 0.95, pass: false }, d2: { psr: 0.999, threshold: 0.95, pass: true }, pooled: { dsr: 0.94, dsrThreshold: 0.95, pass: false, gate: false, passAt: '2027-03' } } });
+  assert.equal(back.research, true);
+  assert.deepEqual(back.failed, ['b', 'd1']);
+  assert.match(back.lead.en, /back in research.*\(b\) and \(d1\)/);
+  assert.match(back.lead.sl, /raziskavah/);
+  assert.match(back.text.en, /\(d1\) fails \(0\.53, needs 0\.95\).*\(d2\) passes \(0\.999/);
+  assert.doesNotMatch(back.text.en, /0\.94|2027/);
+  // only d2 short: still pre-launch, but it can pass with more months
+  const wait = launchInfo({ launch: { status: 'pre-launch', holdoutGates: gates(['d']), d1: { dsrResearch: 0.97, pass: true }, d2: { psr: 0.9, threshold: 0.95, pass: false } } });
+  assert.equal(wait.research, false);
+  assert.match(wait.lead.en, /opens at launch/);
 });
 
 test('the SMS preview: the exact BUY text from a revealed pick, one GSM-7 segment, counter label', () => {
@@ -156,13 +182,19 @@ test('the SMS preview: the exact BUY text from a revealed pick, one GSM-7 segmen
 test('the preview from hero.json is the same text as the published one, without loading picks.json', () => {
   const hero = data('hero');
   const p = previewFromHero(hero);
-  if (!p) return; // the hero pick may be a RENEW; the page then falls back to picks.json
+  assert.ok(p, 'a BUY or RENEW hero is previewed without picks.json');
   assert.equal(buySms(p, 'en', '7Kq2xZ').text, hero.sms);
   if (hero.smsSl) assert.equal(buySms(p, 'sl', '7Kq2xZ').text, hero.smsSl);
-  const same = previewPick(data('picks'));
-  assert.equal(p.no, same.no);
-  assert.equal(p.exitPlanned, same.exitPlanned);
-  assert.equal(previewFromHero({ ...hero, pick: { ...hero.pick, kind: 'RENEW' } }), null);
+  if (p.kind === 'BUY') {
+    const same = previewPick(data('picks'));
+    assert.equal(p.no, same.no);
+    assert.equal(p.exitPlanned, same.exitPlanned);
+  }
+  // a RENEW hero keeps its kind and renders the RENEW text, never a BUY text for a renewal
+  const renew = previewFromHero({ ...hero, pick: { ...hero.pick, kind: 'RENEW', priorNo: '0001' } });
+  assert.equal(renew.kind, 'RENEW');
+  assert.match(buySms(renew, 'en', '7Kq2xZ').text, new RegExp(`^QUORUM #${renew.no} RENEW `));
+  assert.equal(previewFromHero({ ...hero, pick: { ...hero.pick, kind: 'CLOSE' } }), null);
   assert.equal(previewFromHero(null), null);
 });
 
@@ -206,10 +238,10 @@ test('small validators and the demo token', () => {
   assert.equal(isCode('123456'), true);
   assert.equal(isCode('12345'), false);
   let i = 0;
-  const seq = [0, 0.5, 0.99, 0.1, 0.2, 0.3];
+  const seq = [0, 0.5, 0.99, 0.1, 0.2, 0.3, 0.4, 0.6];
   const tok = demoToken(() => seq[i++]);
-  assert.match(tok, /^[0-9A-Za-z]{6}$/);
-  assert.match(demoToken(), /^[0-9A-Za-z]{6}$/);
+  assert.match(tok, /^[0-9A-Za-z]{8}$/);
+  assert.match(demoToken(), /^[0-9A-Za-z]{8}$/, 'the length server/tokens.js issues');
 });
 
 test('quiet hours: texts only 08:00–21:00 Ljubljana; night texts wait for 08:00, across the clock change', () => {

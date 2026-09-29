@@ -8,6 +8,8 @@ import {
   chainOf,
   isRevealed,
   isSealedFor,
+  issueCounts,
+  recordsCsv,
   recordRow,
   recordRows,
   sortRows,
@@ -84,6 +86,38 @@ test('RENEW chains link both ways; a record is revealed only when its chain has 
   // an earlier record of a still-open chain is sealed too
   const renewedOpen = picks.find((p) => p.status === 'renewed' && !isRevealed(p, byNo));
   if (renewedOpen) assert.equal(isSealedFor(renewedOpen, 'free', byNo), true);
+});
+
+test('live mode: a record the server redacted (sealed: true, no ticker) is sealed for every tier', async () => {
+  const { redactPicks } = await import('../../server/data.js');
+  const red = redactPicks(picks);
+  const rb = indexPicks(red);
+  const sealed = red.filter((p) => p.sealed);
+  assert.ok(sealed.length > 0);
+  for (const tier of ['free', 'signal', 'research']) {
+    for (const p of sealed) {
+      assert.equal(isSealedFor(p, tier, rb), true, `${p.no} ${tier}`);
+      const row = recordRow(p, rb, tier);
+      assert.equal(row.sealed, true);
+      assert.equal(row.ticker, null);
+    }
+  }
+  // what the server leaves revealed stays readable
+  const closed = red.find((p) => p.status === 'closed');
+  assert.equal(isSealedFor(closed, 'free', rb), false);
+});
+
+test('issue counts: stocks that met the rule are issued, already open, capped or removed', () => {
+  const k = issueCounts({ closest: 3, reached: 10, buys: ['0117'], renews: ['0116'], vetoes: { rule: 0, llm: 0, human: 0, capped: 1 } });
+  assert.deepEqual([k.reached, k.issued, k.held, k.capped, k.quorumMet, k.newPick], [10, 2, 8, 1, true, true]);
+  const none = issueCounts({ closest: 3, reached: 8, buys: [], renews: [], vetoes: { rule: 2, llm: 0, human: 0, capped: 0 } });
+  assert.deepEqual([none.quorumMet, none.newPick, none.held], [true, false, 8]);
+  assert.equal(issueCounts({ closest: 2, reached: 0, buys: [], renews: [], vetoes: {} }).quorumMet, false);
+  for (const r of issues) {
+    const c = issueCounts(r);
+    assert.ok(c.held >= 0 && c.held <= c.reached, r.date);
+    if (r.quorum) assert.ok(c.newPick, r.date);
+  }
 });
 
 test('sealed rows expose only what the public chain shows', () => {
@@ -167,4 +201,24 @@ test('tamper copies flip exactly one character and leave the ledger untouched', 
     assert.notEqual(JSON.stringify(c.entries[c.index]), JSON.stringify(ledger.entries[c.index]));
   }
   assert.equal(JSON.stringify(ledger.entries), before);
+  // "Improve a result" makes the forged excess better, never worse
+  const t = tamperTarget(ledger.entries, 'result');
+  const c = tamperCopy(ledger.entries, t);
+  assert.ok(Number(c.after) > Number(c.before), `${c.before} -> ${c.after}`);
+  const neg = tamperCopy([{ seq: 1, type: 'CLOSE', body: { no: '0001', excess: -0.02415 } }], { seq: 1, path: ['body', 'excess'], kind: 'number', raise: true });
+  assert.equal(neg.after, '-0.02414');
+  const pos = tamperCopy([{ seq: 1, type: 'CLOSE', body: { no: '0001', excess: 0.0199 } }], { seq: 1, path: ['body', 'excess'], kind: 'number', raise: true });
+  assert.equal(pos.after, '0.0299');
+});
+
+test('the picks CSV: every record, open tickers only for paid tiers', () => {
+  const paid = recordsCsv(recordRows(picks, 'signal'));
+  const free = recordsCsv(recordRows(picks, 'free'));
+  const lines = paid.trim().split('\n');
+  assert.equal(lines.length, picks.length + 1);
+  assert.match(lines[0], /^no,kind,prior_no,issue_date,status,sealed,agreement,ticker,name/);
+  const open = picks.find((p) => p.status === 'open');
+  assert.ok(paid.includes(`,${open.ticker},`));
+  const freeRow = free.split('\n').find((l) => l.startsWith(`${open.no},`));
+  assert.ok(freeRow && !freeRow.includes(open.ticker), freeRow);
 });

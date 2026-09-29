@@ -15,7 +15,7 @@
 //   registerPushRoutes(router, ctx): GET /api/push/key, POST /api/push/subscribe, POST /api/push/unsubscribe
 import { renderSms, validateSms } from '../core/sms-templates.js';
 import { issueSlot, fmtDDMMYY, fmtLong, addDays } from '../core/calendar.js';
-import { ensureUnsubscribeToken } from './tokens.js';
+import { ensureUnsubscribeToken, TOKEN_LENGTH } from './tokens.js';
 import { recipientZone } from './messaging.js';
 import { HttpError } from './http.js';
 import { quietHoursNextAllowed, iso } from './util.js';
@@ -144,7 +144,7 @@ export function createNotifier(ctx) {
     const blocked = new Set();
     for (const it of picks) {
       for (const locale of ['en', 'sl']) {
-        const v = validateSms(smsText(it, locale, 'ZZZZZZ'));
+        const v = validateSms(smsText(it, locale, 'Z'.repeat(TOKEN_LENGTH)));
         if (!v.ok) {
           blocked.add(it.recId);
           out.blocked.push({ no: it.no, kind: it.kind, locale, errors: v.errors });
@@ -364,8 +364,31 @@ export function createNotifier(ctx) {
 }
 
 // ------------------------------------------------------------------ push subscription routes
+// pushHostAllowed(hostname, hosts) -> true when the host is one of the push services (an entry
+// '*.push.apple.com' matches any subdomain of push.apple.com).
+export function pushHostAllowed(hostname, hosts) {
+  const h = String(hostname ?? '').toLowerCase().replace(/\.$/, '');
+  return hosts.some((e) => (e.startsWith('*.') ? h.endsWith(e.slice(1)) && h.length > e.length - 1 : h === e));
+}
+
+// checkPushEndpoint(endpoint, hosts) -> URL; throws HttpError 400 unless it is an https URL on a
+// push service, on the default port and without credentials.
+export function checkPushEndpoint(endpoint, hosts) {
+  let url;
+  try {
+    url = new URL(String(endpoint ?? ''));
+  } catch {
+    throw new HttpError(400, 'invalid_endpoint', 'endpoint must be an https URL');
+  }
+  if (url.protocol !== 'https:' || String(endpoint).length > 1024 || url.username || url.password || (url.port && url.port !== '443')) {
+    throw new HttpError(400, 'invalid_endpoint', 'endpoint must be an https URL');
+  }
+  if (!pushHostAllowed(url.hostname, hosts)) throw new HttpError(400, 'invalid_endpoint', 'endpoint is not on a known Web Push service');
+  return url;
+}
+
 export function registerPushRoutes(router, ctx) {
-  const { db } = ctx;
+  const { db, config } = ctx;
   router.add('GET', '/api/push/key', async () => ({ publicKey: ctx.push?.publicKey ?? null, transport: ctx.push?.kind ?? null }));
 
   router.add(
@@ -375,27 +398,29 @@ export function registerPushRoutes(router, ctx) {
       const endpoint = String(body?.endpoint ?? '');
       const p256dh = String(body?.keys?.p256dh ?? '');
       const auth = String(body?.keys?.auth ?? '');
-      let url;
-      try {
-        url = new URL(endpoint);
-      } catch {
-        throw new HttpError(400, 'invalid_endpoint', 'endpoint must be an https URL');
-      }
-      if (url.protocol !== 'https:' || endpoint.length > 1024) throw new HttpError(400, 'invalid_endpoint', 'endpoint must be an https URL');
+      checkPushEndpoint(endpoint, config.push.hosts);
       const k = b64u.dec(p256dh);
       if (k.length !== 65 || k[0] !== 4) throw new HttpError(400, 'invalid_key', 'keys.p256dh must be an uncompressed P-256 public key');
       if (b64u.dec(auth).length !== 16) throw new HttpError(400, 'invalid_key', 'keys.auth must be 16 bytes');
       const now = iso(ctx.now());
-      db.run(
-        `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, revoked_at = NULL`,
-        user.id,
-        endpoint,
-        p256dh,
-        auth,
-        now,
-      );
-      return { ok: true };
+      let revoked = 0;
+      db.tx(() => {
+        db.run(
+          `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, created_at = excluded.created_at, revoked_at = NULL`,
+          user.id,
+          endpoint,
+          p256dh,
+          auth,
+          now,
+        );
+        // At most config.push.maxPerUser live devices per user: the oldest are revoked first.
+        const live = db.all('SELECT id FROM push_subscriptions WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC, id DESC', user.id);
+        for (const r of live.slice(Math.max(1, config.push.maxPerUser))) {
+          revoked += db.run('UPDATE push_subscriptions SET revoked_at = ? WHERE id = ?', now, r.id).changes;
+        }
+      });
+      return { ok: true, revokedOldest: revoked };
     },
     { auth: true, accepts: ['json'] },
   );

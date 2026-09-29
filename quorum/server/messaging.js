@@ -34,8 +34,20 @@ export function recipientZone(db, userId, country = null) {
 // A provider error is permanent when the provider answered 4xx other than 429 (bad number, bad
 // request, unknown subscription): retrying cannot help.
 function isPermanent(e) {
+  if (e?.permanent === true) return true;
   const s = Number(e?.status);
   return Number.isInteger(s) && s >= 400 && s < 500 && s !== 429 && s !== 408;
+}
+
+// withDeadline(promise, ms) -> the promise, or a rejection after ms (a transport that ignores its
+// own timeout still cannot hold a fan-out worker).
+function withDeadline(promise, ms) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error(`push: no answer within ${ms} ms`), { code: 'timeout' })), ms);
+    timer.unref?.();
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
 }
 
 export function createMessaging(ctx) {
@@ -177,8 +189,9 @@ export function createMessaging(ctx) {
     }
   }
 
-  // Web Push to every live subscription of the user (one notification row per user and item).
-  // 404/410 revokes that subscription; the row is sent when at least one device accepted it.
+  // Web Push to every live subscription of the user (one notification row per user and item), all
+  // devices in parallel, each with a deadline. 404/410 revokes that subscription; the row is sent
+  // when at least one device accepted it.
   async function sendPush(row) {
     if (!ctx.push) {
       finish(row.id, { status: 'queued' });
@@ -193,20 +206,25 @@ export function createMessaging(ctx) {
     let gone = 0;
     let lastError = null;
     const ids = [];
-    for (const s of subs) {
-      try {
-        const r = await ctx.push.send({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, row.body, { ttl: 3600, urgency: 'normal' });
-        if (r.gone) {
-          gone++;
-          db.run('UPDATE push_subscriptions SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?', iso(ctx.now()), s.id);
-        } else {
-          sent++;
-          if (r.id) ids.push(r.id);
-        }
-      } catch (e) {
-        lastError = e;
+    const timeoutMs = config.push?.timeoutMs ?? 10_000;
+    const deadlineMs = timeoutMs + Math.min(2_000, timeoutMs);
+    const results = await Promise.allSettled(
+      subs.map((s) => withDeadline(ctx.push.send({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, row.body, { ttl: 3600, urgency: 'normal' }), deadlineMs)),
+    );
+    results.forEach((res, i) => {
+      if (res.status === 'rejected') {
+        lastError = res.reason;
+        return;
       }
-    }
+      const r = res.value;
+      if (r.gone) {
+        gone++;
+        db.run('UPDATE push_subscriptions SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?', iso(ctx.now()), subs[i].id);
+      } else {
+        sent++;
+        if (r.id) ids.push(r.id);
+      }
+    });
     if (sent > 0) {
       finish(row.id, { status: 'sent', provider_sid: ids[0] ?? `push:${sent}/${subs.length}`, sent_at: iso(ctx.now()) });
       return { id: row.id, sent: true, devices: sent };
@@ -227,6 +245,24 @@ export function createMessaging(ctx) {
       if (row) results.push(await sendOne(row));
     }
     return results;
+  }
+
+  // recoverStuck({ olderThanMs }) -> { requeued, failed }. A row still 'sending' that long after its
+  // claim was interrupted (the process stopped mid-send): push and email go back to 'queued' (a
+  // repeat is harmless), a text is marked failed 'interrupted' (it may have gone out; never twice).
+  function recoverStuck({ olderThanMs = config.stuckSendingMs ?? 5 * 60_000 } = {}) {
+    const now = iso(ctx.now());
+    const cutoff = iso(addMs(ctx.now(), -olderThanMs));
+    const out = { requeued: 0, failed: 0 };
+    for (const r of db.all("SELECT id, channel FROM notifications WHERE status = 'sending' AND updated_at <= ?", cutoff)) {
+      const sms = r.channel === 'sms';
+      const n = db.run("UPDATE notifications SET status = ?, error_code = 'interrupted', updated_at = ? WHERE id = ? AND status = 'sending'", sms ? 'failed' : 'queued', now, r.id).changes;
+      if (n) out[sms ? 'failed' : 'requeued']++;
+    }
+    if (out.failed) {
+      ctx.alerts?.raise('send_interrupted', `${out.failed} text(s) were interrupted mid-send and marked failed (they may have gone out: check the Twilio log)`, { severity: 'warn', dedupeKey: 'send_interrupted' });
+    }
+    return out;
   }
 
   // dispatchDue({ limit }) -> results; every queued row that is due (retries, quiet-hours holds).
@@ -283,7 +319,7 @@ export function createMessaging(ctx) {
     return { queued: q.created, id: q.id };
   }
 
-  return { smsState, queue, dispatch, dispatchDue, maybeSendOptIn, sendEmail, statusCallback };
+  return { smsState, queue, dispatch, dispatchDue, recoverStuck, maybeSendOptIn, sendEmail, statusCallback };
 }
 
 function welcomeEmail(locale, e164, config) {

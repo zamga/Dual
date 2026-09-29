@@ -32,6 +32,7 @@ import {
   pctl,
   money,
   sectorL,
+  meetsRule,
 } from './_universe.js';
 
 // The explorer's state lives in memory, so a language or view-as switch keeps the screen.
@@ -137,10 +138,18 @@ export async function render(ctx) {
 
   // body: the virtual window
   const body = h('div', { class: 'rx-body', role: 'rowgroup' });
-  const scroller = h('div', { class: 'rx-scroll', tabindex: '0', role: 'presentation' }, body);
+  const scroller = h('div', { class: 'rx-scroll', role: 'presentation' }, body);
+  // The grid itself is the one keyboard stop: it carries the name, aria-activedescendant and the keys,
+  // so a screen reader announces "The universe, grid" and then the active row's stock cell.
   const grid = h(
     'div',
-    { class: 'rx-grid', role: 'grid', 'aria-label': L('The universe, one row per stock (simulated, fictional companies)', 'Univerzum, ena vrstica na delnico (simulirano, izmišljena podjetja)'), 'aria-colcount': String(COLS.length) },
+    {
+      class: 'rx-grid',
+      role: 'grid',
+      tabindex: '0',
+      'aria-label': L('The universe, one row per stock (simulated, fictional companies). Arrow keys move, Enter opens the stock.', 'Univerzum, ena vrstica na delnico (simulirano, izmišljena podjetja). Puščice premikajo, Enter odpre delnico.'),
+      'aria-colcount': String(COLS.length),
+    },
     h('div', { class: 'rx-headwrap', role: 'rowgroup' }, headRow),
     scroller,
   );
@@ -156,7 +165,10 @@ export async function render(ctx) {
 
   function rowNode(r, i) {
     const cells = [];
-    const agreeQ = (r.agree ?? 0) >= 3;
+    // the quorum colour only for stocks that met the rule (3 or 4 families and no veto); a vetoed 3/4 is
+    // drawn hollow in Mist with its veto named, because it could not be a pick
+    const agreeQ = meetsRule(r);
+    const blocked = (r.agree ?? 0) >= 3 && !!r.veto;
     cells.push(
       h(
         'div',
@@ -177,8 +189,8 @@ export async function render(ctx) {
       cell.style.setProperty('--v', Number.isFinite(v) ? String(v) : '0');
       cells.push(cell);
     }
-    const dots = h('span', { class: ['rx-dots', agreeQ && 'is-quorum'], 'aria-hidden': 'true' }, [0, 1, 2, 3].map((k) => h('i', { class: k < (r.agree ?? 0) ? 'is-on' : null })));
-    cells.push(h('div', { class: ['rx-c', 'rx-c-agree', agreeQ && 'is-quorum'], role: 'gridcell' }, dots, h('span', { class: 'rx-agree' }, `${r.agree ?? 0}/4`)));
+    const dots = h('span', { class: ['rx-dots', agreeQ && 'is-quorum', blocked && 'is-blocked'], 'aria-hidden': 'true' }, [0, 1, 2, 3].map((k) => h('i', { class: k < (r.agree ?? 0) ? 'is-on' : null })));
+    cells.push(h('div', { class: ['rx-c', 'rx-c-agree', agreeQ && 'is-quorum', blocked && 'is-blocked'], role: 'gridcell' }, dots, h('span', { class: 'rx-agree' }, `${r.agree ?? 0}/4`, blocked ? h('span', { class: 'visually-hidden' }, L(', vetoed', ', z vetom')) : null)));
     cells.push(h('div', { class: ['rx-c', 'rx-c-veto', r.veto && 'is-vetoed'], role: 'gridcell', title: r.veto ? VETO_LABEL[r.veto]?.[locale] ?? r.veto : null }, vetoShort(r.veto)));
     cells.push(h('div', { class: 'rx-c rx-c-mcap is-num', role: 'gridcell' }, money(r.mcap, locale)));
     cells.push(h('div', { class: 'rx-c rx-c-adv is-num', role: 'gridcell' }, money(r.adv60, locale)));
@@ -230,8 +242,8 @@ export async function render(ctx) {
   // keyboard: one tab stop; arrows move the active row (aria-activedescendant), Enter opens the stock
   function syncActive() {
     for (const [i, el] of rendered) el.classList.toggle('is-active', i === state.active);
-    if (view.length && rendered.has(state.active)) scroller.setAttribute('aria-activedescendant', `rx-c-${state.active}`);
-    else scroller.removeAttribute('aria-activedescendant');
+    if (view.length && rendered.has(state.active)) grid.setAttribute('aria-activedescendant', `rx-c-${state.active}`);
+    else grid.removeAttribute('aria-activedescendant');
   }
   function moveTo(i) {
     if (!view.length) return;
@@ -242,9 +254,10 @@ export async function render(ctx) {
     else if (top + H > scroller.scrollTop + vh) scroller.scrollTop = top + H - vh;
     paint();
     const r = view[state.active];
-    announce(`${r.ticker}, ${r.name}. ${FAMILIES.map((f) => `${f} ${pctl(r[f])}`).join(', ')}. ${r.agree ?? 0}/4${r.veto ? `, ${VETO_LABEL[r.veto]?.[locale] ?? r.veto}` : ''}.`);
+    announce(`${r.ticker}, ${String(r.name).replace(/\.+$/, '')}. ${FAMILIES.map((f) => `${f} ${pctl(r[f])}`).join(', ')}. ${r.agree ?? 0}/4${r.veto ? `, ${VETO_LABEL[r.veto]?.[locale] ?? r.veto}` : ''}.`);
   }
-  scroller.addEventListener('keydown', (e) => {
+  grid.addEventListener('keydown', (e) => {
+    if (e.target !== grid) return; // the sort buttons in the header keep their own keys
     const page = Math.max(1, Math.floor(scroller.clientHeight / H) - 1);
     const map = { ArrowDown: 1, ArrowUp: -1, PageDown: page, PageUp: -page };
     if (e.key in map) {
@@ -261,7 +274,7 @@ export async function render(ctx) {
       ctx.navigate(href('stock', view[state.active].ticker));
     }
   });
-  scroller.addEventListener('focus', () => {
+  grid.addEventListener('focus', () => {
     if (!rendered.has(state.active)) {
       const { start } = visibleRange(scroller.scrollTop, scroller.clientHeight, H, view.length, 0);
       state.active = Math.min(start, Math.max(0, view.length - 1));
@@ -429,11 +442,13 @@ export async function render(ctx) {
       ...s.byAgree.map((n, k) => {
         const bar = h('span', { class: 'rx-hist__bar' }, h('i'));
         bar.style.setProperty('--w', `${n ? Math.max(1.5, (n / max) * 100) : 0}%`);
-        return h('div', { class: ['rx-hist__row', k >= 3 && 'is-quorum'], 'aria-hidden': 'true' }, h('span', { class: 'rx-hist__k mono' }, `${k}/4`), bar, h('span', { class: 'rx-hist__v mono' }, fmt.int(n)));
+        return h('div', { class: 'rx-hist__row', 'aria-hidden': 'true' }, h('span', { class: 'rx-hist__k mono' }, `${k}/4`), bar, h('span', { class: 'rx-hist__v mono' }, fmt.int(n)));
       }),
     );
     const topSector = s.sectors[0];
     sumFacts.replaceChildren(
+      h('div', { class: 'rx-sum__quorum' }, h('dt', {}, L('3/4 or 4/4, no veto (met the rule)', '3/4 ali 4/4, brez veta (pravilo izpolnjeno)')), h('dd', { class: 'mono' }, fmt.int(s.met))),
+      h('div', {}, h('dt', {}, L('3/4 or 4/4 but vetoed', '3/4 ali 4/4, a z vetom')), h('dd', { class: 'mono' }, fmt.int(s.blocked))),
       h('div', {}, h('dt', {}, L('Vetoed', 'Z vetom')), h('dd', { class: 'mono' }, `${fmt.int(s.vetoed)}`)),
       h('div', {}, h('dt', {}, L(`Median 21d return`, 'Mediana 21-dnevnega donosa')), h('dd', { class: 'mono' }, Number.isFinite(s.median.ret21) ? fmt.pct(s.median.ret21, { sign: true }) : '–')),
       h('div', {}, h('dt', {}, L('Largest sector', 'Največji sektor')), h('dd', {}, topSector ? `${sectorL(topSector[0], locale)} · ${fmt.int(topSector[1])}` : '–')),
@@ -493,7 +508,7 @@ export async function render(ctx) {
     h(
       'p',
       { class: 'c-body small muted rx-legend' },
-      L(`Percentiles run 0–100 within today’s universe; a family “agrees” at the ${R.pctile} or above (${R.plus}). Three or four agreeing families are marked in blue, the colour kept for a quorum; a veto still keeps such a stock out of the issue. News* is the simulation’s stand-in for the 48-hour news check. 21d is the trailing 21-day return to the score date.`, `Percentili so 0–100 znotraj današnjega univerzuma; družina se »strinja« pri ${R.pctile} ali več (${R.plus}). Tri ali štiri družine v soglasju so označene modro, z barvo, rezervirano za kvorum; veto takšno delnico še vedno izključi iz izdaje. Novice* je simulacijski nadomestek 48-urnega pregleda novic. 21 d je donos zadnjih 21 dni do datuma ocene.`),
+      L(`Percentiles run 0–100 within today’s universe; a family “agrees” at the ${R.pctile} or above (${R.plus}). Blue, the colour kept for a quorum, marks only stocks that met the rule: three or four agreeing families and no veto. They include the issue’s pick or renewal and picks already open; the caps (per issue, month and sector) and cooldowns decide which are issued, and only a record in the ledger is a pick. A 3/4 or 4/4 stopped by a veto is drawn hollow, with the veto named. News* is the simulation’s stand-in for the 48-hour news check. 21d is the trailing 21-day return to the score date.`, `Percentili so 0–100 znotraj današnjega univerzuma; družina se »strinja« pri ${R.pctile} ali več (${R.plus}). Modra, barva kvoruma, označuje samo delnice, ki so izpolnile pravilo: tri ali štiri družine v soglasju in brez veta. Med njimi so izbira ali podaljšanje izdaje in že odprte izbire; omejitve (na izdajo, mesec in sektor) in premori odločijo, katere so izdane, izbira pa je samo zapis v knjigi. Delnica s 3/4 ali 4/4, ki jo je ustavil veto, je narisana votlo, z imenom veta. Novice* je simulacijski nadomestek 48-urnega pregleda novic. 21 d je donos zadnjih 21 dni do datuma ocene.`),
     ),
   );
 
@@ -621,7 +636,15 @@ function gateSection(ctx, { tier, R, name, nScored, issue }) {
       { class: 'c-meta boxed rx-gate__cta' },
       h('p', { class: 'rx-gate__price' }, h('span', { class: 'rx-gate__amount' }, fmt.eur(p.amount)), h('span', { class: 'small muted' }, L('a month, VAT included · €390 a year', 'na mesec, z DDV · 390 € na leto'))),
       h('a', { class: 'btn', href: href('join', 'research') }, L('Join Research', 'Naroči Research'), h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')),
-      h('p', { class: 'small muted' }, tier === 'signal' ? L('You are viewing as Signal: the same picks at the same second, without the universe.', 'Gledate kot Signal: iste izbire v isti sekundi, brez univerzuma.') : L('You are viewing as Free. Switch “View as” to Research to open the explorer.', 'Gledate kot Brezplačno. Za raziskovalnik preklopite »Pogled kot« na Research.')),
+      // live mode has no "View as": the tier comes from the account, so the way in is to join or sign in
+      ctx.mode === 'live'
+        ? h(
+            'p',
+            { class: 'small muted' },
+            tier === 'signal' ? L('Your Signal subscription has the same picks at the same second, without the universe. ', 'Vaša naročnina Signal ima iste izbire v isti sekundi, brez univerzuma. ') : L('The explorer opens with a Research subscription. ', 'Raziskovalnik se odpre z naročnino Research. '),
+            h('a', { href: href('account') }, L('Already a member? Sign in', 'Že naročnik? Prijava')),
+          )
+        : h('p', { class: 'small muted' }, tier === 'signal' ? L('You are viewing as Signal: the same picks at the same second, without the universe.', 'Gledate kot Signal: iste izbire v isti sekundi, brez univerzuma.') : L('You are viewing as Free. Switch “View as” to Research to open the explorer.', 'Gledate kot Brezplačno. Za raziskovalnik preklopite »Pogled kot« na Research.')),
     ),
     h(
       'p',

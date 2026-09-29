@@ -1,5 +1,6 @@
 // The distribution of every variant's Sharpe ratio (backtest page), with reference lines: what the best
-// of that many zero-skill variants would show by luck (raw and clustered), and the holdout's Sharpe.
+// of that many zero-skill variants would show by luck (raw and clustered), the chosen rule's research-window
+// Sharpe (the figure gate d1 deflates) and the holdout's Sharpe.
 // Bars are hollow Graphite: this is a backtest, and nothing here is a quorum mark.
 import { h } from '../dom.js';
 import { histogram, extent, linear, ticks } from './scale.js';
@@ -13,6 +14,7 @@ export function variantHistogram(values, { markers = [], fmt, L, bins = 28 }) {
   const maxN = Math.max(1, ...hist.map((b) => b.n));
   const x = linear(lo, hi, 0, 100);
   const plot = h('div', { class: 'vh-plot', 'aria-hidden': 'true' });
+  plot.style.setProperty('--rows', String(Math.max(1, markers.length))); // one label row per reference line
   for (const b of hist) {
     const bar = h('span', { class: 'vh-bar' });
     bar.style.setProperty('--x', `${x(b.x0)}%`);

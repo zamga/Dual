@@ -41,7 +41,12 @@ export function isRevealed(pick, byNo) {
   return chain.length > 0 && chain[chain.length - 1].status === 'closed';
 }
 
+// Sealed for this viewer: the server redacted it (live mode: `sealed: true`, no ticker), or the demo's
+// Free view of a chain that has not closed. A redacted record is sealed whatever the tier says, so no
+// page ever reads a ticker, name, mark or reveal the server withheld.
 export function isSealedFor(pick, tier, byNo) {
+  if (!pick) return true;
+  if (pick.sealed === true || pick.ticker == null) return true;
   return tier === 'free' && !isRevealed(pick, byNo);
 }
 
@@ -109,6 +114,26 @@ export function recordRow(pick, byNo, tier = 'signal') {
 export function recordRows(picks, tier = 'signal') {
   const byNo = indexPicks(picks);
   return (picks ?? []).map((p) => recordRow(p, byNo, tier));
+}
+
+// The record table as CSV for this viewer (Signal's "full ledger as CSV"): one row per BUY and RENEW,
+// numbers as fractions, RFC 4180 quoting. A sealed row keeps only what the public chain shows.
+export function recordsCsv(rows) {
+  const q = (v) => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const cols = ['no', 'kind', 'prior_no', 'issue_date', 'status', 'sealed', 'agreement', 'ticker', 'name', 'entry_open', 'exit_date', 'exit_open', 'net', 'bench', 'excess', 'final', 'commit'];
+  const lines = [cols.join(',')];
+  for (const r of rows) {
+    lines.push(
+      [r.no, r.kind, r.priorNo, r.issueDate, r.status, r.sealed ? 1 : 0, r.agreement, r.ticker, r.name, r.entryOpen, r.exitDate, r.exitOpen, r.net, r.bench, r.excess, r.final ? 1 : 0, r.commit]
+        .map(q)
+        .join(','),
+    );
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 // Sorting: nulls (sealed or not yet measured) always last, whatever the direction, so a sealed
@@ -194,7 +219,42 @@ export function issueBlocks(entries, anchors = []) {
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
-// Every SMS that went out with an issue: BUY and RENEW texts of its picks, CLOSE texts of its exits.
+// What happened to the stocks that met the rule on an issue day, from the counts the issue publishes
+// (issues.json; engine/backtest.js). `reached` counts every non-vetoed stock at the required agreement,
+// including picks already open; `vetoes.capped` counts the caps (issue, month, sector, SMS budget) and
+// cooldowns; `vetoes.human` and `unissued` remove issued BUYs. What is left was already an open pick
+// (a RENEW is one of those). `rule` and `llm` count vetoed stocks, which are not in `reached`.
+// -> { buys, renews, issued, reached, held, capped, human, unissued, rule, llm, required, quorumMet, newPick }
+export function issueCounts(iss, required = 3) {
+  const v = iss?.vetoes ?? {};
+  const buys = iss?.buys?.length ?? 0;
+  const renews = iss?.renews?.length ?? 0;
+  const reached = Math.max(0, iss?.reached ?? 0);
+  const capped = v.capped ?? 0;
+  const human = v.human ?? 0;
+  const unissued = iss?.unissued ?? 0;
+  const held = Math.max(0, reached - buys - capped - human - unissued);
+  const need = iss?.required ?? required;
+  return {
+    buys,
+    renews,
+    issued: buys + renews,
+    reached,
+    held,
+    capped,
+    human,
+    unissued,
+    rule: v.rule ?? 0,
+    llm: v.llm ?? 0,
+    required: need,
+    // at least one stock met the rule with no veto (whether or not it could be issued)
+    quorumMet: (iss?.closest ?? 0) >= need && reached > 0,
+    newPick: buys + renews > 0,
+  };
+}
+
+// Every SMS an issue carries (sent to subscribers once launched): BUY and RENEW texts of its picks, CLOSE
+// texts of its exits.
 export function issueTexts(issue, byNo) {
   const out = [];
   for (const no of [...(issue?.buys ?? []), ...(issue?.renews ?? [])]) {
@@ -270,7 +330,7 @@ export function tamperTarget(entries, preset = 'reveal') {
   const list = entries ?? [];
   if (preset === 'result') {
     const e = list.find((x) => x.type === 'CLOSE' && typeof x.body?.excess === 'number');
-    if (e) return { seq: e.seq, path: ['body', 'excess'], label: `CLOSE #${e.body.no}: excess`, kind: 'number' };
+    if (e) return { seq: e.seq, path: ['body', 'excess'], label: `CLOSE #${e.body.no}: excess`, kind: 'number', raise: true };
   }
   if (preset === 'scored') {
     const e = list.find((x) => x.type === 'ISSUE' && typeof x.body?.nScored === 'number');
@@ -291,15 +351,26 @@ export function tamperCopy(entries, target, { rehash = null } = {}) {
   const key = target.path[target.path.length - 1];
   const before = obj[key];
   const s = String(before);
-  // flip the last digit of a number (keeps it a valid number), the last letter of a string
+  // flip the last digit of a number (keeps it a valid number), the last letter of a string. A forged
+  // result is made better, as a forger would: one digit moves so the value rises (a negative excess
+  // shrinks towards zero, a positive one grows), still exactly one character.
   let at = s.length - 1;
-  if (target.kind === 'number')
+  let f = null;
+  if (target.kind === 'number' && target.raise) {
+    const neg = s.startsWith('-');
+    for (let i = s.length - 1; i >= 0 && !f; i--) {
+      if (!/[0-9]/.test(s[i])) continue;
+      const d = Number(s[i]);
+      if (neg ? d > 0 : d < 9) f = { value: s.slice(0, i) + String(neg ? d - 1 : d + 1) + s.slice(i + 1), index: i, from: s[i], to: String(neg ? d - 1 : d + 1) };
+    }
+  }
+  if (!f && target.kind === 'number')
     for (let i = s.length - 1; i >= 0; i--)
       if (/[0-9]/.test(s[i])) {
         at = i;
         break;
       }
-  const f = flipChar(s, at);
+  f ??= flipChar(s, at);
   obj[key] = target.kind === 'number' ? Number(f.value) : f.value;
   return { entries: copy, index: idx, seq: target.seq, before: s, after: f.value, at: f.index, rehash };
 }

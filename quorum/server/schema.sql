@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS magic_links (
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   used_at TEXT,
-  ip TEXT
+  ip TEXT,
+  browser_sha256 TEXT                 -- SHA-256 of the qrm_login cookie of the browser that asked for the link
 );
 
 CREATE TABLE IF NOT EXISTS geo_checks (
@@ -179,7 +180,7 @@ CREATE TABLE IF NOT EXISTS processed_events (         -- append-only
   provider TEXT NOT NULL,
   event_id TEXT NOT NULL,
   type TEXT,
-  payload TEXT NOT NULL,
+  payload TEXT NOT NULL,              -- minimised (server/privacy.js): ids, amounts, dates, billing country
   received_at TEXT NOT NULL,
   UNIQUE (provider, event_id)
 );
@@ -295,8 +296,11 @@ CREATE TABLE IF NOT EXISTS candidates (
   public_no TEXT,                     -- assigned at the 13:45 seal
   payload_json TEXT,                  -- the engine's candidate: identity, percentiles, drivers, veto checks, prices
   thesis_status TEXT,                 -- pending | drafted | handoff | approver | disabled
-  veto_scan TEXT,                     -- pending | clear | flagged | unavailable | stand_in
-  status_reason TEXT
+  veto_scan TEXT,                     -- pending | clear | flagged | unavailable | needs_review | reviewed | stand_in
+  status_reason TEXT,
+  veto_scan_detail TEXT,              -- JSON: the scan's category, reason and item ids, and the keyword red flags
+  news_reviewed_by INTEGER REFERENCES persons(id),  -- the approver who read the news of a scan that did not clear
+  news_reviewed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS candidates_date ON candidates(date);
 
@@ -455,7 +459,7 @@ CREATE TABLE IF NOT EXISTS delivery_events (          -- append-only raw status 
   provider_sid TEXT,
   status TEXT,
   error_code TEXT,
-  payload TEXT NOT NULL,              -- the phone number is replaced by its SHA-256
+  payload TEXT NOT NULL,              -- the delivery facts only (server/privacy.js): no phone number
   received_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS delivery_events_sid ON delivery_events(provider_sid);

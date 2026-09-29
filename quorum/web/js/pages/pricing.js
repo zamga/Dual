@@ -3,13 +3,14 @@
 import { h, setNumber } from '../dom.js';
 import { href } from '../router.js';
 import { masthead, contentSections, page } from './_content.js';
+import { trackRecordLabel } from '../ui.js';
 
 const COPY = {
   en: {
     title: 'Pricing',
     kicker: 'What do I get?',
     h1: 'One price for everyone.',
-    lede: 'Every tier gets the same issue at the same second. Tiers differ in how much data you get, never in when you get a pick. Prices are in euros and include VAT.',
+    lede: 'Every paid tier gets the same issue at the same second; the paid tiers differ in how much data you get, never in when you get a pick. On the free Ledger tier an open pick stays sealed (number, time, hash) until it closes; its ticker is then revealed to everyone. Prices are in euros and include VAT.',
     billing: 'Billing',
     monthly: 'Monthly',
     annual: 'Annual',
@@ -34,7 +35,7 @@ const COPY = {
         m: 19,
         y: 190,
         lead: 'For investors who want the picks as they are issued.',
-        items: ['Every BUY, CLOSE and RENEW at 14:00: SMS in SI, AT, DE, HR and IT, plus push and email', 'Full pick notes: thesis, colonnade chart, sensitivity, disclosures', 'The full ledger as CSV', 'At most 16 texts a month; most days, none'],
+        items: ['Every BUY, CLOSE and RENEW at 14:00: SMS in SI, AT, DE, HR and IT, plus push and email', 'Full pick notes: thesis, colonnade chart, sensitivity, disclosures', 'The full record as CSV, open picks included (Copy on the ledger)', 'At most 16 texts a month; on many days, none'],
         cta: 'Join Signal',
         href: href('join', 'signal'),
       },
@@ -52,7 +53,7 @@ const COPY = {
     ],
     honestTitle: 'Honest expectations',
     honest: 'Expect picks to beat the benchmark 53–58% of the time. That is a real edge and it will still feel like losing about four times in ten. A sustained live rate above 60% is treated as a bug until proven otherwise.',
-    record: (x) => `Sealed record so far: ${x.hit} of ${x.n} closed picks beat the benchmark (95% CI ${x.lo}–${x.hi}).`,
+    record: (x) => `${x.label} so far: ${x.hit} of ${x.n} closed picks beat the benchmark (95% CI ${x.lo}–${x.hi}).`,
     recordLink: 'See every pick, including the losers',
     policies: {
       title: 'Policies',
@@ -72,7 +73,7 @@ const COPY = {
     title: 'Cene',
     kicker: 'Kaj dobim?',
     h1: 'Ena cena za vse.',
-    lede: 'Vsak paket dobi isto izdajo v isti sekundi. Paketi se razlikujejo po količini podatkov, nikoli po tem, kdaj dobite izbiro. Cene so v evrih in vključujejo DDV.',
+    lede: 'Vsak plačljivi paket dobi isto izdajo v isti sekundi; plačljiva paketa se razlikujeta po količini podatkov, nikoli po tem, kdaj dobite izbiro. V brezplačnem paketu Ledger ostane odprta izbira zapečatena (številka, čas, zgoščena vrednost), dokler se ne zapre; takrat se njena oznaka razkrije vsem. Cene so v evrih in vključujejo DDV.',
     billing: 'Obračun',
     monthly: 'Mesečno',
     annual: 'Letno',
@@ -97,7 +98,7 @@ const COPY = {
         m: 19,
         y: 190,
         lead: 'Za vlagatelje, ki želijo izbire ob izidu.',
-        items: ['Vsak NAKUP, ZAPRTJE in PODALJŠANJE ob 14:00: SMS v SI, AT, DE, HR in IT ter potisna obvestila in e-pošta', 'Celotni zapiski izbir: teza, graf stebrov, občutljivost, razkritja', 'Celotna knjiga v CSV', 'Največ 16 SMS na mesec; večino dni nobenega'],
+        items: ['Vsak NAKUP, ZAPRTJE in PODALJŠANJE ob 14:00: SMS v SI, AT, DE, HR in IT ter potisna obvestila in e-pošta', 'Celotni zapiski izbir: teza, graf stebrov, občutljivost, razkritja', 'Celoten zapis v CSV, z odprtimi izbirami (Kopiraj v knjigi)', 'Največ 16 SMS na mesec; veliko dni nobenega'],
         cta: 'Naroči Signal',
         href: href('join', 'signal'),
       },
@@ -115,7 +116,7 @@ const COPY = {
     ],
     honestTitle: 'Iskrena pričakovanja',
     honest: 'Pričakujte, da bodo izbire merilo premagale v 53–58 % primerov. To je resnična prednost, pa bo še vedno delovala kot poraz približno štirikrat od desetih. Trajen delež nad 60 % obravnavamo kot napako, dokler se ne dokaže drugače.',
-    record: (x) => `Zapečaten zapis doslej: ${x.hit} od ${x.n} zaprtih izbir je premagalo merilo (95 % IZ ${x.lo}–${x.hi}).`,
+    record: (x) => `${x.label} doslej: ${x.hit} od ${x.n} zaprtih izbir je premagalo merilo (95 % IZ ${x.lo}–${x.hi}).`,
     recordLink: 'Oglejte si vse izbire, tudi neuspešne',
     policies: {
       title: 'Pravila',
@@ -177,11 +178,13 @@ export async function render(ctx) {
     ? h(
         'p',
         { class: 'small' },
-        C.record({ hit: fmt.pct0(summary.hitRate), n: fmt.int(summary.nClosed), lo: fmt.pct0(summary.hitCI[0]), hi: fmt.pct0(summary.hitCI[1]) }),
+        C.record({ label: summary.label?.[ctx.locale] ?? summary.label?.en ?? (ctx.locale === 'sl' ? 'Zapečaten zapis' : 'Sealed record'), hit: fmt.pct0(summary.hitRate), n: fmt.int(summary.nClosed), lo: fmt.pct0(summary.hitCI[0]), hi: fmt.pct0(summary.hitCI[1]) }),
         ' ',
         h('a', { href: href('ledger') }, C.recordLink),
       )
     : null;
+  // the brief §7 track-record label goes with the figure, on the page where people decide to pay
+  const recordLabel = summary ? h('p', { class: 'small muted pricing-track' }, trackRecordLabel(ctx.locale)) : null;
 
   const node = page(
     masthead({ kicker: C.kicker, title: C.h1, lede: C.lede, meta: toggle }),
@@ -191,7 +194,7 @@ export async function render(ctx) {
       { class: 'grid honest-block', 'aria-labelledby': 'honest-h' },
       h('h2', { class: 'label c-head', id: 'honest-h' }, C.honestTitle),
       h('blockquote', { class: 'c-body honest-quote serif' }, C.honest),
-      h('div', { class: 'c-meta' }, record),
+      h('div', { class: 'c-meta pricing-record' }, record, recordLabel),
     ),
     ...contentSections([
       { id: 'policies', title: C.policies.title, body: C.policies.body, aside: C.policies.aside },

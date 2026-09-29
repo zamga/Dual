@@ -16,6 +16,7 @@ import {
 } from '../core/calendar.js';
 import { createEntry, merkleRoot, commitment, GENESIS_HASH } from '../core/ledger.js';
 import { renderSms } from '../core/sms-templates.js';
+import { isRealTicker } from '../engine/sim/blocklist.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEED = 20260928;
@@ -65,20 +66,8 @@ function wilson(k, n) {
   return [r4(clamp(c - h, 0, 1)), r4(clamp(c + h, 0, 1))];
 }
 
-// Well-known real tickers the generator must never produce (a subset of the engine's blocklist).
-const BLOCK = new Set(
-  ('AAPL MSFT AMZN GOOG GOOGL META TSLA NVDA BRK JPM JNJ V MA PG HD KO PEP DIS NFLX INTC AMD CSCO ORCL CRM ADBE ' +
-    'IBM T VZ WMT COST TGT NKE MCD SBUX BA CAT GE MMM F GM XOM CVX PFE MRK ABBV LLY UNH CVS BAC WFC C GS MS AXP ' +
-    'PYPL SQ UBER LYFT ABNB SNAP PINS SHOP SPOT ZM ROKU PLTR COIN HOOD RIVN LCID NIO BABA TSM ASML QCOM TXN AVGO ' +
-    'MU AMAT LRCX KLAC ADI NXPI MRVL ON INTU NOW SNOW DDOG NET CRWD ZS OKTA PANW FTNT TEAM WDAY ADSK ANSS CDNS ' +
-    'SNPS EA TTWO ATVI HPQ DELL HPE WBA KR DG DLTR LOW TJX ROST BBY EBAY ETSY W CHWY DASH MAR HLT RCL CCL NCLH ' +
-    'DAL UAL AAL LUV UPS FDX CSX UNP NSC LMT RTX NOC GD HON DE EMR ETN ITW PH ROK SPGI MCO ICE CME NDAQ BLK ' +
-    'SCHW TROW BK STT USB PNC TFC COF DFS SYF AIG MET PRU ALL TRV CB PGR HUM CI ELV CNC MOH ABT TMO DHR ISRG ' +
-    'SYK BSX MDT BDX ZBH EW GILD AMGN BIIB REGN VRTX MRNA BNTX ZTS IDXX DXCM ILMN NEE DUK SO D AEP EXC SRE PCG ' +
-    'ED XEL AMT CCI PLD EQIX SPG O PSA WELL AVB EQR DLR SBAC LIN APD SHW ECL DD DOW NEM FCX NUE STLD CLF AA ' +
-    'X MOS CF ADM BG TSN HSY MDLZ GIS K KHC CPB CAG SJM MKC CLX CL KMB CHD EL TAP STZ BF PM MO BTI SPY QQQ ' +
-    'DIA IWM VOO VTI GME AMC BB NOK ACME CORN GOLD NETS THOR HALO CORE WOLF BEAR BULL CASH').split(' '),
-);
+// Real tickers the generator must never produce: the engine's blocklist and the list of real US symbols.
+const BLOCK = { has: isRealTicker };
 
 // Invented company roots (syllable + ending). Checked by eye against well-known issuers.
 const ROOT_A = ['Al', 'Bran', 'Cor', 'Del', 'Es', 'Fen', 'Gar', 'Hal', 'Is', 'Jor', 'Kes', 'Lar', 'Mor', 'Net', 'Or', 'Pel', 'Quil', 'Ros', 'Sel', 'Thorn', 'Ul', 'Var', 'Wex', 'Yar', 'Zen', 'Brek', 'Cal', 'Dun', 'Ember', 'Grey'];

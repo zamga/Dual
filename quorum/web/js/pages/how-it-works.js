@@ -1,17 +1,20 @@
-// #how-it-works: the families, the quorum rule, vetoes, cadence, why most days are silent.
+// #how-it-works: the families, the quorum rule (with a real quorum, drawn), the vetoes (with the sealed
+// record's funnel from issues.json), the daily cadence as a timetable on rule 1, why many days are silent.
 // SL copy: first draft, needs native review.
 import { h } from '../dom.js';
 import { href } from '../router.js';
 import { ruleLabels } from '../rule.js';
 import { masthead, contentSections, toc, page, table } from './_content.js';
 import { familyName, familyDef } from '../ui.js';
+import { quorumExample } from '../charts/quorum-example.js';
+import { issueCounts } from './_records.js';
 
 const COPY = {
   en: {
     title: 'How it works',
     kicker: 'How does a pick happen?',
     h1: 'Four families. Three must agree.',
-    lede: 'Every US trading day we score about 1,300 liquid US stocks with four independent model families. A pick exists only when at least three of them put the same stock {inTop} and no veto fires. Most days, that does not happen, and we publish that too.',
+    lede: 'Every US trading day we score about 1,300 liquid US stocks with four independent model families. A stock meets the rule only when at least three of them put it {inTop} and no veto fires; the caps and cooldowns then decide whether it becomes a new pick. Every issue says which, pick or not.',
     toc: 'On this page',
     families: {
       title: 'Four independent families',
@@ -55,15 +58,15 @@ const COPY = {
         ['13:45', 'Seal: canonical JSON, SHA-256, chained to the previous record. The commitment hash is public.'],
         ['14:00:00', 'The issue is published on the web, with a pick or without. Texts go out only for BUY, CLOSE or RENEW.'],
         ['15:30', 'The US open (14:30 in the weeks when EU and US clocks change on different dates). This price is the entry.'],
-        ['Day 21', 'At the 14:00 slot the pick is renewed if it still meets the rule, otherwise closed. Both are texted. Exit is the open that day.'],
+        ['Day 21', 'At the 14:00 slot the pick is renewed if it still meets the rule, otherwise closed. Either one sends a text. Exit is the open that day.'],
         ['Sunday 18:00', 'The weekly Ledger email: open picks, closes and statistics. No SMS.'],
       ],
     },
     silence: {
-      title: 'Why most days are silent',
+      title: 'Why many days are silent',
       short: 'Silence',
       body: (x) =>
-        `<p>Three independent families rarely agree about the same stock on the same day. In the sealed record, <strong>${x.q} of ${x.n} issues</strong> had a quorum. On the rest, the issue said “No quorum today”, how many stocks were scored and how close the nearest candidate came.</p><p>We think that silence is the product. A service that texts every day is either lowering its bar or selling activity. Ours texts only when the rule is met, and the rule is published.</p>`,
+        `<p>Three families agreeing is not rare: ${x.metAll ? 'on every issue in the sealed record' : `on ${x.met} of ${x.n} issues`} at least one stock met the rule, three or four families and no veto. What keeps most days quiet is what comes after the rule: a stock already open is not issued again (it can only be renewed on day 21), a closed one waits 10 trading days, and the caps allow at most 2 new picks an issue, 8 a month and 3 open per sector, within 16 texts a month. In the sealed record <strong>${x.q} of ${x.n} issues</strong> carried a new pick or a renewal, and a text was due on ${x.texted}. On the other days the issue said “No new pick today” and what held the candidates back.</p><p>We think that silence is the product. A service that texts every day is either lowering its bar or selling activity. Ours texts only for a BUY, a RENEW or a CLOSE, and the rule is published.</p>`,
       head: ['Closest agreement on the day', 'Issues'],
     },
     measure: {
@@ -85,7 +88,7 @@ const COPY = {
     title: 'Kako deluje',
     kicker: 'Kako nastane izbira?',
     h1: 'Štiri družine. Tri se morajo strinjati.',
-    lede: 'Vsak dan trgovanja v ZDA s štirimi neodvisnimi družinami modelov ocenimo približno 1.300 likvidnih ameriških delnic. Izbira obstaja samo, ko vsaj tri isto delnico uvrstijo {inTop} in se ne sproži noben veto. Večino dni se to ne zgodi, in tudi to objavimo.',
+    lede: 'Vsak dan trgovanja v ZDA s štirimi neodvisnimi družinami modelov ocenimo približno 1.300 likvidnih ameriških delnic. Delnica izpolni pravilo samo, ko jo vsaj tri uvrstijo {inTop} in se ne sproži noben veto; omejitve in premori nato odločijo, ali postane nova izbira. Vsaka izdaja to pove, z izbiro ali brez.',
     toc: 'Na tej strani',
     families: {
       title: 'Štiri neodvisne družine',
@@ -134,10 +137,10 @@ const COPY = {
       ],
     },
     silence: {
-      title: 'Zakaj je večino dni tiho',
+      title: 'Zakaj je veliko dni tiho',
       short: 'Tišina',
       body: (x) =>
-        `<p>Tri neodvisne družine se redko strinjajo o isti delnici na isti dan. V zapečatenem zapisu je kvorum imelo <strong>${x.q} od ${x.n} izdaj</strong>. Ob ostalih je izdaja sporočila »Danes brez kvoruma«, koliko delnic je bilo ocenjenih in kako blizu je bila najbližja kandidatka.</p><p>Menimo, da je ta tišina izdelek. Storitev, ki pošilja SMS vsak dan, bodisi znižuje merila bodisi prodaja aktivnost. Naša pošlje SMS samo, ko je pravilo izpolnjeno, pravilo pa je javno.</p>`,
+        `<p>Soglasje treh družin ni redko: ${x.metAll ? 'v vsaki izdaji zapečatenega zapisa' : `v ${x.met} od ${x.n} izdaj`} je vsaj ena delnica izpolnila pravilo, tri ali štiri družine in brez veta. Večino dni utiša tisto, kar pride po pravilu: že odprte delnice ne izdamo znova (lahko jo le podaljšamo 21. dan), zaprta počaka 10 trgovalnih dni, omejitve pa dopuščajo največ 2 novi izbiri na izdajo, 8 na mesec in 3 odprte na sektor, v okviru 16 SMS na mesec. V zapečatenem zapisu je <strong>${x.q} od ${x.n} izdaj</strong> prineslo novo izbiro ali podaljšanje, SMS pa je bil predviden ${x.texted} dni. Ob drugih dneh je izdaja sporočila »Danes brez nove izbire« in kaj je zadržalo kandidatke.</p><p>Menimo, da je ta tišina izdelek. Storitev, ki pošilja SMS vsak dan, bodisi znižuje merila bodisi prodaja aktivnost. Naša pošlje SMS samo za NAKUP, PODALJŠANJE ali ZAPRTJE, pravilo pa je javno.</p>`,
       head: ['Največje soglasje tistega dne', 'Izdaje'],
     },
     measure: {
@@ -159,8 +162,11 @@ const COPY = {
 
 export async function render(ctx) {
   const C = COPY[ctx.locale] ?? COPY.en;
-  const [meta, issues] = await Promise.all([ctx.data('meta').catch(() => null), ctx.data('issues').catch(() => [])]);
+  const { L, fmt } = { L: (en, sl) => (ctx.locale === 'sl' ? sl : en), fmt: ctx.fmt };
+  const [meta, issues, hero] = await Promise.all([ctx.data('meta').catch(() => null), ctx.data('issues').catch(() => []), ctx.data('hero').catch(() => null)]);
   const q = issues.filter((r) => r.quorum).length;
+  const met = issues.filter((r) => issueCounts(r).quorumMet).length;
+  const texted = issues.filter((r) => r.buys?.length || r.renews?.length || r.closes?.length).length;
   // The rule threshold is data (meta.rule.topPct), never copy.
   const R = ruleLabels(meta, ctx.locale);
   const fill = (str) => str.replace(/\{inTop\}/g, R.inTop).replace(/\{pctile\}/g, R.pctile);
@@ -177,21 +183,29 @@ export async function render(ctx) {
 
   const sections = [
     { id: 'families', title: C.families.title, short: C.families.short, body: [h('p', {}, C.families.intro), famTable], aside: `<p class="small muted">${C.families.aside}</p>` },
-    { id: 'quorum', title: C.rule.title, short: C.rule.short, body: fill(C.rule.body), aside: `<p class="small muted">${C.rule.aside}</p>` },
-    { id: 'vetoes', title: C.vetoes.title, short: C.vetoes.short, body: C.vetoes.body },
+    {
+      id: 'quorum',
+      title: C.rule.title,
+      short: C.rule.short,
+      body: fill(C.rule.body),
+      aside: `<p class="small muted">${C.rule.aside}</p>`,
+      figure: hero?.pick ? quorumExample(hero, { meta, locale: ctx.locale, label: L('A real quorum: our latest closed pick', 'Pravi kvorum: naša zadnja zaprta izbira') }) : null,
+    },
+    { id: 'vetoes', title: C.vetoes.title, short: C.vetoes.short, body: C.vetoes.body, figure: issues.length ? vetoFunnel(ctx, issues) : null },
     {
       id: 'cadence',
       title: C.cadence.title,
       short: C.cadence.short,
-      body: [h('p', {}, C.cadence.intro), table({ head: C.cadence.head, rows: C.cadence.rows.map(([a, b]) => [h('span', { class: 'mono' }, a), b]), className: 'table--cadence' })],
+      body: [h('p', {}, C.cadence.intro)],
+      figure: timetable(C.cadence),
     },
     {
       id: 'silence',
       title: C.silence.title,
       short: C.silence.short,
-      body: C.silence.body({ q: ctx.fmt.int(q), n: ctx.fmt.int(issues.length) }),
+      body: C.silence.body({ q: fmt.int(q), n: fmt.int(issues.length), met: fmt.int(met), metAll: issues.length > 0 && met === issues.length, texted: fmt.int(texted) }),
       aside: dist.length
-        ? table({ head: C.silence.head, rows: dist.map(([k, n]) => [h('span', { class: 'mono' }, `${k}/4`), ctx.fmt.int(n)]), numCols: [1], className: 'table--compact' })
+        ? table({ head: C.silence.head, rows: dist.map(([k, n]) => [h('span', { class: 'mono' }, `${k}/4`), fmt.int(n)]), numCols: [1], className: 'table--compact' })
         : null,
     },
     { id: 'measurement', title: C.measure.title, short: C.measure.short, body: C.measure.body, aside: `<p class="small muted">${C.measure.aside}</p>` },
@@ -209,6 +223,76 @@ export async function render(ctx) {
     h('div', { class: 'grid page-next' }, h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('methodology') }, C.next, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→')))),
   );
   return { title: C.title, node };
+}
+
+// The daily cadence as a timetable on rule 1 (the home page's how-step rows): times in the margin, a tick
+// on the rule, the step beside it.
+function timetable(C) {
+  return h(
+    'ol',
+    { class: 'how-steps hw-times c-full flush', 'aria-label': C.title },
+    C.rows.map(([time, text]) =>
+      h(
+        'li',
+        { class: 'how-step grid' },
+        h('span', { class: 'how-step__time c-margin' }, h('time', {}, time)),
+        h('span', { class: 'how-step__tick', 'aria-hidden': 'true' }),
+        h('div', { class: 'how-step__body c-body' }, h('p', { class: 'hw-times__text' }, text)),
+      ),
+    ),
+  );
+}
+
+// The sealed record as a funnel, from the counts every issue publishes (issues.json; _records.js
+// issueCounts): stock-days scored, stocks at 3/4 or 4/4, the vetoes, those that met the rule, what held
+// them back, and the new picks. Bars are Graphite and hollow; only the last row (the picks) is a quorum mark.
+function vetoFunnel(ctx, issues) {
+  const { fmt } = ctx;
+  const L = (en, sl) => (ctx.locale === 'sl' ? sl : en);
+  const sum = (f) => issues.reduce((a, r) => a + f(r), 0);
+  const k = issues.map((r) => issueCounts(r));
+  const tot = (key) => k.reduce((a, c) => a + (c[key] ?? 0), 0);
+  const rows = [
+    { label: L('Stock-days scored', 'Ocenjenih delnic po dnevih'), n: sum((r) => r.nScored ?? 0), bar: false },
+    { label: L('At 3/4 or 4/4 before the vetoes', 'S 3/4 ali 4/4 pred veti'), n: tot('reached') + tot('rule') + tot('llm') },
+    { label: L('Stopped by a rule veto', 'Ustavil veto pravila'), n: tot('rule'), minus: true },
+    { label: L('Stopped by the news veto (stand-in)', 'Ustavil veto novic (nadomestek)'), n: tot('llm'), minus: true },
+    { label: L('Met the rule, no veto', 'Izpolnilo pravilo, brez veta'), n: tot('reached') },
+    { label: L('Already an open pick (renewals come from these)', 'Že odprta izbira (od tod podaljšanja)'), n: tot('held'), minus: true },
+    { label: L('Capped or cooling down', 'Omejenih ali v premoru'), n: tot('capped'), minus: true },
+    { label: L('Removed by the approver, or no approver', 'Odstranila odobriteljica ali ni odobritelja'), n: tot('human') + tot('unissued'), minus: true },
+    { label: L('New picks (BUY)', 'Nove izbire (NAKUP)'), n: tot('buys'), quorum: true },
+  ];
+  const max = Math.max(1, ...rows.filter((r) => r.bar !== false).map((r) => r.n));
+  const from = issues[0]?.date;
+  const to = issues.at(-1)?.date;
+  return h(
+    'figure',
+    { class: 'hw-funnel' },
+    h(
+      'ol',
+      { class: 'hw-funnel__list' },
+      rows.map((r) => {
+        const bar = h('span', { class: ['hw-funnel__bar', r.minus && 'is-minus', r.quorum && 'is-quorum'] });
+        bar.style.setProperty('--w', `${r.bar === false || !r.n ? 0 : Math.max(0.4, (r.n / max) * 100)}%`);
+        return h(
+          'li',
+          { class: 'hw-funnel__row' },
+          h('span', { class: 'hw-funnel__k' }, r.minus ? `− ${r.label}` : r.label),
+          h('span', { class: 'hw-funnel__track', 'aria-hidden': 'true' }, r.bar === false ? null : bar),
+          h('span', { class: 'hw-funnel__v mono' }, fmt.int(r.n)),
+        );
+      }),
+    ),
+    h(
+      'figcaption',
+      { class: 'figcaption' },
+      L(
+        `Every issue of the sealed record, ${fmt.date(from)} to ${fmt.date(to)} (${fmt.int(issues.length)} issues), summed. Renewals (${fmt.int(tot('renews'))}) are open picks that still met the rule on day 21.`,
+        `Vse izdaje zapečatenega zapisa, ${fmt.date(from)} do ${fmt.date(to)} (${fmt.int(issues.length)} izdaj), sešteto. Podaljšanja (${fmt.int(tot('renews'))}) so odprte izbire, ki so 21. dan še izpolnjevale pravilo.`,
+      ),
+    ),
+  );
 }
 
 function toParas(htmlStr) {

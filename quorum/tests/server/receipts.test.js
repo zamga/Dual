@@ -38,7 +38,7 @@ test('status only moves forward: queued -> sending -> sent -> delivered; failed 
   assert.equal(nextStatus('sent', 'nonsense'), null);
 });
 
-test('receipts over HTTP: signature checked, forward-only, raw events kept with the number hashed', async () => {
+test('receipts over HTTP: signature checked, forward-only, events kept once and without the phone number', async () => {
   const t = await pipelineApp();
   try {
     await dayWithTexts(t, [{ email: 'a@example.si', e164: '+38641000001' }]);
@@ -52,14 +52,42 @@ test('receipts over HTTP: signature checked, forward-only, raw events kept with 
     assert.equal(row.status, 'delivered');
     assert.ok(row.delivered_at);
     assert.equal(row.error_code, null, 'a late error on a final status changes nothing');
-    const ev = t.db.all('SELECT payload FROM delivery_events WHERE provider_sid = ?', m.sid);
-    assert.equal(ev.length, 4);
+    const ev = t.db.all('SELECT status, payload FROM delivery_events WHERE provider_sid = ?', m.sid);
+    assert.deepEqual(ev.map((e) => e.status), ['sent', 'delivered', 'undelivered'], 'the repeated "sent" is stored once');
     for (const e of ev) {
-      assert.ok(!e.payload.includes('+38641000001'));
-      assert.match(JSON.parse(e.payload).To, /^sha256:[0-9a-f]{64}$/);
+      const payload = JSON.parse(e.payload);
+      assert.ok(!e.payload.includes('41000001'), 'no phone number, in clear or hashed');
+      assert.ok(!('To' in payload) && !('From' in payload));
+      assert.equal(payload.MessageSid, m.sid);
     }
   } finally {
     await t.close();
+  }
+});
+
+test('a callback changes only the account of a text we sent; without TWILIO_AUTH_TOKEN every callback is refused', async () => {
+  const t = await pipelineApp();
+  try {
+    const [a] = await dayWithTexts(t, [{ email: 'a@example.si', e164: '+38641000001' }]);
+    // a validly signed 21610 for a message we never sent, naming the subscriber's number: nobody is opted out
+    assert.equal(await callback(t, { sid: 'SMunknown000000', to: '+38641000001' }, 'failed', '21610'), 204);
+    assert.equal(t.db.get('SELECT COUNT(*) AS n FROM opt_outs WHERE user_id = ?', a.user.id).n, 0);
+    assert.equal(t.ctx.messaging.smsState(a.user.id).allowed, true);
+  } finally {
+    await t.close();
+  }
+  // no auth token configured (console SMS, nothing to sign with): refused whatever the signature
+  const u = await pipelineApp({ config: { twilio: { authToken: '' } } });
+  try {
+    const params = { MessageSid: 'SM1', MessageStatus: 'undelivered', ErrorCode: '30007' };
+    for (const key of ['', 'console-auth-token']) {
+      const r = await u.client().request('POST', '/api/webhooks/twilio/status', { form: params, headers: { 'x-twilio-signature': twilioSignature(key || 'x', URL_, params) } });
+      assert.equal(r.status, 403);
+    }
+    assert.equal(u.db.get('SELECT COUNT(*) AS n FROM delivery_events').n, 0);
+    assert.equal(u.db.getSetting('sms_paused'), null);
+  } finally {
+    await u.close();
   }
 });
 
@@ -107,22 +135,29 @@ test('repeated 30003/30005/30006 marks the number invalid and emails the user; o
   }
 });
 
-test('30007 above 2% of the texts sent in 10 minutes pauses SMS and pages on-call; push and email continue', async () => {
+test('30007: distinct texts sent in the last 10 minutes; 5 or more and above 2% pause SMS and page; fewer only warn', async () => {
   const t = await pipelineApp();
   try {
-    // 60 texts go out (15 subscribers x 4 items); one 30007 is 1.7%: no pause
+    // 60 texts go out (15 subscribers x 4 items)
     const people = Array.from({ length: 15 }, (_, i) => ({ email: `s${i}@example.si`, e164: `+3864120${1001 + i}` }));
     await dayWithTexts(t, people);
     const texts = t.sms.outbox.filter((m) => m.body.startsWith('QUORUM #'));
     assert.equal(texts.length, 60);
-    await callback(t, texts[0], 'undelivered', '30007');
+    // one filtered text, its callback repeated: counted once (1 of 60), a warning, no pause
+    for (let i = 0; i < 3; i++) await callback(t, texts[0], 'undelivered', '30007');
+    assert.equal(t.db.get('SELECT COUNT(*) AS n FROM delivery_events WHERE provider_sid = ?', texts[0].sid).n, 1);
     assert.equal(t.db.getSetting('sms_paused'), null);
-    // a second one is 3.3%: pause and page
-    await callback(t, texts[1], 'undelivered', '30007');
+    assert.equal(t.db.get("SELECT COUNT(*) AS n FROM ops_alerts WHERE kind = 'sms_30007' AND severity = 'warn'").n, 1);
+    assert.deepEqual([t.ctx.receipts.checkSpike().errors, t.ctx.receipts.checkSpike().sends], [1, 60]);
+    // four of 60 (6.7%) is still under the minimum of 5 distinct texts
+    for (const m of texts.slice(1, 4)) await callback(t, m, 'undelivered', '30007');
+    assert.equal(t.db.getSetting('sms_paused'), null);
+    // the fifth: pause and page
+    await callback(t, texts[4], 'undelivered', '30007');
     assert.equal(t.db.getSetting('sms_paused'), '1');
-    assert.match(t.db.getSetting('sms_paused_reason'), /30007 spike: 2 of 60/);
+    assert.match(t.db.getSetting('sms_paused_reason'), /30007 spike: 5 of 60/);
     assert.equal(t.pager.pages.filter((p) => p.kind === 'sms_30007_spike').length, 1);
-    await callback(t, texts[2], 'undelivered', '30007');
+    await callback(t, texts[5], 'undelivered', '30007');
     assert.equal(t.pager.pages.filter((p) => p.kind === 'sms_30007_spike').length, 1, 'paged once');
     assert.equal((await t.client().get('/api/health')).body.smsPaused, true);
     // texts wait; email still goes out
@@ -131,10 +166,12 @@ test('30007 above 2% of the texts sent in 10 minutes pauses SMS and pages on-cal
     const mail = t.ctx.messaging.queue({ userId: u, channel: 'email', kind: 'TEST', to: 's0@example.si', subject: 's', body: 'b', idemKey: 'mail' });
     const r = await t.ctx.messaging.dispatch([sms.id, mail.id]);
     assert.deepEqual([r[0].skipped, r[1].sent], ['sms_paused', true]);
-    // the spike window is 10 minutes: old errors do not count
+    // late receipts: 12 minutes on, texts sent before the window do not count, however many come back
     t.ctx.receipts.resumeSms({ by: 'test' });
-    t.advance(11 * 60_000);
-    assert.equal(t.ctx.receipts.checkSpike().paused, false);
+    t.advance(12 * 60_000);
+    for (const m of texts.slice(6, 12)) await callback(t, m, 'undelivered', '30007');
+    assert.equal(t.db.getSetting('sms_paused'), '0');
+    assert.deepEqual([t.ctx.receipts.checkSpike().paused, t.ctx.receipts.checkSpike().sends], [false, 0]);
   } finally {
     await t.close();
   }

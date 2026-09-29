@@ -44,9 +44,16 @@ test('fan-out: recipients per brief §4.4, identical content, rows persisted fir
     assert.equal((await tokyo.client.post('/api/prefs', { timeZone: 'Asia/Tokyo' })).status, 200);
     assert.equal((await tokyo.client.post('/api/prefs', { timeZone: 'Mars/Olympus' })).status, 400);
     assert.equal((await quietMail.client.post('/api/prefs', { email: false })).status, 200);
-    for (const n of [1, 2]) assert.equal((await a.client.post('/api/push/subscribe', { endpoint: `https://push.example.net/a${n}`, keys: pushKeys(n) })).status, 200);
+    for (const n of [1, 2]) assert.equal((await a.client.post('/api/push/subscribe', { endpoint: `https://fcm.googleapis.com/fcm/send/a${n}`, keys: pushKeys(n) })).status, 200);
     assert.equal((await b.client.post('/api/push/subscribe', { endpoint: 'http://push.example.net/insecure', keys: pushKeys(3) })).status, 400);
-    assert.equal((await b.client.post('/api/push/subscribe', { endpoint: 'https://push.example.net/b', keys: { p256dh: 'AAAA', auth: 'BBBB' } })).status, 400);
+    // only the browsers' push services: never this server, its network or the cloud metadata address
+    for (const endpoint of ['https://127.0.0.1:8787/api/admin/sms', 'https://169.254.169.254/latest/meta-data/', 'https://10.0.0.5/internal', 'https://localhost/x', 'https://push.example.net/b', 'https://fcm.googleapis.com.evil.example/x', 'https://user:pw@fcm.googleapis.com/x', 'https://fcm.googleapis.com:8443/x']) {
+      const r = await b.client.post('/api/push/subscribe', { endpoint, keys: pushKeys(3) });
+      assert.deepEqual([r.status, r.body.error], [400, 'invalid_endpoint'], endpoint);
+    }
+    assert.equal((await b.client.post('/api/push/subscribe', { endpoint: 'https://web.push.apple.com/QK1/b', keys: pushKeys(3) })).status, 200);
+    assert.equal((await b.client.post('/api/push/unsubscribe', { endpoint: 'https://web.push.apple.com/QK1/b' })).body.removed, 1);
+    assert.equal((await b.client.post('/api/push/subscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/b', keys: { p256dh: 'AAAA', auth: 'BBBB' } })).status, 400);
     const before = t.sms.outbox.length;
 
     const p = await publishDay(t);
@@ -98,7 +105,7 @@ test('fan-out: recipients per brief §4.4, identical content, rows persisted fir
     assert.match(mail.text, /drafted by an AI model from our model data and checked and approved by Maja Vrhovnik, Head of Research/);
     assert.match(mail.text, /Price at dissemination: 87\.95 USD \(SIM last close, 2025-11-03T16:00:00-05:00\)/);
     assert.match(mail.text, /Not personal advice/);
-    assert.equal(t.push.outbox.filter((m) => m.endpoint.startsWith('https://push.example.net/a')).length, 8, 'both devices, every item');
+    assert.equal(t.push.outbox.filter((m) => m.endpoint.startsWith('https://fcm.googleapis.com/fcm/send/a')).length, 8, 'both devices, every item');
     // idempotent: a second enqueue creates nothing
     const again = await t.ctx.notifier.enqueueIssue({ date: t.input.date, items, publishedAt: p.publishedAt });
     assert.deepEqual(again.rows, { sms: 0, push: 0, email: 0 });
@@ -227,19 +234,19 @@ test('push: a gone subscription (410) is revoked; the row is sent when another d
   try {
     t.local('19:00', '2025-11-03');
     const a = await subscriber(t, { email: 'a@example.si', e164: '+38641000001', sms: false });
-    await a.client.post('/api/push/subscribe', { endpoint: 'https://push.example.net/old', keys: pushKeys(1) });
-    await a.client.post('/api/push/subscribe', { endpoint: 'https://push.example.net/new', keys: pushKeys(2) });
+    await a.client.post('/api/push/subscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/old', keys: pushKeys(1) });
+    await a.client.post('/api/push/subscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/new', keys: pushKeys(2) });
     const calls = [];
     t.ctx.push = { kind: 'stub', send: async (s) => (calls.push(s.endpoint), s.endpoint.endsWith('/old') ? { ok: false, status: 410, gone: true } : { ok: true, status: 201, gone: false, id: 'm1' }) };
     await publishDay(t);
     const d = await t.ctx.notifier.deliverIssue(t.input.date);
     assert.deepEqual(d.counts.push, { sent: 4 });
-    assert.ok(t.db.get("SELECT revoked_at FROM push_subscriptions WHERE endpoint = 'https://push.example.net/old'").revoked_at);
+    assert.ok(t.db.get("SELECT revoked_at FROM push_subscriptions WHERE endpoint = 'https://fcm.googleapis.com/fcm/send/old'").revoked_at);
     const tried = calls.filter((x) => x.endsWith('/old')).length;
     assert.ok(tried >= 1 && tried <= 4, 'tried at most once per item already in flight');
     await t.ctx.messaging.dispatch([t.ctx.messaging.queue({ userId: a.user.id, channel: 'push', kind: 'TEST', to: null, body: JSON.stringify({ title: 't' }), idemKey: 'push-after-revoke' }).id]);
     assert.equal(calls.filter((x) => x.endsWith('/old')).length, tried, 'never tried again once gone');
-    const r = await a.client.post('/api/push/unsubscribe', { endpoint: 'https://push.example.net/new' });
+    const r = await a.client.post('/api/push/unsubscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/new' });
     assert.equal(r.body.removed, 1);
     assert.equal((await a.client.get('/api/push/key')).status, 200);
   } finally {

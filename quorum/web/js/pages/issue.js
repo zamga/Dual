@@ -1,14 +1,16 @@
 // #issue-YYYY-MM-DD: one daily issue, exactly as published at 14:00 Ljubljana time, pick or not.
-// An empty issue reads "No quorum today" with the stocks scored and the closest agreement. Shows the
-// picks and exits, the texts that went out in both locales, that day's ledger records with their
-// hashes and anchor, the approver's removals, and previous/next navigation.
+// A day without a new pick says why, from the counts the issue publishes (_records.js issueCounts):
+// "No quorum today" only when no stock reached the required agreement; otherwise "No new pick today"
+// with the stocks that met the rule and what held them back (already open, capped or cooling down,
+// removed). Shows the picks and exits, the issue's texts in both locales (sent only once launched),
+// that day's ledger records with their hashes and anchor, the approver's removals, and prev/next.
 //
 // SL: first draft, needs native review.
 import { h } from '../dom.js';
 import { href } from '../router.js';
 import { hashChip, timestamp, sectionHead, signed, quorumBadge } from '../ui.js';
 import { ruleLabels } from '../rule.js';
-import { indexPicks, isSealedFor, prevNextIssue, nearestIssue, entriesOn, issueTexts, resultOf } from './_records.js';
+import { indexPicks, isSealedFor, prevNextIssue, nearestIssue, entriesOn, issueTexts, resultOf, issueCounts } from './_records.js';
 import { chainRow, anchorLine } from '../charts/chain.js';
 import { analyze } from '../core/gsm7.js';
 import { formatInZone, LJUBLJANA, isTradingDay, holidayName, weekday } from '../core/calendar.js';
@@ -22,7 +24,8 @@ const DAYS = {
 export async function render(ctx) {
   const { L, fmt, locale } = ctx;
   const date = ctx.params.date;
-  const [issues, picks, ledger, meta] = await Promise.all([ctx.data('issues'), ctx.data('picks'), ctx.data('ledger').catch(() => null), ctx.data('meta').catch(() => null)]);
+  const [issues, picks, ledger, meta, launch] = await Promise.all([ctx.data('issues'), ctx.data('picks'), ctx.data('ledger').catch(() => null), ctx.data('meta').catch(() => null), ctx.launch()]);
+  const pre = launch.prelaunch; // before launch no text is sent: the texts below are what the issue carried
   const byNo = indexPicks(picks);
   const R = ruleLabels(meta, locale);
   const { prev, next, index } = prevNextIssue(issues, date);
@@ -32,22 +35,29 @@ export async function render(ctx) {
   const day = DAYS[locale]?.[weekday(date)] ?? DAYS.en[weekday(date)];
   const quorum = !!(iss.buys?.length || iss.renews?.length);
   const nPicks = (iss.buys?.length ?? 0) + (iss.renews?.length ?? 0);
+  const k = issueCounts(iss, meta?.rule?.minAgree ?? 3);
   const title = quorum
     ? nPicks === 1
       ? L('Quorum: 1 pick.', 'Kvorum: 1 izbira.')
       : L(`Quorum: ${nPicks} picks.`, `Kvorum: ${nPicks} ${nPicks === 2 ? 'izbiri' : nPicks < 5 ? 'izbire' : 'izbir'}.`)
-    : L('No quorum today.', 'Danes brez kvoruma.');
+    : k.quorumMet
+      ? L('No new pick today.', 'Danes brez nove izbire.')
+      : L('No quorum today.', 'Danes brez kvoruma.');
   const approver = meta?.persons?.find((p) => p.id === iss.approver);
-  // what stopped the candidates on a day without a pick, from the counts the issue publishes
-  const stoppedBy = (loc) => {
-    const v = iss.vetoes ?? {};
-    const en = [v.rule || v.llm ? 'vetoes' : null, v.human ? 'the approver' : null, v.capped ? 'the caps' : null].filter(Boolean);
-    const sl = [v.rule || v.llm ? 'veti' : null, v.human ? 'odobriteljica' : null, v.capped ? 'omejitve' : null].filter(Boolean);
-    const list = loc === 'sl' ? sl : en;
-    if (!list.length) return loc === 'sl' ? 'odprte pozicije in premori po zaprtju' : 'open positions and cooldowns';
-    const and = loc === 'sl' ? ' in ' : ' and ';
-    return list.length === 1 ? list[0] : `${list.slice(0, -1).join(', ')}${and}${list.at(-1)}`;
+  // What held back the stocks that met the rule, in the order the rule applies, from the published counts.
+  const heldBack = (loc, first = null) => {
+    const sl = loc === 'sl';
+    const parts = [
+      first,
+      k.held ? (sl ? `${k.held} ${k.held === 1 ? 'je bila že odprta izbira' : 'jih je bilo že odprtih izbir'}${k.renews ? ` (${k.renews} ${k.renews === 1 ? 'podaljšana' : 'podaljšanih'} danes)` : ''}` : `${k.held} ${k.held === 1 ? 'was an open pick already' : 'were open picks already'}${k.renews ? ` (${k.renews} renewed today)` : ''}`) : null,
+      k.capped ? (sl ? `${k.capped} ${k.capped === 1 ? 'je ustavila omejitev ali premor po zaprtju' : 'so ustavile omejitve ali premori po zaprtju'}` : `${k.capped} ${k.capped === 1 ? 'was' : 'were'} capped or cooling down after a recent close`) : null,
+      k.human ? (sl ? `${k.human} ${k.human === 1 ? 'je odstranila odobriteljica' : 'jih je odstranila odobriteljica'}` : `${k.human} removed by the approver`) : null,
+      k.unissued ? (sl ? `${k.unissued} brez odobritelja ni bilo izdanih` : `${k.unissued} not issued without an approver`) : null,
+    ].filter(Boolean);
+    const and = sl ? ' in ' : ' and ';
+    return parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')}${and}${parts.at(-1)}`;
   };
+  const newWords = (loc) => (k.buys ? (loc === 'sl' ? `${k.buys} ${k.buys === 1 ? 'je nova izbira' : 'je novih izbir'}` : `${k.buys} new ${k.buys === 1 ? 'pick' : 'picks'}`) : null);
   let secN = 0;
   const idx = () => String(++secN).padStart(2, '0');
 
@@ -62,7 +72,7 @@ export async function render(ctx) {
   // ---- masthead: the issue as published ------------------------------------------------------------------
   const head = h(
     'header',
-    { class: 'grid page-masthead is-head' },
+    { class: 'grid masthead page-masthead is-head' },
     h('p', { class: 'label c-head' }, L(`Issue #${iss.issueNo} · ${day} ${fmt.date(date)} · 14:00 ${iss.tz}`, `Izdaja #${iss.issueNo} · ${day} ${fmt.date(date)} · 14:00 ${iss.tz}`)),
     h('h1', { class: 'display d1 c-head' }, title),
     h(
@@ -70,12 +80,12 @@ export async function render(ctx) {
       { class: 'lede c-body masthead__lede' },
       quorum
         ? L(
-            `${fmt.int(iss.nScored)} stocks scored. ${nPicks === 1 ? 'One stood' : `${nPicks} stood`} on at least three of the four columns${iss.closest === 4 ? ', the strongest on all four' : ''}, and no veto fired. ${iss.closes?.length ? `${iss.closes.length === 1 ? 'One pick' : `${iss.closes.length} picks`} also closed at the US open.` : ''}`,
-            `${fmt.int(iss.nScored)} ocenjenih delnic. ${nPicks === 1 ? 'Ena je stala' : `${nPicks} jih je stalo`} na vsaj treh od štirih stebrov${iss.closest === 4 ? ', najmočnejša na vseh štirih' : ''}, in noben veto se ni sprožil. ${iss.closes?.length ? `${iss.closes.length === 1 ? 'Ena izbira se je' : `${iss.closes.length} izbir se je`} tudi zaprla ob odprtju ameriškega trga.` : ''}`,
+            `${fmt.int(iss.nScored)} stocks scored. ${fmt.int(k.reached)} met the rule with no veto${iss.closest === 4 ? ' (the strongest on all four columns)' : ''}: ${heldBack('en', newWords('en'))}.${iss.closes?.length ? ` ${iss.closes.length === 1 ? 'One pick' : `${iss.closes.length} picks`} also closed at the US open.` : ''}`,
+            `${fmt.int(iss.nScored)} ocenjenih delnic. ${fmt.int(k.reached)} jih je izpolnilo pravilo brez veta${iss.closest === 4 ? ' (najmočnejša na vseh štirih stebrih)' : ''}: ${heldBack('sl', newWords('sl'))}.${iss.closes?.length ? ` ${iss.closes.length === 1 ? 'Ena izbira se je' : `${iss.closes.length} izbir se je`} tudi zaprla ob odprtju ameriškega trga.` : ''}`,
           )
         : L(
-            `${fmt.int(iss.nScored)} stocks scored. The closest agreement was ${iss.closest}/4${iss.closest >= 3 ? `, but ${stoppedBy('en')} stopped every candidate` : ''}. The issue was published anyway, as every trading day.${iss.closes?.length ? ` ${iss.closes.length === 1 ? 'One pick' : `${iss.closes.length} picks`} closed at the US open, so an exit was texted.` : ' No text went out.'}`,
-            `${fmt.int(iss.nScored)} ocenjenih delnic. Največje soglasje je bilo ${iss.closest}/4${iss.closest >= 3 ? `, a ${stoppedBy('sl')} so ustavili vse kandidatke` : ''}. Izdaja je vseeno izšla, kot vsak dan trgovanja.${iss.closes?.length ? ` ${iss.closes.length === 1 ? 'Ena izbira se je' : `${iss.closes.length} izbir se je`} zaprla ob odprtju ameriškega trga, zato je bil poslan izstop.` : ' SMS ni bil poslan.'}`,
+            `${fmt.int(iss.nScored)} stocks scored. ${k.quorumMet ? `${fmt.int(k.reached)} met the rule (${k.required} of 4 families ${R.inTop}, no veto), but none could be issued: ${heldBack('en') || 'none was eligible'}.` : `The closest agreement was ${iss.closest}/4, short of the ${k.required} the rule needs.`} The issue was published anyway, as every trading day.${iss.closes?.length ? ` ${iss.closes.length === 1 ? 'One pick' : `${iss.closes.length} picks`} closed at the US open, ${pre ? 'so the issue carries an exit text (before launch nothing is sent).' : 'so an exit was texted.'}` : pre ? ' No text was due.' : ' No text went out.'}`,
+            `${fmt.int(iss.nScored)} ocenjenih delnic. ${k.quorumMet ? `${fmt.int(k.reached)} jih je izpolnilo pravilo (${k.required} od 4 družin ${R.inTop}, brez veta), a nobene ni bilo mogoče izdati: ${heldBack('sl') || 'nobena ni bila primerna'}.` : `Največje soglasje je bilo ${iss.closest}/4, manj od ${k.required}, ki jih zahteva pravilo.`} Izdaja je vseeno izšla, kot vsak dan trgovanja.${iss.closes?.length ? ` ${iss.closes.length === 1 ? 'Ena izbira se je' : `${iss.closes.length} izbir se je`} zaprla ob odprtju ameriškega trga, ${pre ? 'zato izdaja vsebuje SMS o izstopu (pred zagonom se nič ne pošlje).' : 'zato je bil poslan izstop.'}` : pre ? ' SMS ni bil predviden.' : ' SMS ni bil poslan.'}`,
           ),
     ),
     h(
@@ -98,11 +108,12 @@ export async function render(ctx) {
   const funnel = [
     [L('Stocks scored', 'Ocenjenih delnic'), fmt.int(iss.nScored)],
     [L('Closest agreement', 'Največje soglasje'), `${iss.closest}/4`],
-    [L(`Candidates past the vetoes`, 'Kandidatk po vetih'), fmt.int(iss.reached ?? 0)],
+    [L('Met the rule, no veto', 'Izpolnilo pravilo, brez veta'), fmt.int(k.reached)],
     [L('Rule vetoes', 'Veti pravil'), fmt.int(v.rule ?? 0)],
     [L('News vetoes', 'Veti novic'), fmt.int(v.llm ?? 0)],
+    [L('Already open picks', 'Že odprte izbire'), fmt.int(k.held)],
+    [L('Capped or cooling down', 'Omejenih ali v premoru'), fmt.int(v.capped ?? 0)],
     [L('Removed by the approver', 'Odstranila odobriteljica'), fmt.int(v.human ?? 0)],
-    [L('Capped', 'Omejenih'), fmt.int(v.capped ?? 0)],
     [L('Issued', 'Izdanih'), fmt.int(nPicks)],
   ];
   // The columns are the families on the four rules. On a quorum day they show the first pick's real
@@ -135,12 +146,14 @@ export async function render(ctx) {
           `#${lead.no} ${lead.ticker}: ${lead.agreeing.join(', ')} so jo uvrstile ${R.inTop}${lead.agreeing.length < 4 ? `; ${'ABCD'.split('').filter((f) => !agreeSet.has(f)).map((f) => `${f} na ${fmt.rank(lead.families?.[f]?.pct)}`).join(', ')}` : ''}. Preklada leži na stebrih, ki so se uvrstili.`,
         )
       : L(`At least three families placed a stock ${R.inTop}. Which ones stays sealed until the pick closes.`, `Vsaj tri družine so delnico uvrstile ${R.inTop}. Katere, ostane zapečateno do zaprtja izbire.`)
-    : L(`The strongest stock reached ${iss.closest} of the four columns. No lintel, no text. Which families came close is not published for non-picks.`, `Najmočnejša delnica je dosegla ${iss.closest} od štirih stebrov. Brez preklade ni SMS. Katere družine so bile blizu, za neizbrane delnice ne objavljamo.`);
+    : k.quorumMet
+      ? L(`The strongest stock stood on ${iss.closest} of the four columns, but nothing new could be issued, so no new lintel. Which families agreed is not published for stocks that were not issued.`, `Najmočnejša delnica je stala na ${iss.closest} od štirih stebrov, a nič novega ni bilo mogoče izdati, zato ni nove preklade. Katere družine so se strinjale, za neizdane delnice ne objavljamo.`)
+      : L(`The strongest stock reached ${iss.closest} of the four columns. No lintel, no text. Which families came close is not published for non-picks.`, `Najmočnejša delnica je dosegla ${iss.closest} od štirih stebrov. Brez preklade ni SMS. Katere družine so bile blizu, za neizbrane delnice ne objavljamo.`);
   if (R.topPct) cols.style.setProperty('--thr', String(R.topPct));
   const daySec = h(
     'section',
     { class: 'section grid rec-sec is-day', 'aria-labelledby': 'is-day-h' },
-    ...sectionHead({ index: idx(), kicker: L('The day', 'Dan'), title: quorum ? L('The columns met.', 'Stebri so se srečali.') : L(`Closest: ${iss.closest}/4.`, `Največ: ${iss.closest}/4.`), id: 'is-day-h', size: 'd3' }),
+    ...sectionHead({ index: idx(), kicker: L('The day', 'Dan'), title: quorum ? L('The columns met.', 'Stebri so se srečali.') : k.quorumMet ? L('Met, but not issued.', 'Izpolnjeno, a ne izdano.') : L(`Closest: ${iss.closest}/4.`, `Največ: ${iss.closest}/4.`), id: 'is-day-h', size: 'd3' }),
     h(
       'figure',
       { class: 'c-full flush is-fig' },
@@ -204,7 +217,22 @@ export async function render(ctx) {
   const textSec = h(
     'section',
     { class: 'section grid rec-sec is-texts', 'aria-labelledby': 'is-tx-h' },
-    ...sectionHead({ index: idx(), kicker: L('The texts', 'Sporočila SMS'), title: texts.length ? L(`${texts.length === 1 ? 'One text' : `${texts.length} texts`} at 14:00.`, `${texts.length === 1 ? 'En SMS' : `${texts.length} SMS`} ob 14:00.`) : L('Nobody’s phone moved.', 'Noben telefon se ni zganil.'), id: 'is-tx-h', size: 'd3' }),
+    ...sectionHead({
+      index: idx(),
+      kicker: pre ? L('The texts · pre-launch, not sent', 'Sporočila SMS · pred zagonom, niso poslana') : L('The texts', 'Sporočila SMS'),
+      title: texts.length
+        ? pre
+          ? L(`${texts.length === 1 ? 'One text' : `${texts.length} texts`} due at 14:00.`, `${texts.length === 1 ? 'En SMS' : `${texts.length} SMS`} za 14:00.`)
+          : L(`${texts.length === 1 ? 'One text' : `${texts.length} texts`} at 14:00.`, `${texts.length === 1 ? 'En SMS' : `${texts.length} SMS`} ob 14:00.`)
+        : pre
+          ? L('No text due.', 'Brez SMS.')
+          : L('Nobody’s phone moved.', 'Noben telefon se ni zganil.'),
+      id: 'is-tx-h',
+      size: 'd3',
+    }),
+    texts.length && pre
+      ? h('p', { class: 'c-body rec-note' }, L('The texts as rendered for this record, in both languages. SMS alerts have not launched, so there are no subscribers and nothing was sent.', 'Sporočila, kot so pripravljena za ta zapis, v obeh jezikih. Obvestila SMS še niso zagnana, zato ni naročnikov in nič ni bilo poslano.'))
+      : null,
     texts.length
       ? h(
           'div',
@@ -218,7 +246,7 @@ export async function render(ctx) {
               ['en', 'sl'].map((loc) => {
                 const text = tx.text?.[loc];
                 if (!text) return null;
-                if (sealed) return h('p', { class: 'is-sms is-sms--sealed small', lang: loc }, h('span', { class: 'label' }, loc.toUpperCase()), L(' Sent to subscribers at 14:00; the text names the ticker, so it stays sealed until the pick closes.', ' Poslano naročnikom ob 14:00; sporočilo vsebuje oznako, zato ostane zapečateno do zaprtja.'));
+                if (sealed) return h('p', { class: 'is-sms is-sms--sealed small', lang: loc }, h('span', { class: 'label' }, loc.toUpperCase()), pre ? L(' Written at 14:00 for subscribers (none before launch); the text names the ticker, so it stays sealed until the pick closes.', ' Pripravljeno ob 14:00 za naročnike (pred zagonom jih ni); sporočilo vsebuje oznako, zato ostane zapečateno do zaprtja.') : L(' Sent to subscribers at 14:00; the text names the ticker, so it stays sealed until the pick closes.', ' Poslano naročnikom ob 14:00; sporočilo vsebuje oznako, zato ostane zapečateno do zaprtja.'));
                 const a = analyze(text);
                 return h(
                   'figure',

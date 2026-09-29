@@ -111,12 +111,23 @@ export function sectionHead({ index, kicker, title, lede, level = 2, size = 'd2'
 }
 
 // ---- headline statistics in the brief's fixed order (§2.8) --------------------------------------
-export function statStrip(summary, { t = tGlobal, fmt = formatters(), locale } = {}) {
+// Every recommendation (BUY and RENEW records) and its split, from summary.json (nRecords, nPicks = BUY,
+// nRenews) or, for an older export where nPicks counted every record, from meta.counts.
+export function recordCounts(summary, counts = null) {
+  if (Number.isFinite(summary?.nRecords)) return { records: summary.nRecords, picks: summary.nPicks, renews: summary.nRenews ?? summary.nRecords - summary.nPicks };
+  if (counts && Number.isFinite(counts.picks) && Number.isFinite(counts.renews)) return { records: counts.picks + counts.renews, picks: counts.picks, renews: counts.renews };
+  return { records: summary?.nPicks, picks: null, renews: null };
+}
+
+// The first figure says what it counts: every recommendation, split into new picks and renewals.
+export function statStrip(summary, { t = tGlobal, fmt = formatters(), locale, counts = null } = {}) {
   const L = (en, sl) => (locale === 'sl' ? sl : en);
   const ci = summary.hitCI ? `${fmt.pct0(summary.hitCI[0])}–${fmt.pct0(summary.hitCI[1])}` : '';
   const worst = summary.worstPick;
+  const { records, picks, renews } = recordCounts(summary, counts);
+  const split = Number.isFinite(picks) && Number.isFinite(renews) ? L(`${fmt.int(picks)} new picks, ${fmt.int(renews)} renewals · `, `${fmt.int(picks)} novih izbir, ${fmt.int(renews)} podaljšanj · `) : '';
   const items = [
-    [L('Picks since', 'Izbire od'), `${fmt.int(summary.nPicks)}`, `${fmt.date(summary.liveSince)} · ${L(`${summary.nClosed} closed`, `${summary.nClosed} zaprtih`)}`],
+    [L('Recommendations since', 'Priporočila od'), `${fmt.int(records)}`, `${fmt.date(summary.liveSince)} · ${split}${L(`${summary.nClosed} closed`, `${summary.nClosed} zaprtih`)}`],
     [L('Hit rate vs benchmark', 'Delež uspešnih proti merilu'), fmt.pct0(summary.hitRate), `${t('common.ci')} ${ci}`],
     [L('Median excess return', 'Mediana presežnega donosa'), signed(summary.medianExcess, { fmt }), L('per pick, 21 trading days', 'na izbiro, 21 trgovalnih dni')],
     [L('Mean excess return', 'Povprečni presežni donos'), signed(summary.meanExcess, { fmt }), L('per pick, net of costs', 'na izbiro, po stroških')],
@@ -189,4 +200,16 @@ export function familyName(id, meta, locale) {
 export function familyDef(id, meta, locale) {
   const f = meta?.families?.find((x) => x.id === id);
   return f ? pickL(f.def, locale) : tGlobal(`familyDef.${id}`, null, locale);
+}
+
+// ---- contact addresses ---------------------------------------------------------------------------------
+// One set of addresses for every page (OPERATIONS.md SUPPORT_EMAIL). mailto: is unreliable in the
+// Artifact viewer (ARCHITECTURE.md §5), so an address is selectable text with a Copy button; the click is
+// handled once for the whole app (app.js, [data-copy]).
+export const CONTACT = { support: 'support@qrm.si', privacy: 'privacy@qrm.si', press: 'press@qrm.si', hello: 'hello@qrm.si' };
+
+export function contactHtml(addr, locale = 'en') {
+  const label = locale === 'sl' ? 'Kopiraj' : 'Copy';
+  const aria = locale === 'sl' ? `Kopiraj naslov ${addr}` : `Copy the address ${addr}`;
+  return `<span class="contact"><span class="mono contact__addr">${addr}</span> <button type="button" class="contact__copy" data-copy="${addr}" aria-label="${aria}">${label}</button></span>`;
 }

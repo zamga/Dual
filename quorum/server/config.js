@@ -36,6 +36,18 @@ function int(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function hosts(value, fallback) {
+  const raw = value == null || value === '' ? fallback : value;
+  return String(raw)
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+// The Web Push services browsers hand out endpoints for (Chrome, Edge, Opera and Samsung Internet
+// use FCM; Firefox Mozilla autopush; Safari Apple; legacy Edge WNS). "*." matches any subdomain.
+export const DEFAULT_PUSH_HOSTS = 'fcm.googleapis.com,android.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,*.push.apple.com,*.notify.windows.com';
+
 // loadConfig(env = process.env, overrides = {}) -> frozen config object.
 // `overrides` is merged last (shallow per section) and is how tests and scripts configure the app.
 export function loadConfig(env = process.env, overrides = {}) {
@@ -60,6 +72,8 @@ export function loadConfig(env = process.env, overrides = {}) {
     linkBase: (env.LINK_BASE || 'https://qrm.si').replace(/\/+$/, ''),
     webRoot: env.WEB_ROOT || null, // default resolved in index.js (../web)
     smsTransport: env.SMS_TRANSPORT === 'twilio' ? 'twilio' : 'console',
+    // Production refuses to start with the console SMS twin unless this is set (a staging host).
+    allowConsoleSms: bool(env.ALLOW_CONSOLE_SMS),
     emailTransport: env.EMAIL_TRANSPORT === 'postmark' ? 'postmark' : 'console',
     postmark: {
       serverToken: env.POSTMARK_SERVER_TOKEN || '',
@@ -72,6 +86,14 @@ export function loadConfig(env = process.env, overrides = {}) {
       publicKey: env.VAPID_PUBLIC_KEY || '',
       privateKey: env.VAPID_PRIVATE_KEY || '',
       subject: env.VAPID_SUBJECT || 'mailto:support@qrm.si',
+    },
+    push: {
+      // Only endpoints on these push services are accepted (and they must resolve to public
+      // addresses when a message is sent): a subscription can never point the server at itself or
+      // at an internal host.
+      hosts: hosts(env.PUSH_HOSTS, DEFAULT_PUSH_HOSTS),
+      timeoutMs: int(env.PUSH_TIMEOUT_MS, 10_000), // per push request, headers and body
+      maxPerUser: int(env.PUSH_MAX_PER_USER, 5), // live subscriptions per user; the oldest is revoked first
     },
     emailFrom: env.EMAIL_FROM || 'Quorum <hello@qrm.si>',
     supportEmail: env.SUPPORT_EMAIL || 'support@qrm.si',
@@ -115,7 +137,9 @@ export function loadConfig(env = process.env, overrides = {}) {
       spikeCode: '30007',
       spikeWindowMs: 10 * 60_000,
       spikeRatio: num(env.SPIKE_30007_RATIO, 0.02), // pause SMS when 30007s exceed this share of sends
-      spikeMinErrors: int(env.SPIKE_30007_MIN, 1),
+      // ... and at least this many distinct texts sent in the window came back 30007 (one filtered
+      // text among a handful is not a spike: it warns, it does not pause the channel)
+      spikeMinErrors: int(env.SPIKE_30007_MIN, 5),
     },
     // Daily anchoring: OpenTimestamps calendars (OTS_CALENDARS=off to disable) and an RFC 3161 TSA.
     anchor: {
@@ -145,7 +169,19 @@ export function loadConfig(env = process.env, overrides = {}) {
     // How often the server retries queued messages that are due (0 = off; tests call dispatch).
     outboxIntervalMs: int(env.OUTBOX_INTERVAL_MS, 30_000),
     bodyLimits: { json: 16 * 1024, stripe: 512 * 1024, twilio: 64 * 1024, form: 8 * 1024 },
-    // Per-IP token buckets: capacity requests, refilled evenly over windowMs.
+    // A row still 'sending' this long after it was claimed was interrupted (a crash or restart
+    // mid-send): push and email are queued again, a text is marked failed (it may have gone out).
+    stuckSendingMs: 5 * 60_000,
+    // Per-client token buckets: capacity requests, refilled evenly over windowMs. A client is an IPv4
+    // address or an IPv6 /64 (the prefix below for the costly routes: one host often holds a /56).
+    rateLimitV6Prefix: { default: 64, authMagic: 56, phoneStart: 56, optout: 56 },
+    // Global budgets (all clients together) for what costs money or reputation. Past a budget the
+    // route refuses (or, for unknown opt-out links, only pages) and on-call is paged.
+    globalLimits: {
+      authEmails: { capacity: int(env.AUTH_EMAILS_PER_MINUTE, 120), windowMs: 60_000 },
+      verifyStarts: { capacity: int(env.VERIFY_STARTS_PER_MINUTE, 30), windowMs: 60_000 },
+      unknownOptOutTokens: { capacity: 200, windowMs: 10 * 60_000 },
+    },
     rateLimits: {
       api: { capacity: 300, windowMs: 60_000 },
       data: { capacity: 240, windowMs: 60_000 },
@@ -196,5 +232,6 @@ export const ENV_VARS = [
   'SMS_COUNTRIES', 'SCHEDULER', 'IP_COUNTRY_HEADER', 'GEO_REQUIRE_IP', 'TRUST_PROXY', 'OUTBOX_INTERVAL_MS', 'RESEARCH_TIER',
   'POSTMARK_SERVER_TOKEN', 'POSTMARK_MESSAGE_STREAM', 'POSTMARK_BASE_URL', 'PUSH_TRANSPORT', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT',
   'SMS_MPS', 'PUSH_CONCURRENCY', 'EMAIL_CONCURRENCY', 'INVALID_NUMBER_AFTER', 'SPIKE_30007_RATIO', 'SPIKE_30007_MIN',
+  'ALLOW_CONSOLE_SMS', 'PUSH_HOSTS', 'PUSH_TIMEOUT_MS', 'PUSH_MAX_PER_USER', 'AUTH_EMAILS_PER_MINUTE', 'VERIFY_STARTS_PER_MINUTE',
   'OTS_CALENDARS', 'RFC3161_URL', 'PAGER_WEBHOOK_URL', 'ENGINE_DAY_DIR',
 ];

@@ -27,7 +27,7 @@ export async function render(ctx) {
 
   const head = h(
     'header',
-    { class: 'grid page-masthead st-head' },
+    { class: 'grid masthead page-masthead st-head' },
     h('p', { class: 'label c-head' }, info ? `${L('Stock', 'Delnica')} · ${venueL(info.venue, locale)} · ${locale === 'sl' ? info.sectorSl ?? info.sector : info.sector}` : L('Stock', 'Delnica')),
     h('h1', { class: 'display d1 c-head st-h1' }, ticker, name ? h('span', { class: 'visually-hidden' }, `, ${name}`) : null),
     h(

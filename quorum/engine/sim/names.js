@@ -1,6 +1,6 @@
 // Fictional company names, tickers and identifiers. Names are built from invented or landscape
 // words plus a sector word, so they read like listed companies without being any real one.
-import { REAL_TICKER_SET, REAL_NAME_WORDS } from './blocklist.js';
+import { isRealTicker, REAL_NAME_WORDS } from './blocklist.js';
 
 const HEADS = ['Kar', 'Tal', 'Bren', 'Osk', 'Veld', 'Quil', 'Nor', 'Tes', 'Hal', 'Mer', 'Cal', 'Dra', 'Fen', 'Gal',
   'Ist', 'Jor', 'Lum', 'Mar', 'Ost', 'Pel', 'Ras', 'Sel', 'Tor', 'Ul', 'Var', 'Wen', 'Yar', 'Zel', 'Ard', 'Bel',
@@ -79,15 +79,22 @@ function tickerCandidates({ stems, word }) {
   const out = [];
   if (b) out.push(a[0] + b[0] + w[0], a.slice(0, 2) + b[0] + w[0], a[0] + b.slice(0, 2) + w[0]);
   out.push(a.slice(0, 4), skeleton.slice(0, 4), a.slice(0, 3), a.slice(0, 3) + w[0], skeleton.slice(0, 3) + w[0]);
-  out.push(a.slice(0, 2) + w.slice(0, 2), a[0] + w.slice(0, 3), a.slice(0, 5), skeleton.slice(0, 5), a.slice(0, 2));
-  return out.filter((t) => t.length >= 2 && t.length <= 5 && /^[A-Z]+$/.test(t));
+  out.push(a.slice(0, 2) + w.slice(0, 2), a[0] + w.slice(0, 3), a.slice(0, 2));
+  // 2-4 letters: five-letter symbols read as Nasdaq suffix codes (…F foreign, …Y ADR, …X mutual fund)
+  return out.filter((t) => t.length >= 2 && t.length <= 4 && /^[A-Z]+$/.test(t));
 }
 
+/** A ticker a simulated company may not use: any real US symbol (engine/sim/blocklist.js). */
 export function isBlockedTicker(t) {
-  return REAL_TICKER_SET.has(t);
+  return isRealTicker(t);
 }
 
-/** Derive a unique ticker (2-5 letters) not on the real-ticker blocklist. */
+/**
+ * Derive a unique 2-4 letter ticker that is not a real US symbol. The name-derived candidates come
+ * first; when every one is taken or real, letters of the name are drawn with `rng`, which should be a
+ * stream of its own (engine/sim/market.js passes the 'tickers' stream) so that the screen can never
+ * shift the draws of anything else in the simulation.
+ */
 export function makeTicker(rng, nameInfo, usedTickers) {
   for (const t of tickerCandidates(nameInfo)) {
     if (!usedTickers.has(t) && !isBlockedTicker(t)) {

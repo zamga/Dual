@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createECDH, createDecipheriv, createHmac } from 'node:crypto';
-import { encryptPayload, deriveKeys, b64u, vapidHeaders, verifyVapidJwt, generateVapidKeys, createWebPush, vapidKeyObjects } from '../../server/vendors/push.js';
+import { encryptPayload, deriveKeys, b64u, vapidHeaders, verifyVapidJwt, generateVapidKeys, createWebPush, vapidKeyObjects, isPublicAddress } from '../../server/vendors/push.js';
 import { createPostmarkEmail, EmailError } from '../../server/vendors/email.js';
 
 // RFC 8291 appendix A: every intermediate value and the final message.
@@ -86,7 +86,8 @@ test('web push transport: POST with TTL, aes128gcm and VAPID; 201 ok, 404/410 go
     seen.push({ url, init });
     return new Response(status === 201 ? '' : 'nope', { status, headers: status === 201 ? { location: 'https://push.example.net/m/1' } : {} });
   };
-  const push = createWebPush({ vapid: { publicKey: keys.publicKey, privateKey: keys.privateKey, subject: 'mailto:ops@qrm.si' }, fetch, clock: () => new Date('2025-11-04T13:00:00Z') });
+  const resolveHost = async () => ['142.250.180.10']; // a public address (no DNS in tests)
+  const push = createWebPush({ vapid: { publicKey: keys.publicKey, privateKey: keys.privateKey, subject: 'mailto:ops@qrm.si' }, fetch, resolveHost, clock: () => new Date('2025-11-04T13:00:00Z') });
   const r = await push.send(sub, { title: 'Quorum #0011 BUY KRST' }, { ttl: 3600 });
   assert.deepEqual(r, { ok: true, status: 201, gone: false, id: 'https://push.example.net/m/1' });
   const h = seen[0].init.headers;
@@ -99,6 +100,37 @@ test('web push transport: POST with TTL, aes128gcm and VAPID; 201 ok, 404/410 go
   status = 503;
   await assert.rejects(push.send(sub, { title: 'x' }), (e) => e.status === 503);
   assert.throws(() => createWebPush({ vapid: { publicKey: generateVapidKeys().publicKey, privateKey: keys.privateKey, subject: 'mailto:a@b.si' }, fetch }), /does not belong/);
+  assert.ok(seen.every((x) => x.init.signal instanceof AbortSignal && x.init.redirect === 'error'), 'every request has a deadline and follows no redirect');
+});
+
+test('web push transport: a host that resolves to a private address is never called; a tarpit times out', async () => {
+  const keys = generateVapidKeys();
+  const ua = createECDH('prime256v1');
+  ua.generateKeys();
+  const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys: { p256dh: b64u.enc(ua.getPublicKey()), auth: b64u.enc(Buffer.alloc(16, 1)) } };
+  const vapid = { publicKey: keys.publicKey, privateKey: keys.privateKey, subject: 'mailto:ops@qrm.si' };
+  for (const addrs of [['10.0.0.5'], ['142.250.180.10', '127.0.0.1'], ['169.254.169.254'], ['::1'], ['fd00::1'], []]) {
+    let called = 0;
+    const push = createWebPush({ vapid, fetch: async () => (called++, new Response('', { status: 201 })), resolveHost: async () => addrs });
+    await assert.rejects(push.send(sub, { title: 'x' }), (e) => e.permanent === true && e.status === 403, addrs.join(','));
+    assert.equal(called, 0, addrs.join(','));
+  }
+  assert.deepEqual(['8.8.8.8', '2a00:1450:4001::1', '10.1.1.1', '192.168.0.1', '::ffff:127.0.0.1', '100.64.0.1'].map(isPublicAddress), [true, true, false, false, false, false]);
+  // a push service that never answers: the request is aborted at the deadline
+  const tarpit = createWebPush({
+    vapid,
+    timeoutMs: 50,
+    resolveHost: async () => ['142.250.180.10'],
+    fetch: (url, init) => new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason))),
+  });
+  const t0 = Date.now();
+  const keepAlive = setInterval(() => {}, 1000); // AbortSignal.timeout's timer does not hold the event loop open
+  try {
+    await assert.rejects(tarpit.send(sub, { title: 'x' }), (e) => e.name === 'TimeoutError');
+  } finally {
+    clearInterval(keepAlive);
+  }
+  assert.ok(Date.now() - t0 < 2000);
 });
 
 test('email transport: Postmark-style REST through an injectable fetch', async () => {

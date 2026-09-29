@@ -154,6 +154,51 @@ test('HTML console: sign in with the token (Strict cookie), see candidates, veto
   }
 });
 
+test('news review: every item in full beside the scan in the API and the page; the review is a named, logged action', async () => {
+  const t = await pipelineApp({
+    config: { explainerModel: '' }, // the explainer is off: nothing with news is cleared by a scan
+    mutate: (d) => {
+      d.news.LUMX = [{ id: 'l1', at: '2025-11-02T10:00:00Z', source: 'Wire <b>', headline: 'Auditor resigns; regulator opens investigation <script>x</script>', summary: 'Details follow (fictional).' }];
+    },
+  });
+  try {
+    await ready(t);
+    const c = t.client();
+    const list = await c.get('/api/admin/candidates?person=p1', { headers: bearer });
+    const lumx = list.body.candidates.find((x) => x.ticker === 'LUMX');
+    assert.deepEqual([lumx.vetoScan, lumx.needsNewsReview, lumx.newsItems], ['unavailable', true, 1]);
+    assert.deepEqual(lumx.news, [{ id: 'l1', at: '2025-11-02T10:00:00Z', source: 'Wire <b>', headline: 'Auditor resigns; regulator opens investigation <script>x</script>', summary: 'Details follow (fictional).' }]);
+    assert.match(lumx.scan.reason, /explainer off/);
+    assert.ok(lumx.scan.redFlags[0].terms.includes('auditor'));
+    // the page: the items are shown (escaped) with the red flags and the review form
+    await c.request('POST', '/admin/login', { form: { token: ADMIN } });
+    const page = await c.get('/admin?person=p1');
+    assert.match(page.text, /Auditor resigns; regulator opens investigation &lt;script&gt;x&lt;\/script&gt;/);
+    assert.ok(!page.text.includes('<script>x'), 'third-party text is escaped');
+    assert.match(page.text, /Wire &lt;b&gt;/);
+    assert.match(page.text, /red flag: auditor/);
+    assert.match(page.text, /News review needed/);
+    assert.match(page.text, /Record news review/);
+    const noBox = await c.request('POST', '/admin/news-review', { form: { date: t.input.date, personId: 'p1', candidateId: String(lumx.id) } });
+    assert.match(decodeURIComponent(noBox.headers.get('location')), /e=Tick the box/);
+    const ok = await c.request('POST', '/admin/news-review', { form: { date: t.input.date, personId: 'p1', candidateId: String(lumx.id), confirm: '1', note: 'Read it: an old story.' } });
+    assert.match(decodeURIComponent(ok.headers.get('location')), /m=News review recorded/);
+    const after = (await c.get('/api/admin/candidates', { headers: bearer })).body.candidates.find((x) => x.id === lumx.id);
+    assert.deepEqual([after.vetoScan, after.needsNewsReview, after.newsReview.by, after.newsReview.note], ['reviewed', false, 'p1', 'Read it: an old story.']);
+    // the JSON API does the same, once
+    const krst = list.body.candidates.find((x) => x.ticker === 'KRST');
+    assert.equal((await c.post('/api/admin/news-review', { candidateId: krst.id, personId: 'p1' }, { headers: bearer })).status, 200);
+    const again = await c.post('/api/admin/news-review', { candidateId: krst.id, personId: 'p1' }, { headers: bearer });
+    assert.deepEqual([again.status, again.body.error], [409, 'review_not_needed']);
+    assert.deepEqual(
+      t.db.all("SELECT actor, object_id FROM access_log WHERE action = 'news_reviewed' ORDER BY id").map((r) => [r.actor, r.object_id]),
+      [['person:p1', String(lumx.id)], ['person:p1', String(krst.id)]],
+    );
+  } finally {
+    await t.close();
+  }
+});
+
 test('SMS pause and resume from the console API; GET /api/status shows counts only', async () => {
   const t = await pipelineApp();
   try {

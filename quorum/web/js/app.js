@@ -3,14 +3,16 @@
 //   export async function render(ctx) -> { title, node, cleanup?, top?, afterMount? }
 import { matchRoute, isRouteHash, routeOfHref, href } from './router.js';
 import { setLocale, t, tp, formatters, LOCALES } from './i18n.js';
-import { h, announce, focusEl, store, prefersReducedMotion, qs } from './dom.js';
+import { h, announce, focusEl, store, prefersReducedMotion, qs, copyText } from './dom.js';
 import { createClock } from './clock.js';
 import { createShell } from './shell.js';
+import { launchInfo } from './launch.js';
 
 const root = document.documentElement;
 const view = qs('#view');
 const flags = Object.fromEntries(new URLSearchParams(location.search));
 const TIERS = ['free', 'signal', 'research'];
+const NOOP = () => {};
 
 if (flags.motion === 'reduce') root.dataset.motion = 'reduce';
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
@@ -46,16 +48,30 @@ function initialLocale() {
   return (navigator.language || 'en').toLowerCase().startsWith('sl') ? 'sl' : 'en';
 }
 
+const MODE = qs('meta[name="quorum-mode"]')?.content === 'live' ? 'live' : 'demo';
+
+// Demo: the "view as" tier (flag, saved choice, else Signal). Live: never the demo switch; the tier comes
+// from the viewer's entitlements (GET /api/me) and is 'free' until that answers, so the pages never treat
+// the server's sealed (redacted) picks as revealed.
 function initialTier() {
+  if (MODE === 'live') return 'free';
   if (TIERS.includes(flags.tier)) return flags.tier;
   const saved = store('quorum.tier');
   return TIERS.includes(saved) ? saved : 'signal';
 }
 
+// The same mapping as _member.js tierOf(): research_data -> research, picks -> signal, else free.
+export function tierFromMe(me) {
+  if (me?.entitlements?.research_data?.active) return 'research';
+  if (me?.entitlements?.picks?.active) return 'signal';
+  return 'free';
+}
+
 const app = {
-  mode: qs('meta[name="quorum-mode"]')?.content === 'live' ? 'live' : 'demo',
+  mode: MODE,
   locale: setLocale(initialLocale()),
   tier: initialTier(),
+  me: null,
   flags,
   clock: null,
   meta: null,
@@ -67,18 +83,66 @@ const app = {
     app.locale = setLocale(locale);
     store('quorum.locale', locale);
     root.lang = locale;
+    const back = focusMemo();
+    const kept = back !== NOOP;
     shell.renderAll();
-    renderRoute({ transition: false, keepScroll: true, keepFocus: false, force: true }).then(() => announce(t('locale.changed')));
+    back();
+    renderRoute({ transition: false, keepScroll: true, keepFocus: kept, force: true }).then(() => announce(t('locale.changed')));
   },
   setTier(tier) {
-    if (!TIERS.includes(tier) || tier === app.tier) return;
+    if (app.mode === 'live' || !TIERS.includes(tier) || tier === app.tier) return;
     app.tier = tier;
     store('quorum.tier', tier);
-    if (app.mode === 'live') loadData.clear();
+    const back = focusMemo();
     shell.renderAll();
+    back();
     renderRoute({ transition: false, keepScroll: true, keepFocus: true, force: true }).then(() => announce(t('tier.changed', { tier: t(`tier.${tier}`) })));
   },
+  // Live mode: ask the server who is viewing. A changed entitlement drops the cached data files, since
+  // picks.json and universe.json are redacted per viewer.
+  async refreshViewer() {
+    if (app.mode !== 'live') return false;
+    let me = null;
+    try {
+      const r = await fetch('/api/me', { credentials: 'same-origin', headers: { accept: 'application/json' } });
+      me = r.ok ? await r.json() : null;
+    } catch {
+      me = null;
+    }
+    const tier = tierFromMe(me);
+    const changed = tier !== app.tier || !!me?.authenticated !== !!app.me?.authenticated;
+    app.me = me;
+    app.tier = tier;
+    if (changed) {
+      loadData.clear();
+      shell.renderAll();
+    }
+    return changed;
+  },
 };
+
+// The pill saw the demo clock pin itself (the next issue slot passed with the page open): pages that
+// read ctx.now() re-render once, in place.
+app.onClockPinned = () => {
+  if (app.started) renderRoute({ transition: false, keepScroll: true, keepFocus: true, force: true });
+};
+
+// A demo-bar or locale control is rebuilt by shell.renderAll(); keyboard users keep their place on its
+// replacement (the same tier button, the select, or the locale button).
+function focusMemo() {
+  const a = document.activeElement;
+  if (!a || a === document.body) return NOOP;
+  const bar = qs('#demo-bar');
+  let sel = null;
+  if (a.matches?.('.demo-bar__select')) sel = '.demo-bar__select';
+  else if (a.dataset?.tier) sel = `.seg button[data-tier="${a.dataset.tier}"]`;
+  else if (a.matches?.('.locale-btn')) sel = a.closest('#sheet') ? '#sheet .locale-btn' : '#demo-bar .locale-btn';
+  if (!sel || !(bar.contains(a) || a.closest('#sheet'))) return NOOP;
+  return () => {
+    const next = qs(sel);
+    if (next && next.offsetParent !== null) next.focus({ preventScroll: true });
+  };
+}
 root.lang = app.locale;
 
 const shell = createShell(app);
@@ -87,7 +151,10 @@ shell.renderAll();
 // Kick off shared data early; the home page's hero data too, so its SVG paints fast.
 const metaP = loadData('meta').catch(() => null);
 const issuesP = loadData('issues').catch(() => null);
-if (matchRoute(location.hash).module === 'home') loadData('hero').catch(() => null);
+if (matchRoute(location.hash).module === 'home') {
+  loadData('hero').catch(() => null);
+  loadData('backtest').catch(() => null); // the launch status the hero's copy reads
+}
 
 Promise.all([metaP, issuesP]).then(([meta, issues]) => {
   app.meta = meta;
@@ -118,25 +185,33 @@ function makeCtx(route, signal) {
     clock: app.clock,
     now: () => (app.clock ? app.clock.now() : new Date()),
     data: loadData,
+    // The launch status (web/js/launch.js) from backtest.json: pages ask it before they say a text was
+    // sent. Unknown counts as pre-launch, so nothing claims a delivery that did not happen.
+    launch: () => loadData('backtest').then(launchInfo, () => launchInfo(null)),
+    me: app.me,
     signal,
     navigate: (hash) => {
       location.hash = hash.startsWith('#') ? hash : `#${hash}`;
     },
     announce,
-    reload: () => renderRoute({ transition: false, keepScroll: true, force: true }),
+    reload: async () => {
+      if (app.mode === 'live') await app.refreshViewer();
+      return renderRoute({ transition: false, keepScroll: true, force: true });
+    },
     href,
     reducedMotion: prefersReducedMotion(),
   };
 }
 
+// A failed page never shows the raw exception to the reader (it is in the console for us).
 function errorResult(ctx, err) {
   const isData = !!err?.file;
   const node = h(
     'section',
     { class: 'grid state' },
-    h('p', { class: 'label c-head' }, isData ? 'Data' : 'Error'),
+    h('p', { class: 'label c-head' }, isData ? ctx.t('error.data.kicker') : ctx.t('error.page.kicker')),
     h('h1', { class: 'display d2 c-head' }, isData ? ctx.t('error.data.title') : ctx.t('error.page.title')),
-    h('p', { class: 'lede c-body' }, isData ? ctx.t('error.data.body', { file: err.file }) : String(err?.message ?? err)),
+    h('p', { class: 'lede c-body' }, isData ? ctx.t('error.data.body', { file: err.file }) : ctx.t('error.page.body')),
     h('p', { class: 'c-body' }, h('button', { class: 'btn btn--ghost', type: 'button', onclick: () => ctx.reload() }, ctx.t('common.retry'))),
   );
   return { title: isData ? ctx.t('error.data.title') : ctx.t('error.page.title'), node };
@@ -253,6 +328,24 @@ async function renderRoute({ transition = true, keepScroll = false, keepFocus = 
 
 window.addEventListener('hashchange', () => renderRoute());
 
+// Copy buttons rendered from copy strings (contact addresses: ui.js contactHtml): one delegated handler.
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest?.('button[data-copy]');
+  if (!b) return;
+  const text = b.dataset.copy;
+  const ok = await copyText(text);
+  const was = b.textContent;
+  b.textContent = ok ? (app.locale === 'sl' ? 'Kopirano' : 'Copied') : was;
+  announce(ok ? (app.locale === 'sl' ? `Naslov kopiran: ${text}` : `Address copied: ${text}`) : app.locale === 'sl' ? `Izberite naslov: ${text}` : `Select the address: ${text}`);
+  if (!ok) {
+    const addr = b.parentElement?.querySelector('.contact__addr');
+    if (addr) getSelection()?.selectAllChildren(addr);
+  }
+  setTimeout(() => {
+    if (b.isConnected) b.textContent = was;
+  }, 1600);
+});
+
 // Skip link: the hash is the router's, so move focus by hand.
 qs('.skip-link')?.addEventListener('click', (e) => {
   e.preventDefault();
@@ -282,6 +375,8 @@ const fontsReady = document.fonts?.load
     ])
   : Promise.resolve();
 
-fontsReady.then(() => renderRoute({ transition: false }));
+// Live mode renders the first page only once the server has said who is viewing.
+const viewerReady = app.mode === 'live' ? app.refreshViewer().catch(() => false) : Promise.resolve();
+Promise.all([fontsReady, viewerReady]).then(() => renderRoute({ transition: false }));
 
 export { app };

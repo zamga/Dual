@@ -10,7 +10,7 @@ import { h } from '../dom.js';
 import { href } from '../router.js';
 import { masthead } from './_content.js';
 import { quorumBadge, hashChip, signed, timestamp, smsBody } from '../ui.js';
-import { indexPicks, isSealedFor } from './_records.js';
+import { indexPicks, isSealedFor, issueCounts } from './_records.js';
 import { loadMe, tierOf, channelsPanel, modeNote, signInPanel } from './_member.js';
 import { launchInfo, smsModel } from './_join.js';
 import { analyze } from '../core/gsm7.js';
@@ -51,11 +51,24 @@ export async function render(ctx) {
   const nCloses = issue?.closes?.length ?? 0;
   const tierName = { free: 'Ledger', signal: 'Signal', research: 'Research' }[tier];
 
+  const pre = !launch.ready; // before launch no text is sent
+  const k = issue ? issueCounts(issue, meta?.rule?.minAgree ?? 3) : null;
   const h1Text = issue
     ? issue.quorum
       ? L(`${isToday ? 'Today' : day}: a quorum.`, `${isToday ? 'Danes' : day}: kvorum.`)
-      : L(`${isToday ? 'Today' : day}: no quorum.`, `${isToday ? 'Danes' : day}: brez kvoruma.`)
+      : k.quorumMet
+        ? L(`${isToday ? 'Today' : day}: no new pick.`, `${isToday ? 'Danes' : day}: brez nove izbire.`)
+        : L(`${isToday ? 'Today' : day}: no quorum.`, `${isToday ? 'Danes' : day}: brez kvoruma.`)
     : L('No issue yet.', 'Še ni izdaje.');
+  // a day without a new pick, in words: met the rule but held back, or short of the rule
+  const quiet = (loc) =>
+    k?.quorumMet
+      ? loc === 'sl'
+        ? `${fmt.int(k.reached)} jih je izpolnilo pravilo, a nobene ni bilo mogoče izdati (že odprte, omejene ali v premoru)`
+        : `${fmt.int(k.reached)} met the rule, but none could be issued (already open, capped or cooling down)`
+      : loc === 'sl'
+        ? `največje soglasje je bilo ${issue?.closest ?? 0}/4`
+        : `the closest reached ${issue?.closest ?? 0}/4`;
 
   const parts = [];
   if (issue?.buys?.length) parts.push(L(`${issue.buys.length} new ${issue.buys.length === 1 ? 'pick' : 'picks'}`, `${issue.buys.length} ${issue.buys.length === 1 ? 'nova izbira' : 'nove izbire'}`));
@@ -63,8 +76,8 @@ export async function render(ctx) {
   if (nCloses) parts.push(L(`${nCloses} ${nCloses === 1 ? 'close' : 'closes'}`, `${nCloses} ${nCloses === 1 ? 'zaprtje' : 'zaprtja'}`));
   const lede = issue
     ? L(
-        `Issue #${issue.issueNo}, ${fmt.date(issue.date)}, published 14:00:00 ${issue.tz}. ${fmt.int(issue.nScored)} stocks scored; ${issue.quorum || nCloses ? `${parts.join(', ')}.` : `the closest reached ${issue.closest}/4, so nothing was texted.`}`,
-        `Izdaja #${issue.issueNo}, ${fmt.date(issue.date)}, objavljena ob 14:00:00 ${issue.tz}. Ocenjenih ${fmt.int(issue.nScored)} delnic; ${issue.quorum || nCloses ? `${parts.join(', ')}.` : `največje soglasje je bilo ${issue.closest}/4, zato ni bilo SMS.`}`,
+        `Issue #${issue.issueNo}, ${fmt.date(issue.date)}, published 14:00:00 ${issue.tz}. ${fmt.int(issue.nScored)} stocks scored; ${issue.quorum || nCloses ? `${parts.join(', ')}.` : `${quiet('en')}, so ${pre ? 'no text was due' : 'nothing was texted'}.`}`,
+        `Izdaja #${issue.issueNo}, ${fmt.date(issue.date)}, objavljena ob 14:00:00 ${issue.tz}. Ocenjenih ${fmt.int(issue.nScored)} delnic; ${issue.quorum || nCloses ? `${parts.join(', ')}.` : `${quiet('sl')}, zato ${pre ? 'SMS ni bil predviden' : 'ni bilo SMS'}.`}`,
       )
     : '';
 
@@ -84,7 +97,7 @@ export async function render(ctx) {
     { class: 'app-next' },
     h('p', { class: 'label' }, L('Next issue', 'Naslednja izdaja')),
     h('p', { class: 'app-next__when' }, h('span', { class: 'mono' }, `${WEEKDAY[locale === 'sl' ? 'sl' : 'en'][new Date(`${next.issueDate}T12:00:00Z`).getUTCDay()].slice(0, 3)} ${fmt.dm(next.issueDate)} · 14:00 ${next.tzLabel}`), leftEl),
-    h('p', { class: 'small muted' }, mode === 'pinned' ? L('Demo clock: pinned to the end of the data.', 'Demo ura: ustavljena ob koncu podatkov.') : L(`US open ${next.usOpenLocal}, ${next.minutesToOpen} minutes later. Most days: no quorum, no text.`, `Odprtje ZDA ob ${next.usOpenLocal}, ${next.minutesToOpen} minut pozneje. Večino dni: brez kvoruma, brez SMS.`)),
+    h('p', { class: 'small muted' }, mode === 'pinned' ? L('Demo clock: pinned to the end of the data.', 'Demo ura: ustavljena ob koncu podatkov.') : L(`US open ${next.usOpenLocal}, ${next.minutesToOpen} minutes later. Most days: no new pick, no text.`, `Odprtje ZDA ob ${next.usOpenLocal}, ${next.minutesToOpen} minut pozneje. Večino dni: brez nove izbire, brez SMS.`)),
   );
 
   const metaCol = h(
@@ -136,7 +149,13 @@ export async function render(ctx) {
             sealed ? [L('Revealed', 'Razkrito'), L('when the pick closes', 'ob zaprtju izbire')] : [L(`Excess to ${fmt.dm(res?.date ?? issue.date)}`, `Presežek do ${fmt.dm(res?.date ?? issue.date)}`), res ? h('span', { class: 'lg-mtm' }, signed(res.excess, { fmt })) : '–'],
           ];
     const smsCol = sealed
-      ? h('p', { class: 'small muted app-item__nosms' }, L('Signal and Research readers got this text at 14:00:00. Free readers see the record sealed until it closes.', 'Bralci paketov Signal in Research so ta SMS dobili ob 14:00:00. Brezplačni bralci vidijo zapis zapečaten do zaprtja.'))
+      ? h(
+          'p',
+          { class: 'small muted app-item__nosms' },
+          pre
+            ? L('Signal and Research readers get this text at 14:00:00 once SMS alerts launch (none before). Free readers see the record sealed until it closes.', 'Bralci paketov Signal in Research ta SMS prejmejo ob 14:00:00, ko se obvestila SMS zaženejo (prej ne). Brezplačni bralci vidijo zapis zapečaten do zaprtja.')
+            : L('Signal and Research readers got this text at 14:00:00. Free readers see the record sealed until it closes.', 'Bralci paketov Signal in Research so ta SMS dobili ob 14:00:00. Brezplačni bralci vidijo zapis zapečaten do zaprtja.'),
+        )
       : text
         ? h('div', { class: 'app-item__sms' }, h('p', { class: 'sms' }, smsBody(text)), h('p', { class: 'app-item__smsmeta mono' }, `14:00:00 ${slot.tzLabel} · ${model.label}`))
         : null;
@@ -169,7 +188,7 @@ export async function render(ctx) {
           ? L('Nothing to text.', 'Nič za SMS.')
           : tier === 'free'
             ? L(`${recs.length + closes.length === 1 ? 'One record' : `${recs.length + closes.length} records`} at 14:00.`, `${recs.length + closes.length === 1 ? 'En zapis' : `${recs.length + closes.length} zapisi`} ob 14:00.`)
-            : L(`${recs.length + closes.length === 1 ? 'One text' : `${recs.length + closes.length} texts`} at 14:00.`, `${recs.length + closes.length === 1 ? 'En SMS' : `${recs.length + closes.length} SMS`} ob 14:00.`),
+            : L(`${recs.length + closes.length === 1 ? 'One text' : `${recs.length + closes.length} texts`} ${pre ? 'due ' : ''}at 14:00.`, `${recs.length + closes.length === 1 ? 'En SMS' : `${recs.length + closes.length} SMS`} ${pre ? 'predviden ' : ''}ob 14:00.`),
       ),
     ),
     issue ? h('p', { class: 'c-meta app-issue__ts' }, timestamp([{ at: issue.publishAt, kind: 'published' }], { t: ctx.t }), ' ', h('a', { class: 'arrow-link', href: href('issue', issue.date) }, L('The full issue', 'Celotna izdaja'), h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))) : null,
@@ -178,7 +197,14 @@ export async function render(ctx) {
       : h(
           'div',
           { class: 'c-body app-empty' },
-          h('p', { class: 'lede' }, L(`No quorum: ${fmt.int(issue?.nScored ?? 0)} stocks scored, and the closest any came was ${issue?.closest ?? 0} of 4 families. The issue was published anyway, and no text went out.`, `Brez kvoruma: ocenjenih ${fmt.int(issue?.nScored ?? 0)} delnic, največ ${issue?.closest ?? 0} od 4 družin se je strinjalo. Izdaja je vseeno izšla, SMS ni bil poslan.`)),
+          h(
+            'p',
+            { class: 'lede' },
+            L(
+              `${k?.quorumMet ? 'No new pick' : 'No quorum'}: ${fmt.int(issue?.nScored ?? 0)} stocks scored; ${quiet('en')}. The issue was published anyway, and ${pre ? 'no text was due' : 'no text went out'}.`,
+              `${k?.quorumMet ? 'Brez nove izbire' : 'Brez kvoruma'}: ocenjenih ${fmt.int(issue?.nScored ?? 0)} delnic; ${quiet('sl')}. Izdaja je vseeno izšla, ${pre ? 'SMS ni bil predviden' : 'SMS ni bil poslan'}.`,
+            ),
+          ),
         ),
   );
 
@@ -235,7 +261,7 @@ export async function render(ctx) {
   // ---- 03 channels ---------------------------------------------------------------------------------------------
   const chWrap = h('div', { class: 'c-body app-ch' });
   chWrap.replaceChildren(signedIn ? channelsPanel(ctx, me, {}) : signInPanel(ctx, { lead: meErr ? L('The server did not answer; sign in again.', 'Strežnik se ni odzval; znova se prijavite.') : L('Sign in to see your channels.', 'Prijavite se za svoje kanale.') }));
-  const optIn = me?.sms?.on ? smsModel('OPT_IN', locale, { token: 'Xy7Kq2' }) : null;
+  const optIn = me?.sms?.on ? smsModel('OPT_IN', locale, { token: 'Xy7Kq2Lm' }) : null;
   const chSec = h(
     'section',
     { class: 'grid rec-sec app-sec app-channels', id: 'channels', 'aria-labelledby': 'app-ch-h' },

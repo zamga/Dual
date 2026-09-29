@@ -1,10 +1,13 @@
-// Per-user unsubscribe tokens for the qrm.si/u/<token> link in every SMS: base62, at least 6
-// characters (the SMS templates are proven one segment with a 6-character token), unique per user.
+// Per-user unsubscribe tokens for the qrm.si/u/<token> link in every SMS: base62, unique per user.
+// New tokens have 8 characters (62^8, about 2.2e14: one valid token per 4e10 guesses at 5,000
+// subscribers, against about 1e7 with 6 characters); every template stays one GSM-7 segment with
+// them (BUY 159/160 at worst case). Tokens of 6 or 7 characters issued earlier stay valid: they are
+// in texts already delivered, and a stop link must keep working.
 import { randomToken } from '../core/hash.js';
 import { iso } from './util.js';
 import { isUniqueError } from './db.js';
 
-export const TOKEN_LENGTH = 6;
+export const TOKEN_LENGTH = 8;
 export const TOKEN_RE = /^[0-9A-Za-z]{6,32}$/;
 
 // ensureUnsubscribeToken(db, userId, now) -> token (creates one on first use)

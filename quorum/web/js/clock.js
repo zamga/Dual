@@ -19,13 +19,23 @@ export function createClock({ asOf, flagsNow = null, realNow = () => new Date() 
     }
   }
   const live = realNow().getTime() < horizon.getTime();
-  if (live) return { mode: 'live', now: () => realNow(), pinnedInstant, horizon, asOf };
+  // Live until the horizon; from then on the same clock reads the pinned instant, as a fresh load would.
+  if (live) {
+    const pinned = new Date(pinnedInstant);
+    const now = () => {
+      const r = realNow();
+      return r.getTime() < horizon.getTime() ? r : new Date(pinned);
+    };
+    return { mode: 'live', now, passed: () => realNow().getTime() >= horizon.getTime(), pinnedInstant, horizon, asOf };
+  }
   return { mode: 'pinned', now: () => new Date(pinnedInstant), pinnedInstant, horizon, asOf };
 }
 
-// A clock can go from live to pinned while the page is open (the next slot arrives).
+// A clock can go from live to pinned while the page is open (the next slot arrives); now() then returns
+// the pinned instant, so the mode is read from the real passage of time.
 export function clockMode(clock) {
   if (clock.mode !== 'live') return clock.mode;
+  if (clock.passed) return clock.passed() ? 'pinned' : 'live';
   return clock.now().getTime() < clock.horizon.getTime() ? 'live' : 'pinned';
 }
 

@@ -1,17 +1,19 @@
-// Family D: the ML ranker. Histogram GBDT (engine/ml/gbdt.js) on the rank-transformed feature store.
+// Family D: the ML ranker. Histogram GBDT (engine/ml/gbdt.js) on the rank-transformed feature store,
+// every feature except the LLM veto stand-in's news flag (the veto uses it; D never learns from it).
 //
 // Target: sector-relative rank (to [-1, 1]) of the 21-day forward open-to-open return, entry at the
 // open of t+1 and exit at the open of t+22 (delisting proceeds included).
 // Training rows: every 5th trading day. Hyperparameters: purged k-fold CV (21-day purge plus a
 // one-month embargo) inside the research window only; every configuration tried is logged.
-// Independence check: if D's out-of-fold rank correlation with any of A-C exceeds 0.5, D is
-// retrained without that family's raw inputs. Walk-forward: expanding window, retrained each year at
-// the end of September with a 21-trading-day purge before the cutoff; each model predicts only
-// dates after its cutoff; the model trained at the freeze is never retrained.
+// Independence check: if the seed-averaged out-of-fold rank correlation of D with any of A-C exceeds
+// 0.5, D is retrained without that family's raw inputs (then without its closest remaining proxy).
+// Walk-forward: expanding window, retrained each year at the end of September with a 21-trading-day
+// purge before the cutoff; each model predicts only dates after its cutoff; the model trained at the
+// freeze is never retrained.
 import { createPool } from '../ml/pool.js';
 import { holdReturn, benchReturn } from '../returns.js';
 import { rankInto, spearman, mean, std } from '../lib/stats.js';
-import { FEATURE_KEYS, FAMILY_INPUTS, FEATURE_INDEX } from '../features.js';
+import { FEATURE_KEYS, FAMILY_INPUTS, FEATURE_INDEX, D_INPUT_KEYS } from '../features.js';
 import { makeRng } from '../lib/prng.js';
 
 export const ML_DEFAULTS = Object.freeze({
@@ -213,7 +215,8 @@ export async function runMlFamily(m, fs, familyPct, options = {}) {
     }
     const configs = sampleConfigs(o.cvConfigs, o.seed);
     const maxTrees = Math.max(...o.checkpoints);
-    const allFeatures = FEATURE_KEYS.map((_, j) => j);
+    // every stored feature except the LLM veto stand-in's news flag (features.js D_INPUT_KEYS)
+    const allFeatures = D_INPUT_KEYS.map((k) => FEATURE_INDEX[k]);
 
     async function crossValidate(cfg, features, tag) {
       const jobs = folds.map((fd) =>
@@ -266,7 +269,7 @@ export async function runMlFamily(m, fs, familyPct, options = {}) {
           family: 'D',
           kind: 'gbdt-purged-kfold',
           params: { ...cfg, nTrees: r.nTrees, nBins: 64 },
-          features: 'all',
+          features: 'all but the LLM stand-in news flag',
           cv: { folds: o.cvFolds, purgeDays: o.purge, embargoDays: o.embargo, every: o.cvEvery, window: [m.dates[cvDate[0]], m.dates[researchEndIdx]] },
           metric: { name: 'mean date rank IC vs sector-relative 21d target', value: round(r.meanIC), icir: round(r.icir), byFold: r.foldIC.map(round) },
           monthly: r.monthly,
@@ -287,25 +290,60 @@ export async function runMlFamily(m, fs, familyPct, options = {}) {
     log(`CV done: ${experiments.length} configurations, best ${top.exp.id} IC ${top.r.meanIC.toFixed(4)} (se ${se.toFixed(4)}), chosen ${best.exp.id}`);
 
     // ---- independence check on validation (out-of-fold) predictions ----
+    // The final D averages o.seeds models, which makes it smoother and more correlated with the
+    // families than any single-seed model, so the check measures the seed-averaged out-of-fold
+    // predictions of the chosen configuration. Above the limit, D is retrained without that family's
+    // raw inputs; when those are already out, without the remaining feature that tracks the family
+    // most closely (its closest proxy, by mean cross-sectional rank correlation on the CV dates).
+    async function seedAveragedOof(cfg, nTrees, feats) {
+      const jobs = [];
+      for (const fd of folds) {
+        for (const seed of o.seeds) {
+          jobs.push(
+            pool
+              .run({ list: 'cv', trainRanges: fd.trainRanges, evalRanges: [fd.test], params: { ...cfg, nTrees, nBins: 64, seed }, features: feats, checkpoints: [nTrees] })
+              .then((res) => ({ fd, res })),
+          );
+        }
+      }
+      const oof = new Float32Array(cvList.length);
+      for (const { fd, res } of await Promise.all(jobs)) {
+        const lo = fd.test[0];
+        const ep = res.evalPreds[0].pred;
+        for (let z = 0; z < ep.length; z++) oof[lo + z] += ep[z] / o.seeds.length;
+      }
+      return oof;
+    }
     const trainingLog = [{ step: 'cv-selection', ...selectionRule, experiments: experiments.length }];
     let features = allFeatures;
     const excluded = [];
+    const proxies = [];
     let chosen = best;
-    for (let round2 = 0; round2 < 4; round2++) {
-      const corr = oofFamilyCorr(m, fs, cvList, cvDate, chosen.r.oof, familyPct);
+    for (let round2 = 0; round2 < 8; round2++) {
+      const oof = await seedAveragedOof(chosen.cfg, chosen.r.nTrees, features);
+      const corr = oofFamilyCorr(m, fs, cvList, cvDate, oof, familyPct);
       const worst = Object.entries(corr).sort((a, b) => b[1] - a[1])[0];
-      const entry = { step: 'independence-check', experiment: chosen.exp.id, corr: mapRound(corr), limit: o.corrLimit, excludedSoFar: [...excluded] };
+      const entry = { step: 'independence-check', experiment: chosen.exp.id, seeds: o.seeds.length, corr: mapRound(corr), limit: o.corrLimit, excludedSoFar: [...excluded], proxiesSoFar: [...proxies] };
       if (!(worst[1] > o.corrLimit)) {
         entry.outcome = 'pass';
         trainingLog.push(entry);
         break;
       }
-      entry.outcome = `retrain without family ${worst[0]} raw inputs (${FAMILY_INPUTS[worst[0]].join(', ')})`;
+      const fam = worst[0];
+      if (!excluded.includes(fam)) {
+        entry.outcome = `retrain without family ${fam} raw inputs (${FAMILY_INPUTS[fam].join(', ')})`;
+        excluded.push(fam);
+      } else {
+        const fc = featureFamilyCorr(m, fs, cvList, cvDate, features, familyPct[fam]);
+        const proxy = fc.reduce((a, b) => (Math.abs(b[1]) > Math.abs(a[1]) ? b : a));
+        entry.outcome = `family ${fam} raw inputs already out: retrain without its closest proxy ${FEATURE_KEYS[proxy[0]]} (rank correlation ${round(proxy[1], 3)})`;
+        proxies.push(FEATURE_KEYS[proxy[0]]);
+      }
       trainingLog.push(entry);
-      excluded.push(worst[0]);
-      const drop = new Set(excluded.flatMap((f) => FAMILY_INPUTS[f].map((k) => FEATURE_INDEX[k])));
+      const drop = new Set([...excluded.flatMap((f) => FAMILY_INPUTS[f]), ...proxies].map((k) => FEATURE_INDEX[k]));
       features = allFeatures.filter((j) => !drop.has(j));
-      const rr = await crossValidate(chosen.cfg, features, `minus-${excluded.join('')}`);
+      const tag = `minus-${excluded.join('')}${proxies.length ? `-${proxies.join('-')}` : ''}`;
+      const rr = await crossValidate(chosen.cfg, features, tag);
       const r = rr.find((x) => x.nTrees === chosen.r.nTrees);
       for (const x of rr) {
         experiments.push({
@@ -313,7 +351,7 @@ export async function runMlFamily(m, fs, familyPct, options = {}) {
           family: 'D',
           kind: 'gbdt-purged-kfold',
           params: { ...chosen.cfg, nTrees: x.nTrees, nBins: 64 },
-          features: `all minus ${excluded.map((f) => `family ${f} inputs`).join(', ')}`,
+          features: `all minus ${[...excluded.map((f) => `family ${f} inputs`), ...proxies].join(', ')}`,
           cv: { folds: o.cvFolds, purgeDays: o.purge, embargoDays: o.embargo, every: o.cvEvery },
           metric: { name: 'mean date rank IC vs sector-relative 21d target', value: round(x.meanIC), icir: round(x.icir), byFold: x.foldIC.map(round) },
           monthly: x.monthly,
@@ -323,7 +361,7 @@ export async function runMlFamily(m, fs, familyPct, options = {}) {
       chosen = { cfg: chosen.cfg, r, exp: experiments[experiments.length - (rr.length - rr.indexOf(r))] };
     }
     const params = { ...chosen.cfg, nTrees: chosen.r.nTrees, nBins: 64 };
-    trainingLog.push({ step: 'final', experiment: chosen.exp.id, params, features: features.map((j) => FEATURE_KEYS[j]), excludedFamilies: [...excluded], cvIC: round(chosen.r.meanIC) });
+    trainingLog.push({ step: 'final', experiment: chosen.exp.id, params, features: features.map((j) => FEATURE_KEYS[j]), excludedFamilies: [...excluded], excludedProxies: [...proxies], cvIC: round(chosen.r.meanIC) });
     log(`selected ${chosen.exp.id} ${JSON.stringify(params)}`);
 
     // ---- walk-forward ----
@@ -482,6 +520,32 @@ function oofFamilyCorr(m, fs, list, dates, oof, familyPct) {
     k = e;
   }
   return { A: mean(acc.A), B: mean(acc.B), C: mean(acc.C) };
+}
+
+/** Mean per-date Spearman of each feature (rank store) with a family's percentile: [[j, corr]]. */
+function featureFamilyCorr(m, fs, list, dates, features, pctF) {
+  const N = m.N;
+  const s0 = fs.modelFrom;
+  const acc = features.map(() => []);
+  let k = 0;
+  while (k < list.length) {
+    const t = dates[k];
+    let e = k;
+    while (e < list.length && dates[e] === t) e++;
+    if (t >= s0) {
+      const len = e - k;
+      const y = new Float64Array(len);
+      for (let z = 0; z < len; z++) y[z] = pctF[(t - s0) * N + fs.stock[list[k + z]]];
+      features.forEach((j, a) => {
+        const x = new Float64Array(len);
+        for (let z = 0; z < len; z++) x[z] = fs.q[list[k + z] * fs.F + j];
+        const c = spearman(x, y, len);
+        if (c === c) acc[a].push(c);
+      });
+    }
+    k = e;
+  }
+  return features.map((j, a) => [j, mean(acc[a])]);
 }
 
 function round(x, d = 4) {

@@ -81,7 +81,7 @@ test('parseBody enforces the content type', () => {
   assert.throws(() => parseBody(form, Buffer.from('a=1'), ['json']), (e) => e.status === 415);
 });
 
-test('server: security headers, CSP with Google Fonts, HSTS on https', async () => {
+test('server: security headers, CSP with nothing from third parties, HSTS on https', async () => {
   const t = await makeApp();
   try {
     const r = await t.client().get('/api/health');
@@ -91,8 +91,9 @@ test('server: security headers, CSP with Google Fonts, HSTS on https', async () 
     assert.equal(csp, CSP);
     assert.match(csp, /script-src 'self'(;|$)/);
     assert.doesNotMatch(csp, /script-src[^;]*unsafe-inline/);
-    assert.match(csp, /style-src [^;]*https:\/\/fonts\.googleapis\.com/);
-    assert.match(csp, /font-src [^;]*https:\/\/fonts\.gstatic\.com/);
+    assert.match(csp, /style-src 'self' 'unsafe-inline'(;|$)/);
+    assert.match(csp, /font-src 'self'(;|$)/);
+    assert.doesNotMatch(csp, /https:|googleapis|gstatic/, 'no font service: fonts come from this origin');
     assert.match(csp, /frame-ancestors 'none'/);
     assert.equal(r.headers.get('referrer-policy'), 'same-origin');
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff');

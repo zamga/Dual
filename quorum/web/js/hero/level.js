@@ -30,9 +30,9 @@ const COPY = {
     headline: ['No quorum,', 'no text.'],
     kicker: 'The Level · our latest closed pick',
     cap0: (x) =>
-      `Every US trading day four independent model families rank about ${x.n} stocks. A pick exists only when three of them put the same stock ${x.R.inTop}. Most days, none do.`,
-    cap1: (x) => `Issue #${x.issueNo}, ${x.date}. ${x.nScored} stocks scored. One stood on ${x.agreement === 4 ? 'all four columns' : 'three of four columns'}: ${x.ticker}.`,
-    cap2: (x) => `Sealed at 13:45. Published and texted at 14:00:00 ${x.tz}. Entry at the US open, ${x.minutes} minutes later.`,
+      `Every US trading day four independent model families rank about ${x.n} stocks. A pick exists only when three of them put the same stock ${x.R.inTop}, no veto fires and the caps allow it. Only a pick, a renewal or an exit makes a text.`,
+    cap1: (x) => `Issue #${x.issueNo}, ${x.date}. ${x.nScored} stocks scored. ${x.ticker} stood on ${x.agreement === 4 ? 'all four columns' : 'three of four columns'}${x.kind === 'RENEW' ? ` and was renewed from #${x.priorNo}` : ''}.`,
+    cap2: (x) => `Sealed at 13:45, published at 14:00:00 ${x.tz} with this text${x.pre ? ' (before launch no text is sent)' : ''}. Entry at the US open, ${x.minutes} minutes later.`,
     cap3: 'Our latest closed pick. Whatever happened.',
     meta: (x) => `Issue #${x.issueNo} · ${x.date} · ${x.nScored} scored · ${x.q}`,
     q: (n) => (n === 1 ? '1 quorum' : `${n} quorums`),
@@ -41,6 +41,7 @@ const COPY = {
     jump: (i, s) => `Step ${i}: ${s}`,
     cue: 'Scroll',
     buy: 'BUY',
+    renew: (no) => `RENEW of #${no}`,
     entry: 'Entry',
     exit: 'Exit',
     usOpen: 'US open',
@@ -61,7 +62,7 @@ const COPY = {
     altTop: (x) => x.R.topCap,
     yes: 'yes',
     no: 'no',
-    altSms: 'The SMS sent at 14:00:00:',
+    altSms: (pre) => (pre ? 'The SMS written for 14:00:00 (before launch nothing is sent):' : 'The SMS sent at 14:00:00:'),
     altResult: (x) =>
       `Result at the US open 21 trading days later (${x.exit}): excess return ${x.excess} against the S&P 500 total return (simulated); net ${x.net}, benchmark ${x.bench}.`,
   },
@@ -69,9 +70,9 @@ const COPY = {
     headline: ['Brez kvoruma', 'ni SMS.'],
     kicker: 'Nivelir · naša zadnja zaprta izbira',
     cap0: (x) =>
-      `Vsak dan trgovanja v ZDA štiri neodvisne družine modelov rangirajo približno ${x.n} delnic. Izbira nastane samo, ko tri isto delnico uvrstijo ${x.R.inTop}. Večino dni se to ne zgodi.`,
-    cap1: (x) => `Izdaja #${x.issueNo}, ${x.date}. ${x.nScored} ocenjenih delnic. Ena je stala na ${x.agreement === 4 ? 'vseh štirih stebrih' : 'treh od štirih stebrov'}: ${x.ticker}.`,
-    cap2: (x) => `Zapečateno ob 13:45. Objavljeno in poslano ob 14:00:00 ${x.tz}. Vstop ob odprtju ameriškega trga, ${x.minutes} minut pozneje.`,
+      `Vsak dan trgovanja v ZDA štiri neodvisne družine modelov rangirajo približno ${x.n} delnic. Izbira nastane samo, ko tri isto delnico uvrstijo ${x.R.inTop}, noben veto se ne sproži in omejitve to dopuščajo. SMS sproži samo izbira, podaljšanje ali izstop.`,
+    cap1: (x) => `Izdaja #${x.issueNo}, ${x.date}. ${x.nScored} ocenjenih delnic. ${x.ticker} je stala na ${x.agreement === 4 ? 'vseh štirih stebrih' : 'treh od štirih stebrov'}${x.kind === 'RENEW' ? ` in bila podaljšana iz #${x.priorNo}` : ''}.`,
+    cap2: (x) => `Zapečateno ob 13:45, objavljeno ob 14:00:00 ${x.tz} s tem SMS${x.pre ? ' (pred zagonom se SMS ne pošilja)' : ''}. Vstop ob odprtju ameriškega trga, ${x.minutes} minut pozneje.`,
     cap3: 'Naša zadnja zaprta izbira. Ne glede na izid.',
     meta: (x) => `Izdaja #${x.issueNo} · ${x.date} · ${x.nScored} ocenjenih · ${x.q}`,
     q: (n) => (n === 1 ? '1 kvorum' : `${n} kvorumi`),
@@ -80,6 +81,7 @@ const COPY = {
     jump: (i, s) => `Korak ${i}: ${s}`,
     cue: 'Drsite',
     buy: 'NAKUP',
+    renew: (no) => `PODALJŠANJE #${no}`,
     entry: 'Vstop',
     exit: 'Izstop',
     usOpen: 'odprtje ZDA',
@@ -100,7 +102,7 @@ const COPY = {
     altTop: (x) => x.R.topCap,
     yes: 'da',
     no: 'ne',
-    altSms: 'SMS, poslan ob 14:00:00:',
+    altSms: (pre) => (pre ? 'SMS, pripravljen za 14:00:00 (pred zagonom se nič ne pošlje):' : 'SMS, poslan ob 14:00:00:'),
     altResult: (x) =>
       `Izid ob odprtju ameriškega trga 21 trgovalnih dni pozneje (${x.exit}): presežni donos ${x.excess} proti skupnemu donosu S&P 500 (simulirano); neto ${x.net}, merilo ${x.bench}.`,
   },
@@ -377,7 +379,9 @@ function svgField(parsed, sub, rand) {
 }
 
 // ---- the component ----------------------------------------------------------------------------------
-export function createLevel(ctx, hero, { meta = null } = {}) {
+// opts: { meta, prelaunch } (prelaunch from ctx.launch(): before launch the copy never says a text was sent)
+export function createLevel(ctx, hero, opts = {}) {
+  const meta = opts.meta ?? null;
   const locale = ctx.locale;
   const C = COPY[locale] ?? COPY.en;
   const fmt = ctx.fmt;
@@ -405,7 +409,14 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     minutes: 90,
     q: C.q(hero.quorumCount),
     R,
+    kind: hero.pick.kind ?? 'BUY',
+    priorNo: hero.pick.priorNo ?? null,
+    // unknown launch status reads as pre-launch: nothing claims a text went out
+    pre: opts.prelaunch !== false,
   };
+  // hero.json carries the SMS in both languages; the phone and its text alternative use the page's
+  const smsText = locale === 'sl' ? (hero.smsSl ?? hero.sms) : hero.sms;
+  const kindBadge = X.kind === 'RENEW' && X.priorNo ? C.renew(X.priorNo) : C.buy;
   if (lj.date === hero.issueDate) {
     // minutes from 14:00 to the US open, from the calendar rather than assumed
     const open = new Date(`${hero.issueDate}T09:30:00${nyOffset(hero.issueDate)}`);
@@ -436,7 +447,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     h(
       'span',
       { class: ['lv__val', agreeing.has(f) ? 'is-agree' : 'is-miss'], dataset: { k: String(k) } },
-      pickRow[k] < 0 ? '–' : String(Math.round(pickRow[k] / 10)),
+      pickRow[k] < 0 ? '–' : String(Math.floor(pickRow[k] / 10)),
     ),
   );
   valEls.forEach((el, k) => {
@@ -456,7 +467,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     h('p', { class: ['lv__cap', i === 0 && 'is-on'], dataset: { s: String(i) } }, text),
   );
 
-  const phoneNode = phoneEl({ text: hero.sms, at: hero.smsAt, locale });
+  const phoneNode = phoneEl({ text: smsText, at: hero.smsAt, locale });
   const phoneWrap = h('div', { class: 'lv__phonewrap flush', 'aria-hidden': 'true' }, phoneNode);
 
   // the note (pick-note layout) with the 21-day excess path
@@ -467,7 +478,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     h(
       'div',
       { class: 'lv__notehead' },
-      h('div', { class: 'lv__noteid' }, h('span', { class: 'badge-quorum' }, `${C.buy} · ${agreement}/4`), h('span', { class: 'ticker lv__noteticker' }, hero.pick.ticker), h('span', { class: 'lv__notename' }, `${hero.pick.name} `, h('span', { class: 'tag' }, C.fictional))),
+      h('div', { class: 'lv__noteid' }, h('span', { class: 'badge-quorum' }, `${kindBadge} · ${agreement}/4`), h('span', { class: 'ticker lv__noteticker' }, hero.pick.ticker), h('span', { class: 'lv__notename' }, `${hero.pick.name} `, h('span', { class: 'tag' }, C.fictional))),
       h('p', { class: 'label lv__noteno' }, `#${hero.pick.no} · ${X.date} 14:00 ${tz}`),
     ),
     h(
@@ -487,6 +498,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     h('p', { class: 'lv__noteadvice' }, C.notAdvice),
   );
 
+  const noteBlocks = [...note.children].filter((c) => !c.classList.contains('lv__notechart'));
   const axes = h(
     'ol',
     { class: 'lv__axes flush', 'aria-hidden': 'true' },
@@ -517,7 +529,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
   );
 
   const altRows = FAMS.map((f, k) =>
-    h('tr', {}, h('th', { scope: 'row' }, `${f} · ${familyName(f, meta, locale)}`), h('td', {}, pickRow[k] < 0 ? '–' : String(Math.round(pickRow[k] / 10))), h('td', {}, agreeing.has(f) ? C.yes : C.no)),
+    h('tr', {}, h('th', { scope: 'row' }, `${f} · ${familyName(f, meta, locale)}`), h('td', {}, pickRow[k] < 0 ? '–' : String(Math.floor(pickRow[k] / 10))), h('td', {}, agreeing.has(f) ? C.yes : C.no)),
   );
   const alt = h(
     'div',
@@ -526,7 +538,7 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     h('p', {}, C.alt1(X)),
     h('p', {}, C.alt2(X)),
     h('table', {}, h('caption', {}, C.altTable(X)), h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, C.altFamily), h('th', { scope: 'col' }, C.altPct), h('th', { scope: 'col' }, C.altTop(X)))), h('tbody', {}, altRows)),
-    h('p', {}, `${C.altSms} ${hero.sms}`),
+    h('p', {}, `${C.altSms(X.pre)} ${smsText}`),
     h(
       'p',
       {},
@@ -567,10 +579,23 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     const bubble = phoneNode.querySelector('.sms');
     const screen = phoneNode.querySelector('.phone__screen');
     geom.bubble = bubble ? offsetIn(bubble, stage) : null;
+    if (bubble) {
+      const bcs = getComputedStyle(bubble);
+      geom.bubbleLine = parseFloat(bcs.lineHeight) || 16;
+      geom.bubblePad = parseFloat(bcs.paddingTop) || 10;
+    }
     geom.screen = screen ? offsetIn(screen, stage) : null;
     geom.note = offsetIn(note, stage);
     geom.lintelY = pr.top + (1 - THRESHOLD / 1000) * pr.height;
     stage.style.setProperty('--head-h', `${headline.offsetHeight}px`);
+    // the note shares the stage with the last caption only (state 3): measure that caption's text (the
+    // stacked caption boxes all stretch to the tallest one)
+    const cap3 = stage.querySelector('.lv__cap[data-s="3"]');
+    if (cap3) {
+      const rg = document.createRange();
+      rg.selectNodeContents(cap3);
+      stage.style.setProperty('--caps-h', `${Math.ceil(rg.getBoundingClientRect().height) || 64}px`);
+    }
     engine?.resize?.(geom);
     noteChart.layout();
     lastFieldKey = '';
@@ -622,10 +647,15 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     put(bandLabel, 'opacity', String(fadeCols * ease.seg(loadT, 0.6, 1)));
     put(pickLabel, 'opacity', String(lock * (s2 > 0 ? 0 : 1)));
 
-    // S2: the lintel contracts into the SMS baseline, the phone appears, the bubble grows
-    const phoneIn = ease.out3(ease.seg(s2, 0.05, 0.4)) * (1 - ease.seg(s3, 0.12, 0.34));
-    put(phoneWrap, 'opacity', String(phoneIn));
-    put(phoneWrap, 'transform', `translate3d(0, ${Math.round((1 - ease.out3(ease.seg(s2, 0.05, 0.4))) * 40)}px, 0) scale(${(1 + ease.seg(s3, 0.05, 0.34) * 0.06).toFixed(4)})`);
+    // S2: the lintel contracts into the SMS baseline, the phone appears, the bubble grows. The device
+    // is never half transparent (a grey Paper screen on Chamber): it rises into view behind a mask
+    // that opens from the bottom, fully opaque, and leaves the same way once the note has taken over.
+    const phoneRise = ease.out3(ease.seg(s2, 0.05, 0.4));
+    const phoneOut = ease.seg(s3, 0.3, 0.4);
+    const phoneIn = phoneRise * (1 - phoneOut);
+    put(phoneWrap, 'opacity', phoneIn > 0.001 ? '1' : '0');
+    put(phoneWrap, 'clipPath', phoneRise >= 1 ? 'none' : `inset(${((1 - phoneRise) * 100).toFixed(1)}% 0 0 0)`);
+    put(phoneWrap, 'transform', `translate3d(0, ${Math.round((1 - phoneRise) * 40)}px, 0) scale(${(1 + ease.seg(s3, 0.05, 0.34) * 0.06).toFixed(4)})`);
     put(phoneWrap, 'visibility', phoneIn <= 0.001 ? 'hidden' : 'visible');
     const travel = ease.inOut(ease.seg(s2, 0, 0.45));
     const barOn = s2 > 0 && s2 < 0.9;
@@ -644,8 +674,15 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     }
     const bubble = phoneNode.querySelector('.sms');
     if (bubble) {
+      // the bubble grows from its baseline one whole line at a time: no frame shows half a line of text
       const grow = ease.out3(ease.seg(s2, 0.42, 0.78));
-      put(bubble, 'clipPath', grow >= 1 ? 'none' : `inset(${Math.round((1 - grow) * 100)}% 0 0 0 round 16px 16px 16px 4px)`);
+      const bh = geom.bubble?.height ?? 0;
+      const lh = geom.bubbleLine || 16;
+      const pad = geom.bubblePad || 10;
+      const lines = Math.max(1, Math.round((bh - 2 * pad) / lh));
+      const shown = Math.ceil(grow * lines);
+      const cut = grow >= 1 || !bh ? 0 : grow <= 0 ? bh : Math.max(0, bh - pad - shown * lh - (shown === lines ? pad : 0));
+      put(bubble, 'clipPath', cut <= 0 ? 'none' : `inset(${Math.round(cut)}px 0 0 0 round 16px 16px 16px 4px)`);
       bubble.classList.toggle('is-tapped', s3 > 0.02 && s3 < 0.3);
     }
     const when = phoneNode.querySelector('.phone__when');
@@ -669,8 +706,11 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
     } else {
       put(note, 'visibility', 'hidden');
     }
-    put(note, '--content', String(ease.seg(s3, 0.3, 0.5)));
-    noteChart.draw(ease.inOut(ease.seg(s3, 0.42, 0.9)), ease.seg(s3, 0.88, 0.98));
+    // the note's blocks appear one after another, each whole (no partial opacity, no crop)
+    const content = ease.seg(s3, 0.3, 0.5);
+    noteBlocks.forEach((b, i) => put(b, 'visibility', content >= (i + 0.5) / noteBlocks.length ? 'visible' : 'hidden'));
+    // the path starts drawing as soon as the note is in place
+    noteChart.draw(ease.inOut(ease.seg(s3, 0.34, 0.88)), ease.seg(s3, 0.86, 0.96));
 
     // captions, steps, cue
     if (st.step !== lastStep || !section.dataset.step) {
@@ -738,24 +778,6 @@ export function createLevel(ctx, hero, { meta = null } = {}) {
   function onResize() {
     measure();
     request();
-  }
-
-  // SL: the real Slovene SMS is on the pick record; fetch it lazily.
-  if (locale === 'sl') {
-    ctx
-      .data('picks')
-      .then((picks) => {
-        const rec = Array.isArray(picks) ? picks.find((p) => p.no === hero.pick.no) : null;
-        const text = rec?.sms?.sl;
-        const b = phoneNode.querySelector('.sms');
-        if (text && b) {
-          b.replaceChildren(...String(text).split(/(qrm\.si\/\S+)/g).map((s) => (/^qrm\.si\//.test(s) ? h('u', {}, s) : s)));
-          phoneNode.setAttribute('aria-label', `SMS: ${text}`);
-          measure();
-          request();
-        }
-      })
-      .catch(() => {});
   }
 
   stepBtns.forEach((b, i) => {
@@ -857,6 +879,8 @@ function buildNoteChart(path, final, fmt, C) {
   );
   const endLabel = el.querySelector('.lv__endlabel');
   endLabel.style.top = `${(Y(final) / 1000) * 100}%`;
+  // below 1200 px the label sits in the plot: on the side of the end point away from the lintel (zero)
+  if (final < 0) endLabel.classList.add('is-below');
   let lastT = -1;
   return {
     el,

@@ -24,7 +24,7 @@ import { renderSms } from '../core/sms-templates.js';
 import { randomToken } from '../core/hash.js';
 import { mulberry32, hashSeed } from '../core/random.js';
 import { quantile } from '../core/stats.js';
-import { runQuorum, periodRange, firstOnOrAfter, FAMS, round, HORIZON } from './backtest.js';
+import { runQuorum, periodRange, firstOnOrAfter, FAMS, round, floorPct, HORIZON } from './backtest.js';
 import { writeThesis } from './thesis.js';
 
 export const MODEL_VERSION = 'ensemble 1.0.0';
@@ -100,11 +100,11 @@ export function methodologyVersions(model, rule) {
         en:
           `Frozen engine (ensemble 1.0.0). A pick needs at least 3 of the 4 model families (trend, fundamental momentum, quality/value, ML ranker) to place the stock in their ${topEn} on the issue date (calibrated on ${years} to 3-6 picks a month) and no veto: top days-to-cover decile, top idiosyncratic-volatility decile, earnings within 3 trading days, pending merger or split, material negative news in the last 48 hours (a stand-in classifier in this simulation). ` +
           'Caps: 2 new picks per issue, 8 per month, 3 open per sector, no re-issue within 10 trading days of a close except by RENEW, and no new pick that would take the month past 16 alert messages (picks plus exits). Entry at the US open on the issue day, exit at the open 21 trading days later; RENEW if the rule still holds. After bear-market rebounds the crash switch suspends trend and all three other families must agree. ' +
-          `Launch protocol amendment A-1 (${fmtLong(model.periods.freeze, 'en')}): ship gate (d) is also re-tested at every month-end on the holdout plus this sealed record, with the same deflation; SMS alerts wait until it passes.`,
+          `Launch protocol amendment A-1 (${fmtLong(model.periods.freeze, 'en')}): ship gate (d) splits into (d1), a deflated Sharpe probability of at least 0.95 on the research window with PBO below 0.3, and (d2), a probabilistic Sharpe ratio (Sharpe above zero) of at least 0.95 on the holdout plus this sealed record, re-tested at every month-end; SMS alerts wait until both pass.`,
         sl:
           `Zamrznjen model (ansambel 1.0.0). Za izbiro morajo vsaj 3 od 4 modelskih družin (trend, fundamentalni momentum, kakovost/vrednost, rangirnik ML) uvrstiti delnico med ${topSl} na dan izdaje (umerjeno na obdobju ${years} na 3-6 izbir na mesec), in noben veto ne velja: zgornji decil dni za pokritje, zgornji decil idiosinkratične volatilnosti, rezultati v 3 dneh trgovanja, čakajoča združitev ali delitev, pomembna negativna novica v zadnjih 48 urah (v tej simulaciji nadomestni klasifikator). ` +
           'Omejitve: 2 novi izbiri na izdajo, 8 na mesec, 3 odprte na sektor, brez ponovne izdaje v 10 dneh trgovanja po zaprtju, razen s podaljšanjem, in nobene nove izbire, ki bi v mesecu presegla 16 sporočil (izbire in izhodi). Vstop ob odprtju borze v ZDA na dan izdaje, izstop ob odprtju 21 dni trgovanja pozneje; podaljšanje, če pravilo še velja. Po odboju iz medvedjega trga stikalo za zlom momentuma izključi trend in se morajo strinjati vse tri druge družine. ' +
-          `Dopolnilo zagonskega protokola A-1 (${fmtLong(model.periods.freeze, 'sl')}): pogoj (d) se ob koncu vsakega meseca znova preveri tudi na preizkusnem obdobju skupaj s tem zapečatenim zapisom, z enako deflacijo; obvestila SMS čakajo, dokler ni izpolnjen.`,
+          `Dopolnilo zagonskega protokola A-1 (${fmtLong(model.periods.freeze, 'sl')}): pogoj (d) se razdeli na (d1), verjetnost deflacioniranega Sharpovega razmerja vsaj 0,95 v raziskovalnem obdobju in PBO pod 0,3, ter (d2), verjetnostno Sharpovo razmerje (Sharpe nad nič) vsaj 0,95 na preizkusnem obdobju skupaj s tem zapečatenim zapisom, ki se znova preveri ob koncu vsakega meseca; obvestila SMS čakajo, dokler nista izpolnjena oba.`,
       },
       modelVersion: MODEL_VERSION,
     },
@@ -349,7 +349,7 @@ export async function buildRecord(model, rule, { seed = model.seed ?? 20260928, 
     const drivers = model.drivers(s, rec.i);
     const flags = model.vetoFlags(s, rec.i);
     const families = {};
-    for (const f of FAMS) families[f] = { pct: r4(rec.pct[f]), drivers: (drivers[f] ?? []).map(driverOut) };
+    for (const f of FAMS) families[f] = { pct: floorPct(rec.pct[f]), drivers: (drivers[f] ?? []).map(driverOut) };
     const sens = sensitivity(rec.pct, rec.agreeing, rule.topPct);
     const split = splitFactor(model, rec.i, seed);
     const px = (x) => r2(x / split);
@@ -371,8 +371,12 @@ export async function buildRecord(model, rule, { seed = model.seed ?? 20260928, 
     let outcome = null;
     let exit = null;
     let mark = null;
-    const path = [[0, 0, 0]];
+    // path grid: [trading days after the entry date, net, bench]. The first row is the entry at the US
+    // open (net = what a sale at that price would return after both legs' costs), then the close of
+    // every trading day from the entry day (d = 0) to d = 20, and for a closed record the exit at the
+    // open of d = 21. Every row's net is the round-trip return if sold at that price.
     const cost = model.oneWayCost(s, rec.i);
+    const path = [[0, r6((1 - cost) / (1 + cost) - 1), 0]];
     const b0 = model.benchmark.open[t];
     if (rec.outcome) {
       const ce = rec.closeT;
@@ -396,7 +400,7 @@ export async function buildRecord(model, rule, { seed = model.seed ?? 20260928, 
       if (raw.delisted) outcome.delisted = raw.delisted;
       exit = { date: dates[ce], open: exitOpen };
       mark = { date: dates[ce], close: px(model.close[ce * N + rec.i]), net: outcome.net, bench: outcome.bench, excess: outcome.excess };
-      for (let d = 1; d < HORIZON; d++) {
+      for (let d = 0; d < HORIZON; d++) {
         const x = t + d;
         const pn = ((px(model.close[x * N + rec.i]) / entryOpen) * (1 - cost)) / (1 + cost) - 1;
         path.push([d, r6(pn), r6(model.benchmark.close[x] / b0 - 1)]);
@@ -404,7 +408,7 @@ export async function buildRecord(model, rule, { seed = model.seed ?? 20260928, 
       path.push([HORIZON, outcome.net, outcome.bench]);
     } else {
       const last = T - 1;
-      for (let d = 1; t + d <= last && d < HORIZON; d++) {
+      for (let d = 0; t + d <= last && d < HORIZON; d++) {
         const x = t + d;
         const pn = ((px(model.close[x * N + rec.i]) / entryOpen) * (1 - cost)) / (1 + cost) - 1;
         path.push([d, r6(pn), r6(model.benchmark.close[x] / b0 - 1)]);
@@ -441,7 +445,7 @@ export async function buildRecord(model, rule, { seed = model.seed ?? 20260928, 
       crashSwitch: rec.crashSwitch,
       combined: r4(rec.combined),
       families,
-      sensitivity: sens ? { family: sens.family, pct: r4(sens.pct), margin: r4(sens.margin) } : null,
+      sensitivity: sens ? { family: sens.family, pct: floorPct(sens.pct), margin: floorPct(sens.margin) } : null,
       vetoChecks: checks,
       insider: model.insider(s, rec.i),
       thesis: { en: thesis.en, sl: thesis.sl },

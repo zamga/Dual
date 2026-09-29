@@ -40,6 +40,12 @@ test('formatters: true minus sign, sign + arrow + class, locale separators', () 
   assert.deepEqual(en.signed(0.034), { text: '+3.4%', arrow: '↑', cls: 'gain' });
   assert.deepEqual(en.signed(-0.02), { text: '−2.0%', arrow: '↓', cls: 'loss' });
   assert.equal(en.signed(0).cls, 'flat');
+  // classified on the value as printed: 0.000061 prints 0.0%, so no arrow and no Gain colour
+  assert.deepEqual(en.signed(0.000061), { text: '0.0%', arrow: '→', cls: 'flat' });
+  assert.deepEqual(en.signed(-0.00049), { text: '0.0%', arrow: '→', cls: 'flat' });
+  assert.equal(en.signed(0.0005).cls, 'gain');
+  assert.equal(en.signed(0.000061, { digits: 3 }).cls, 'gain');
+  assert.equal(sl.signed(0.000061).cls, 'flat');
   assert.equal(en.date('2026-09-28'), '28.09.26');
   assert.equal(sl.long('2026-09-28'), '28. sep. 2026');
 });

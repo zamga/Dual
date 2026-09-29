@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addTradingDays, countTradingDays } from '../../core/calendar.js';
-import { runQuorum, measure } from '../../engine/backtest.js';
+import { runQuorum, measure, vetoBits, rawVetoBits, llmVetoFromSignal, episodeSets, followEquity } from '../../engine/backtest.js';
+import { followPositions } from '../../engine/validate.js';
 import { fakeMarket } from './fake-market.js';
 
 const RULE = { topPct: 0.9 };
@@ -180,4 +181,52 @@ test('the monthly SMS budget trims new picks, picks plus exits', () => {
   const r = run(m.model, { maxMessages: 2 });
   assert.equal(r.records.filter((x) => x.kind === 'BUY').length, 2);
   assert.equal(r.issues[2].smsBudgetCapped, 1);
+});
+
+test('the LLM stand-in veto is not backtested: it applies only from the first issue of the sealed record', () => {
+  const m = fakeMarket({ stocks: [{ ticker: 'NWS' }, { ticker: 'DTC' }, { ticker: 'LIV' }] });
+  const { dates } = m.model;
+  // the sealed record starts with the issue on day 30 (signals at the close of day 29)
+  m.model.periods = { ...m.model.periods, sealed: [dates[30], dates[m.model.T - 1]] };
+  assert.equal(llmVetoFromSignal(m.model), 29);
+  m.qualify(0, 0);
+  m.veto(0, 0, 'llm_48h'); // before the sealed record: not applied, counted apart
+  m.qualify(1, 0);
+  m.veto(1, 0, 'days_to_cover'); // the other vetoes are backtested as always
+  m.qualify(2, 29);
+  m.veto(2, 29, 'llm_48h'); // the first sealed issue: applied
+  assert.equal(vetoBits(m.model, 0, 0), 1);
+  assert.equal(rawVetoBits(m.model, 0, 0), 1 | 32);
+  assert.equal(vetoBits(m.model, 29, 2), 1 | 32);
+  const r = run(m.model);
+  const first = r.issues[0];
+  assert.deepEqual(first.buys.map((k) => r.records[k].i), [0]);
+  assert.equal(first.vetoes.llm, 0);
+  assert.equal(first.vetoes.rule, 1);
+  assert.deepEqual(first.llmShadow, { candidates: 1, renewals: 0 });
+  const sealed = r.issues.find((x) => x.t === 30);
+  assert.equal(sealed.vetoes.llm, 1);
+  assert.equal(sealed.candidates.find((c) => c.i === 2).status, 'vetoed_llm');
+  assert.deepEqual(sealed.llmShadow, { candidates: 0, renewals: 0 });
+  // the comparison sets follow the same rule
+  const sets = episodeSets(m.model, { from: 1, to: 1, topPct: 0.9, sets: { all: (q, n2) => n2 >= 3 } });
+  assert.deepEqual(sets.all.map((p) => p.i), [0]);
+});
+
+test('follow-every-pick positions keep records whose exit lies after the window, marked to its last day', () => {
+  const m = fakeMarket({ stocks: [{ ticker: 'EARLY', drift: 0.002 }, { ticker: 'LATE', drift: 0.002 }] });
+  m.qualify(0, 0);
+  m.qualify(1, 30);
+  const end = 40; // the window ends before LATE's exit (day 31 + 21 = 52)
+  const r = run(m.model, { to: end, exitLimit: end });
+  const late = r.records.find((x) => x.i === 1);
+  assert.equal(late.outcome, null, 'unmeasured: its exit lies after exitLimit');
+  const pos = followPositions(m.model, r.records);
+  assert.deepEqual(pos.find((p) => p.i === 1), { i: 1, t: 31, tExit: 52, cost: m.model.oneWayCost(30, 1), open: true });
+  const eq = followEquity(m.model, pos, 1, end);
+  for (let d = 31; d <= end; d++) assert.equal(eq.active[d - 1], 1, `day ${d}: LATE is held, not cash`);
+  // episodeSets can return the same open tails (never in the outcome statistics)
+  const sets = episodeSets(m.model, { from: 31, to: 31, exitLimit: end, includeOpen: true, topPct: 0.9, sets: { q: (q, n2) => n2 >= 3 } });
+  assert.deepEqual(sets.q.map((p) => [p.i, p.open === true, p.excess === undefined]), [[1, true, true]]);
+  assert.deepEqual(episodeSets(m.model, { from: 31, to: 31, exitLimit: end, topPct: 0.9, sets: { q: (q, n2) => n2 >= 3 } }).q, []);
 });

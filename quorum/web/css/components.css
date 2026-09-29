@@ -33,14 +33,12 @@
   align-items: center;
 }
 
+/* The complete disclaimer at every width: one line from 1200 px, wrapped below (never a shorter text). */
 .demo-bar__text {
   grid-column: r1 / r3;
   padding-block: 9px;
   color: var(--mist);
-}
-
-.demo-bar__text .demo-bar__long {
-  display: none;
+  line-height: 1.45;
 }
 
 .demo-bar__tier {
@@ -118,15 +116,6 @@
   display: none;
 }
 
-@media (min-width: 1200px) {
-  .demo-bar__text .demo-bar__long {
-    display: inline;
-  }
-  .demo-bar__text .demo-bar__short {
-    display: none;
-  }
-}
-
 @media (max-width: 1023.98px) {
   .demo-bar__tier > .label {
     display: none;
@@ -134,18 +123,24 @@
 }
 
 @media (max-width: 639.98px) {
+  /* Phones: the sentence takes every pixel left of the view-as select and wraps (two or three lines). */
   .demo-bar {
     min-height: 46px;
+    display: flex;
+    gap: 10px;
+    padding-left: 16px;
   }
   .demo-bar__text {
-    grid-column: r1 / r3;
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 0.625rem;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.03em;
+    padding-block: 7px;
   }
-  .mark__word {
+  .site-header .mark__word {
     font-size: 1.2rem;
   }
-  .mark {
+  .site-header .mark {
     gap: 8px;
   }
   .site-header .pill {
@@ -153,8 +148,11 @@
     gap: 7px;
   }
   .demo-bar__tier {
-    grid-column: r3 / full-end;
+    flex: none;
     padding-right: 0;
+  }
+  .demo-bar.is-live .demo-bar__tier {
+    display: none;
   }
   .demo-bar__tier .seg,
   .demo-bar__tier > .label,
@@ -655,12 +653,16 @@
   height: 0;
 }
 
+/* The plinths never sit on content: they are hidden (and let clicks through) until they are needed,
+   when the pointer comes within 48 px of the viewport's bottom edge (.is-near, set by shell.js), when a
+   rule is lit, or when a keyboard user tabs to one (:focus-within). */
 .plinth {
   grid-row: 1;
   justify-self: start;
   transform: translate(-50%, -100%);
   margin-top: -10px;
-  pointer-events: auto;
+  pointer-events: none;
+  opacity: 0;
   appearance: none;
   border: 1px solid var(--hairline);
   background: var(--karst);
@@ -675,7 +677,14 @@
   display: grid;
   place-items: center;
   padding: 0;
-  transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+  transition: opacity var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.plinths.is-near .plinth,
+.plinths.is-lit .plinth,
+.plinths:focus-within .plinth {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .plinths[data-surface='hero'] {
@@ -1043,7 +1052,7 @@
   padding: 2px 8px 2px 7px;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  background: transparent;
+  background: var(--bg); /* opaque: a rule passes behind the hash, never through it */
   color: var(--fg);
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
@@ -1218,18 +1227,42 @@
 }
 
 /* ---- headline statistics (fixed order, never animated, never the largest element) ------------- */
+/* A strip spans r1→r4 and stands on the colonnade: one stat per bay from 640 px, one per half-bay from
+   1280 px (every other edge is a rule), two per row on phones. Each stat is a row subgrid (label, value,
+   note), so values share one baseline whatever the label's length, and text keeps the inset from a rule. */
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   border-top: 1px solid var(--rule);
 }
 
 .stat {
   display: grid;
-  gap: 6px;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: 6px;
   align-content: start;
-  padding: 16px 16px 18px 0;
+  padding: 16px var(--inset) 18px;
   border-bottom: 1px solid var(--rule);
+}
+
+@media (min-width: 640px) {
+  .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .stats {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* phones: the strip's columns are not on the rules, so the rules pass behind each stat */
+@media (max-width: 639.98px) {
+  .stat {
+    background: var(--bg);
+  }
 }
 
 .stat__k {
@@ -1307,6 +1340,15 @@
 .table tbody tr:last-child td,
 .table tbody tr:last-child th {
   border-bottom-color: var(--fg);
+}
+
+/* Rules pass behind data. A table whose columns do not end on the rules has opaque cells (--bg), so
+   a rule never strikes a digit; the colonnade stops at the table and resumes after it. Tables laid out
+   on the rules (the ledger's record table, .table--on-rules) keep them visible. Definition rows do the
+   same for their terms and values only, so the rule still shows in the gap between them. */
+.table:not(.table--on-rules) :is(th, td),
+.dl > div > :is(dt, dd) {
+  background: var(--bg);
 }
 
 /* ---- figures ------------------------------------------------------------------------------------- */
@@ -1559,4 +1601,42 @@
   font-stretch: var(--wdth-mono);
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
+}
+
+/* ---- contact address with a Copy button (mailto is unreliable in the Artifact viewer) ------------- */
+.contact {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+
+.contact__addr {
+  user-select: all;
+}
+
+.contact__copy {
+  appearance: none;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: var(--fs-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  min-height: 28px;
+}
+
+.contact__copy:hover {
+  border-color: var(--fg);
+}
+
+@media (max-width: 639.98px) {
+  .contact__copy {
+    min-height: 44px;
+    padding-inline: 12px;
+  }
 }

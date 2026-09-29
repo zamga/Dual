@@ -2,8 +2,16 @@
 //
 //   06:00        writeCandidates(input)     candidates written (access-controlled; every read is logged)
 //   11:30        explain(date)              Claude: 48-hour news veto scan, EN/SL thesis drafts
-//   12:00-13:40  veto / writeThesis / signOff (server/admin.js)   the named approver, removal only
-//   13:40        closeReview(date)          no approver or deputy -> "no_approver"; no validated thesis -> removed
+//   12:00-13:40  veto / reviewNews / writeThesis / signOff (server/admin.js)   the named approver, removal only
+//   13:40        closeReview(date)          no approver or deputy -> "no_approver"; news not cleared and not
+//                                           reviewed -> removed; no validated thesis -> removed
+//
+// The 48-hour news veto fails closed. A candidate goes through untouched only when the scan came
+// back 'clear' (no items, or the model found nothing and the keyword floor did not fire). When the
+// scan could not run ('unavailable', 'pending') or was not conclusive ('needs_review'), the named
+// approver must read the items in the console and record "news reviewed, nothing material"
+// (reviewNews, logged with the person); otherwise the candidate is removed at 13:40 with the code
+// 'news_unreviewed'. The ISSUE entry counts the scan outcomes (newsScan).
 //   13:45        seal(date)                 BUY/RENEW ledger entries: canonical JSON, SHA-256, prevHash,
 //                                           producedAt; each carries the commit of a salted reveal
 //   14:00:00     publish(date)              ISSUE entry, recommendations (disseminated_at, dissemination
@@ -23,10 +31,12 @@ import { createEntry, commitment, verifyReveal, verifyChain } from '../core/ledg
 import { canonicalize } from '../core/canonical-json.js';
 import { issueSlot, isTradingDay, formatInZone, zonedToInstant, fmtLong, LJUBLJANA } from '../core/calendar.js';
 import { randomToken } from '../core/hash.js';
-import { checkThesisDraft } from './explainer.js';
+import { checkThesisDraft, newsRedFlags, floorNote } from './explainer.js';
 import { iso, sha256 } from './util.js';
 
 export const HORIZON = 21;
+// veto_scan values that need the approver's own reading of the news before the candidate may issue
+export const NEWS_REVIEW_NEEDED = ['pending', 'unavailable', 'needs_review'];
 export const PIPELINE_TIMES = { candidates: '06:00', explain: '11:30', reviewOpens: '12:00', reviewCloses: '13:40', seal: '13:45', publish: '14:00' };
 const STAGES = ['candidates', 'explained', 'reviewed', 'sealed', 'published', 'marked', 'anchored'];
 const FAMILY_NAME = { A: { en: 'trend', sl: 'trend' }, B: { en: 'fundamental momentum', sl: 'fundamentalni momentum' }, C: { en: 'quality/value', sl: 'kakovost/vrednost' }, D: { en: 'ML ranker', sl: 'rangirnik ML' } };
@@ -184,9 +194,7 @@ export function factorJsonOf(c, { date, topPct = 0.95, vetoScan = null } = {}) {
       drivers: (x.drivers ?? []).map((d) => ({ key: d.key, label: d.label, value: d.value, unit: d.unit ?? 'z', raw: d.raw ?? null, context: d.context ?? false })),
     };
   }
-  const checks = (c.vetoChecks ?? []).map((v) =>
-    v.key === 'llm_48h' ? { key: 'llm_48h', pass: vetoScan ? vetoScan !== 'flagged' : v.pass, note: vetoScan === 'clear' ? 'Claude news scan' : v.note ?? null } : { ...v },
-  );
+  const checks = (c.vetoChecks ?? []).map((v) => (v.key === 'llm_48h' ? newsCheck(v, vetoScan) : { ...v }));
   const earnings = checks.find((v) => v.key === 'earnings_within_3d' && v.next);
   return {
     simulated: true,
@@ -211,6 +219,27 @@ export function factorJsonOf(c, { date, topPct = 0.95, vetoScan = null } = {}) {
     exitPlanned: c.exitPlanned,
     exitPlannedText: { en: fmtLong(c.exitPlanned, 'en'), sl: fmtLong(c.exitPlanned, 'sl') },
   };
+}
+
+// newsCheck(engineCheck, vetoScan) -> the llm_48h entry of the factor JSON. Only a scan that cleared
+// passes; a scan that did not run or was not conclusive passes nothing (pass: null), and its note
+// says what a published pick then rests on: the approver's own reading of the news.
+export function newsCheck(v, vetoScan) {
+  switch (vetoScan) {
+    case null:
+    case undefined:
+      return { key: 'llm_48h', pass: v.pass ?? null, note: v.note ?? null };
+    case 'clear':
+      return { key: 'llm_48h', pass: true, note: 'Claude news scan' };
+    case 'flagged':
+      return { key: 'llm_48h', pass: false, note: 'Claude news scan' };
+    case 'reviewed':
+      return { key: 'llm_48h', pass: true, note: 'the automated scan did not clear it; the approver read the news: nothing material' };
+    case 'needs_review':
+      return { key: 'llm_48h', pass: null, note: 'the automated scan did not clear it; the approver reads the news before sign-off' };
+    default:
+      return { key: 'llm_48h', pass: null, note: 'the automated scan did not run; the approver reads the news before sign-off' };
+  }
 }
 
 // ------------------------------------------------------------------ the publisher
@@ -409,29 +438,39 @@ export function createPublisher(ctx, { explainer = null, anchorer = null, notifi
     if (!r) throw new PipelineError('no_candidates', `No candidates for ${date}`);
     if (stageAtLeast(r, 'explained')) return { date, skipped: 'already_explained' };
     const input = parse(r.input_json, {});
-    const out = { date, scanned: 0, flagged: 0, drafted: 0, handoff: 0, disabled: !explainer?.enabled, reason: explainer?.disabledReason ?? null };
+    const out = { date, scanned: 0, flagged: 0, needsReview: 0, drafted: 0, handoff: 0, disabled: !explainer?.enabled, reason: explainer?.disabledReason ?? null };
     for (const c of readCandidates(date, { actor: 'system:explainer', purpose: 'explain' })) {
       if (c.status !== 'candidate') continue;
       const p = c.payload;
-      let scan = 'unavailable';
-      if (explainer) {
-        const s = await explainer.vetoScan({ candidateId: c.id, ticker: p.ticker, name: p.name, sector: p.sector, asOf: localIso(ctx.now()), windowHours: 48, items: p.news ?? [] });
-        out.scanned++;
-        scan = s.status;
-        if (s.status === 'flagged') {
-          out.flagged++;
-          db.tx(() => {
-            db.run("UPDATE candidates SET status = 'vetoed_llm', veto_scan = 'flagged', thesis_status = NULL, status_reason = ?, updated_at = ? WHERE id = ?", `llm_48h: ${s.category}: ${s.reason}`, iso(ctx.now()), c.id);
-            db.run("INSERT INTO vetoes (candidate_id, type, detail, created_at) VALUES (?, 'llm_48h', ?, ?)", c.id, JSON.stringify({ category: s.category, reason: s.reason, items: s.itemIds, explanationId: s.explanationId }), iso(ctx.now()));
-          });
-          continue;
-        }
-        db.run('UPDATE candidates SET veto_scan = ?, updated_at = ? WHERE id = ?', s.status, iso(ctx.now()), c.id);
-      } else {
-        db.run("UPDATE candidates SET veto_scan = 'unavailable', updated_at = ? WHERE id = ?", iso(ctx.now()), c.id);
+      const items = p.news ?? [];
+      const s = explainer
+        ? await explainer.vetoScan({ candidateId: c.id, ticker: p.ticker, name: p.name, sector: p.sector, asOf: localIso(ctx.now()), windowHours: 48, items })
+        : items.length
+          ? { status: 'unavailable', category: null, reason: 'explainer not configured', itemIds: [], explanationId: null, redFlags: newsRedFlags(items), unscanned: items.length }
+          : { status: 'clear', category: 'none', reason: 'no news items in the last 48 hours', itemIds: [], explanationId: null, redFlags: [], unscanned: 0 };
+      if (explainer) out.scanned++;
+      const scan = s.status;
+      const detail = JSON.stringify({ status: s.status, category: s.category ?? null, reason: s.reason ?? null, itemIds: s.itemIds ?? [], explanationId: s.explanationId ?? null, redFlags: s.redFlags ?? [], unscanned: s.unscanned ?? 0 });
+      if (scan === 'flagged') {
+        out.flagged++;
+        db.tx(() => {
+          db.run("UPDATE candidates SET status = 'vetoed_llm', veto_scan = 'flagged', veto_scan_detail = ?, thesis_status = NULL, status_reason = ?, updated_at = ? WHERE id = ?", detail, `llm_48h: ${s.category}: ${s.reason}`, iso(ctx.now()), c.id);
+          db.run("INSERT INTO vetoes (candidate_id, type, detail, created_at) VALUES (?, 'llm_48h', ?, ?)", c.id, JSON.stringify({ category: s.category, reason: s.reason, items: s.itemIds, explanationId: s.explanationId }), iso(ctx.now()));
+        });
+        continue;
       }
+      if (c.veto_scan === 'reviewed') {
+        // The approver already read this candidate's news (before the scan ran): the review stands,
+        // and the scan's answer is kept beside it (a flag, above, still removes the candidate).
+        const prev = parse(c.veto_scan_detail, {});
+        db.run('UPDATE candidates SET veto_scan_detail = ?, updated_at = ? WHERE id = ?', JSON.stringify({ ...JSON.parse(detail), review: prev.review ?? null }), iso(ctx.now()), c.id);
+      } else {
+        if (NEWS_REVIEW_NEEDED.includes(scan)) out.needsReview++;
+        db.run('UPDATE candidates SET veto_scan = ?, veto_scan_detail = ?, updated_at = ? WHERE id = ?', scan, detail, iso(ctx.now()), c.id);
+      }
+      const draftScan = c.veto_scan === 'reviewed' ? 'reviewed' : scan;
       const d = explainer
-        ? await explainer.draftThesis({ candidateId: c.id, factorJson: factorJsonOf(p, { date, topPct: input.topPct, vetoScan: scan }) })
+        ? await explainer.draftThesis({ candidateId: c.id, factorJson: factorJsonOf(p, { date, topPct: input.topPct, vetoScan: draftScan }) })
         : { status: 'handoff', reason: 'explainer not configured' };
       if (d.status === 'passed') out.drafted++;
       else out.handoff++;
@@ -470,6 +509,25 @@ export function createPublisher(ctx, { explainer = null, anchorer = null, notifi
       logAccess(`person:${p.public_id}`, 'veto', 'candidate', String(c.id), ip);
     });
     return { ok: true, candidateId: c.id, status: 'vetoed_human', by: p.public_id };
+  }
+
+  // reviewNews(date, candidateId, { personId, note, ip }): the approver has read the candidate's
+  // 48-hour news (shown in the console) because the automated scan did not clear it, and records that
+  // nothing is material. Logged with the person; without it the candidate is removed at 13:40.
+  // (Material news is a veto: veto() with the reason.)
+  function reviewNews(date, candidateId, { personId, note = null, ip = null } = {}) {
+    reviewOpen(date);
+    const p = approverPerson(personId, date);
+    const c = candidateFor(date, candidateId);
+    if (c.status !== 'candidate') throw new PipelineError('not_open', `This candidate is already ${c.status}`);
+    if (!NEWS_REVIEW_NEEDED.includes(c.veto_scan)) throw new PipelineError('review_not_needed', `The news scan of this candidate is ${c.veto_scan}: no news review to record`);
+    const now = iso(ctx.now());
+    const detail = { ...parse(c.veto_scan_detail, {}), review: { by: p.public_id, at: now, note: note ? String(note).slice(0, 1000) : null, before: c.veto_scan } };
+    db.tx(() => {
+      db.run("UPDATE candidates SET veto_scan = 'reviewed', veto_scan_detail = ?, news_reviewed_by = ?, news_reviewed_at = ?, updated_at = ? WHERE id = ?", JSON.stringify(detail), p.id, now, now, c.id);
+      logAccess(`person:${p.public_id}`, 'news_reviewed', 'candidate', String(c.id), ip);
+    });
+    return { ok: true, candidateId: c.id, vetoScan: 'reviewed', by: p.public_id };
   }
 
   // writeThesis(date, candidateId, { personId, en, sl }): the approver writes (or replaces) the thesis
@@ -518,12 +576,20 @@ export function createPublisher(ctx, { explainer = null, anchorer = null, notifi
     if (stageAtLeast(r, 'reviewed')) return { date, skipped: 'already_reviewed' };
     const who = signedOff(date);
     const now = iso(ctx.now());
-    const out = { date, approver: who?.public_id ?? null, noApprover: 0, noThesis: 0 };
+    const out = { date, approver: who?.public_id ?? null, noApprover: 0, newsUnreviewed: 0, noThesis: 0 };
     db.tx(() => {
       for (const c of db.all("SELECT * FROM candidates WHERE date = ? AND status = 'candidate'", date)) {
         if (reason || !who) {
           db.run("UPDATE candidates SET status = 'no_approver', status_reason = ?, updated_at = ? WHERE id = ?", reason ?? 'unissued (no approver): no approver or deputy signed off by 13:40', now, c.id);
           out.noApprover++;
+        } else if (NEWS_REVIEW_NEEDED.includes(c.veto_scan)) {
+          // The published news veto never passes by default: no scan that cleared, no review, no pick.
+          const d = parse(c.veto_scan_detail, {});
+          const why = c.veto_scan === 'needs_review' ? floorNote(d.redFlags ?? [], d.unscanned ?? 0) : `the scan did not run (${d.reason ?? c.veto_scan})`;
+          const text = `The 48-hour news check did not clear by 13:40: ${why}, and no news review was recorded.`;
+          db.run("UPDATE candidates SET status = 'vetoed_human', status_reason = ?, updated_at = ? WHERE id = ?", text.slice(0, 1000), now, c.id);
+          db.run("INSERT INTO vetoes (candidate_id, type, detail, person_id, created_at) VALUES (?, 'human', ?, ?, ?)", c.id, JSON.stringify({ en: text.slice(0, 1000), sl: null, code: 'news_unreviewed' }), who.person_id, now);
+          out.newsUnreviewed++;
         } else if (!thesisOf(c.id)) {
           const text = 'No validated thesis by 13:40 (the draft failed the checks or the explainer was unavailable, and the approver did not write one).';
           db.run("UPDATE candidates SET status = 'vetoed_human', status_reason = ?, updated_at = ? WHERE id = ?", text, now, c.id);
@@ -633,6 +699,9 @@ export function createPublisher(ctx, { explainer = null, anchorer = null, notifi
       approver: who?.public_id ?? null,
       humanVetoes: human,
       unissued: cands.filter((c) => c.status === 'no_approver').length,
+      // The 48-hour news scan of the day's candidates: cleared by the scan, flagged (removed), cleared
+      // by the approver's own reading after a scan that did not clear, or never cleared (removed).
+      newsScan: newsScanCounts(cands),
     };
     if (late) body.late = true;
     if (input.candidatesMissing) body.engineOutput = 'missing';
@@ -741,6 +810,17 @@ export function createPublisher(ctx, { explainer = null, anchorer = null, notifi
     if (!late && notifier) notify = await notifier.enqueueIssue({ date, items, publishedAt, slot });
     else if (late) ctx.alerts?.raise('issue_late', `Issue ${date} published late at ${publishedAt}; no notifications were sent`, { severity: 'page', dedupeKey: `late:${date}` });
     return { date, issueNo, seq: issueEntry.seq, hash: issueEntry.hash, publishedAt, late, items, notify, vetoes, body };
+  }
+
+  function newsScanCounts(cands) {
+    const out = { clear: 0, flagged: 0, reviewed: 0, unreviewed: 0 };
+    for (const c of cands) {
+      if (c.veto_scan === 'clear') out.clear++;
+      else if (c.veto_scan === 'flagged') out.flagged++;
+      else if (c.veto_scan === 'reviewed') out.reviewed++;
+      else if (NEWS_REVIEW_NEEDED.includes(c.veto_scan)) out.unreviewed++;
+    }
+    return out;
   }
 
   function conflicts(date) {
@@ -904,6 +984,7 @@ export function createPublisher(ctx, { explainer = null, anchorer = null, notifi
     readCandidates,
     explain,
     veto,
+    reviewNews,
     writeThesis,
     signOff,
     closeReview,

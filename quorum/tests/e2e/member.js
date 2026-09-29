@@ -192,11 +192,15 @@ export async function memberChecks({ browser, base, sizes = [[390, 844], [1440, 
       if (!found.includes(firstTicker)) fail(where, [`search for ${firstTicker} lost it`]);
       await page.fill('.rx-search', '');
       // keyboard: one tab stop, arrows move the active row, Enter opens the stock
-      await page.focus('.rx-scroll');
+      // (the focus stop is the role=grid element itself, named, with aria-activedescendant and a row count)
+      await page.focus('.rx-grid');
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('ArrowDown');
-      const act = await page.evaluate(() => document.querySelector('.rx-scroll').getAttribute('aria-activedescendant'));
-      if (act !== 'rx-c-2') fail(where, [`arrow keys: active ${act}`]);
+      const act = await page.evaluate(() => {
+        const g = document.querySelector('.rx-grid');
+        return { id: g.getAttribute('aria-activedescendant'), role: g.getAttribute('role'), name: g.getAttribute('aria-label'), rows: g.getAttribute('aria-rowcount'), focused: document.activeElement === g };
+      });
+      if (act.id !== 'rx-c-2' || act.role !== 'grid' || !act.name || !(Number(act.rows) > 1) || !act.focused) fail(where, [`grid keyboard stop: ${JSON.stringify(act)}`]);
       const t2 = await page.evaluate(() => document.querySelector('#rx-c-2 .rx-ticker')?.textContent);
       await page.keyboard.press('Enter');
       await ready(page);
@@ -230,6 +234,11 @@ export async function memberChecks({ browser, base, sizes = [[390, 844], [1440, 
       await audit(page, `${where} withdraw confirm`, fail, logs);
       await page.click('#withdrawal .m-confirm__yes');
       if (!/Withdrawal confirmed|Odstop potrjen/.test((await page.textContent('#withdrawal')) ?? '')) fail(where, ['withdrawal not confirmed']);
+      // the rest of the page follows the withdrawal: billing withdrawn, no refund offer left, SMS off
+      await page.waitForFunction(() => /withdrawn|odstopljeno/.test(document.querySelector('#billing, .acc-billing')?.textContent ?? ''), null, { timeout: 5000 }).catch(() => {});
+      const after = await page.evaluate(() => ({ billing: document.querySelector('.acc-billing')?.textContent ?? '', withdrawal: document.querySelector('#withdrawal')?.textContent ?? '' }));
+      if (!/withdrawn|odstopljeno/.test(after.billing)) fail(where, ['billing still shows the subscription as active after the withdrawal']);
+      if (/You can withdraw until|Odstopite lahko do/.test(after.withdrawal)) fail(where, ['the refund offer is still shown after the withdrawal']);
       await page.click('#data .m-copy .btn');
       await page.click('#data .m-rawbox summary');
       await page.waitForFunction(() => document.querySelector('#data .m-raw')?.value.length > 20, null, { timeout: 5000 }).catch(() => {});

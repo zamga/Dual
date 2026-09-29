@@ -8,9 +8,11 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { startServer } from '../tests/e2e/server.js';
 import { sampleRoutes, sampleData } from '../tests/e2e/routes.js';
-import { overflow, basics, contrast } from '../tests/e2e/checks.js';
+import { overflow, basics, contrast, ruleStrike, copyChecks } from '../tests/e2e/checks.js';
+import { liveChecks } from '../tests/e2e/live.js';
 
 const require = createRequire(import.meta.url);
 function loadPlaywright() {
@@ -38,6 +40,8 @@ const t0 = performance.now();
 const server = args.base ? null : await startServer(ROOT);
 const BASE = String(args.base ?? server.url);
 const routes = await sampleRoutes(resolve(ROOT, 'data'));
+// Before launch no page may say a text was sent (tests/e2e/checks.js copyChecks).
+const launchReady = await readFile(resolve(ROOT, 'data', 'backtest.json'), 'utf8').then((s) => JSON.parse(s).launch?.status === 'ready').catch(() => false);
 const failures = [];
 const fail = (where, list) => list.forEach((m) => failures.push(`${where}: ${m}`));
 
@@ -68,6 +72,8 @@ for (const [w, h] of SIZES) {
     fail(where, await page.evaluate(overflow));
     fail(where, await page.evaluate(basics));
     fail(where, await page.evaluate(contrast));
+    fail(where, await page.evaluate(ruleStrike));
+    fail(where, await page.evaluate(copyChecks, launchReady));
   }
   await context.close();
 }
@@ -186,6 +192,15 @@ for (const [flag, want] of [['?gl=webgl', 'webgl'], ['?gl=canvas', 'canvas'], ['
   const leak2 = await fp.evaluate((t) => [...document.querySelectorAll('.lg-row.is-sealed')].some((r) => r.textContent.includes(t)), d.open.ticker);
   if (leak2) failures.push(`free ledger leaks the open ticker ${d.open.ticker}`);
   await free.close();
+}
+
+// Live mode: the Node server's redaction, an anonymous visitor (skipped with --base or --no-live).
+if (!args.base && !args['no-live']) {
+  try {
+    await liveChecks({ browser, webRoot: ROOT, fail });
+  } catch (e) {
+    failures.push(`live mode: ${e.stack || e.message}`);
+  }
 }
 
 await browser.close();

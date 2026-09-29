@@ -25,6 +25,16 @@ const VETO_BIT = { days_to_cover: 2, idio_vol: 4, earnings_within_3d: 8, pending
 
 export const round = (x, d = 6) => (typeof x === 'number' && Number.isFinite(x) ? Math.round(x * 10 ** d) / 10 ** d : null);
 
+/**
+ * A family percentile as published (4 decimals), truncated rather than rounded so that a published
+ * value is at or above the rule's topPct exactly when the family votes: 0.94996 is published as 0.9499,
+ * never as 0.95. Null when the family does not score the stock.
+ */
+export const floorPct = (x) => (typeof x === 'number' && Number.isFinite(x) ? Math.floor(x * 1e4) / 1e4 : null);
+
+/** A percentile as the integer permille of hero.json (0-999), truncated like floorPct; -1 when not scored. */
+export const permille = (x) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(0, Math.min(999, Math.floor(x * 1000))) : -1);
+
 /** Model day index of a date (exact match), or -1. */
 export function dayIndex(model, date) {
   const { dates } = model;
@@ -67,11 +77,20 @@ export function periodRange(model, name) {
 }
 
 // ---- vetoes -------------------------------------------------------------------------------------------
+//
+// The LLM 48-hour news veto (llm_48h; in the simulation a deterministic stand-in) is never backtested
+// (brief §3.3): LLM components are validated only on dates after the model's training cutoff, so the
+// veto is validated live, from the first issue of the sealed record on. vetoBits() therefore masks it
+// for every issue day before model.periods.sealed[0]: the research window, the calibration, the variant
+// matrix, the holdout and every comparison set run without it. rawVetoBits() keeps it, for the
+// would-be blocks published beside the backtest (llmVetoShadow).
 
+export const VETO_BIT_LLM = VETO_BIT.llm_48h;
 const vetoMemo = new WeakMap();
+const llmFromMemo = new WeakMap();
 
-/** Veto bit mask for stock i at signal day s (bit 0 = computed). Memoised per model. */
-export function vetoBits(model, s, i) {
+/** Veto bit mask for stock i at signal day s with every veto, the LLM stand-in included (bit 0 = computed). */
+export function rawVetoBits(model, s, i) {
   let arr = vetoMemo.get(model);
   if (!arr) {
     arr = new Uint8Array(model.T * model.N);
@@ -85,6 +104,26 @@ export function vetoBits(model, s, i) {
     arr[k] = b;
   }
   return b;
+}
+
+/**
+ * First signal day on which the LLM veto applies: the day before the first issue of the sealed record
+ * (model.periods.sealed[0]); signal day s feeds the issue on day s + 1. Memoised per model.
+ */
+export function llmVetoFromSignal(model) {
+  let s0 = llmFromMemo.get(model);
+  if (s0 === undefined) {
+    const live = model.periods?.sealed?.[0];
+    s0 = live ? Math.max(0, firstOnOrAfter(model, live) - 1) : 0;
+    llmFromMemo.set(model, s0);
+  }
+  return s0;
+}
+
+/** Veto bit mask that applies at signal day s: rawVetoBits without the LLM stand-in before the sealed record. */
+export function vetoBits(model, s, i) {
+  const b = rawVetoBits(model, s, i);
+  return s < llmVetoFromSignal(model) ? b & ~VETO_BIT_LLM : b;
 }
 
 export function vetoKeysOf(bits) {
@@ -167,7 +206,9 @@ export function measure(model, i, tEntry, tExit, { full = false } = {}) {
  *   records[k]: { k, kind: 'BUY'|'RENEW', i, s, t, tExit, prior, next, agreement, agreeing, combined,
  *                 crashSwitch, pct, sector, status: 'open'|'closed'|'renewed', outcome, closeT }
  *   issues[]:   { t, s, date, nScored, closest, required, reached, crashSwitch, buys, renews, closes,
- *                 vetoes: {rule, llm, human, capped}, human: [...], approver, unissued, candidates? }
+ *                 vetoes: {rule, llm, human, capped}, human: [...], approver, unissued, candidates?,
+ *                 llmShadow: {candidates, renewals} (before the sealed record only: what the LLM
+ *                 stand-in, which is not backtested, would have blocked) }
  */
 export function runQuorum(model, o) {
   const rule = { ...DEFAULT_RULE, ...(o.rule || {}) };
@@ -196,6 +237,9 @@ export function runQuorum(model, o) {
   const pC = model.pct.C;
   const pD = model.pct.D;
   const top = rule.topPct;
+  const llmFrom = llmVetoFromSignal(model);
+  // before the sealed record the LLM stand-in does not veto; count what it would have blocked
+  const llmWouldBlock = (s, i) => s < llmFrom && (rawVetoBits(model, s, i) & VETO_BIT_LLM) !== 0;
 
   const stockAt = (s, i) => ({ id: i, ticker: tickerOf[i], sector: sectorOf[i], pct: pctOf(model, s, i), vetoes: vetoKeysOf(vetoBits(model, s, i)) });
 
@@ -214,7 +258,7 @@ export function runQuorum(model, o) {
       monthCount = 0;
       sentThisMonth = 0;
     }
-    const issue = { t, s, date, crashSwitch: cs, buys: [], renews: [], closes: [], vetoes: { rule: 0, llm: 0, human: 0, capped: 0 }, human: [], approver: null, unissued: 0 };
+    const issue = { t, s, date, crashSwitch: cs, buys: [], renews: [], closes: [], vetoes: { rule: 0, llm: 0, human: 0, capped: 0 }, human: [], approver: null, unissued: 0, llmShadow: { candidates: 0, renewals: 0 } };
 
     // 1. the day-21 slot: RENEW or CLOSE every record whose window ends at today's open
     const due = open.filter((k) => records[k].tExit === t).sort((a, b) => a - b);
@@ -234,6 +278,7 @@ export function runQuorum(model, o) {
         rec.next = nk;
         open.push(nk);
         issue.renews.push(nk);
+        if (llmWouldBlock(s, rec.i)) issue.llmShadow.renewals++;
       } else {
         closeRecord(rec, t, 'closed');
         issue.closes.push(k);
@@ -283,6 +328,7 @@ export function runQuorum(model, o) {
       if (c.status === 'vetoed_rule') issue.vetoes.rule++;
       else if (c.status === 'vetoed_llm') issue.vetoes.llm++;
       else if (c.status.startsWith('capped') || c.status === 'cooldown') issue.vetoes.capped++;
+      if (c.status !== 'vetoed_rule' && c.status !== 'already_open' && llmWouldBlock(s, c.id)) issue.llmShadow.candidates++;
     }
 
     sentThisMonth += issue.renews.length + issue.closes.length;
@@ -429,9 +475,12 @@ export function compositeABC(model) {
  * day it qualifies (signals at s = t - 1, no veto firing), is held from open[t] to open[t + 21] and can
  * re-enter at that slot if it still qualifies. Same costs and benchmark as picks.
  * @param sets { name: (q, n2, ctx) => boolean } where q = s * N + i and n2 = families in the top slice
- * @returns { name: [{ i, t, tExit, excess, net, bench }] }
+ * @param includeOpen  also return the positions whose exit lies after exitLimit, as { i, t, tExit, cost,
+ *                     open: true } with no outcome (for the follow-every-position equity, which marks them
+ *                     to the end of the period; outcome statistics must use only the measured ones)
+ * @returns { name: [{ i, t, tExit, excess, net, bench, cost }] }
  */
-export function episodeSets(model, { from, to, exitLimit = model.T - 1, topPct = 0.9, sets, vetoes = true, extra = {} }) {
+export function episodeSets(model, { from, to, exitLimit = model.T - 1, topPct = 0.9, sets, vetoes = true, extra = {}, includeOpen = false }) {
   const { N, T } = model;
   const names = Object.keys(sets);
   const held = names.map(() => new Int32Array(N).fill(-1));
@@ -458,7 +507,10 @@ export function episodeSets(model, { from, to, exitLimit = model.T - 1, topPct =
         }
         const tExit = t + HORIZON;
         held[k][i] = tExit;
-        if (tExit > exitLimit) continue;
+        if (tExit > exitLimit) {
+          if (includeOpen) out[names[k]].push({ i, t, tExit, cost: model.oneWayCost(s, i), open: true });
+          continue;
+        }
         const m = measure(model, i, t, tExit);
         if (m) out[names[k]].push({ i, t, tExit, excess: m.excess, net: m.net, bench: m.bench, cost: m.cost });
       }

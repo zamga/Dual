@@ -23,4 +23,6 @@ test('cell text matches the brief format', () => {
   const L = (en) => en;
   assert.equal(cellText({ date: '2026-09-28', nScored: 1402, closest: 2, quorum: false, closes: [] }, { fmt, L }), '28.09.26 · 1,402 scored · closest 2/4');
   assert.match(cellText({ date: '2026-09-28', nScored: 1384, closest: 3, quorum: true, buys: ['0055'], renews: [] }, { fmt, L }), /quorum 3\/4 · #0055$/);
+  // stocks met the rule but were all held or capped: "no new pick", never "no quorum"
+  assert.equal(cellText({ date: '2025-10-09', nScored: 1353, closest: 3, reached: 8, quorum: false, closes: ['0002'] }, { fmt, L }), '09.10.25 · 1,353 scored · 3/4 met, no new pick · exit #0002');
 });

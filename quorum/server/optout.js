@@ -2,18 +2,26 @@
 // nothing (link scanners and previews fetch it). POST /u/:token opts the user out of all SMS at
 // once: a consent revoke event, an opt_outs row, the SMS channel off, and exactly one OPT_OUT
 // confirmation text. Our database is the source of truth; Twilio's opt-out list cannot be queried.
+//
+// The pages are no validity oracle: GET answers the same bilingual page for every token, and POST
+// answers an unknown token exactly as it answers a known one whose texts are already off (only a
+// POST that really switched texts off says so, and that one has already done its work). Unknown
+// tokens count against a global budget that pages on-call when someone scans for valid ones.
 import { renderSms } from '../core/sms-templates.js';
 import { latestConsent, recordConsent } from './consent.js';
 import { userForToken, TOKEN_RE } from './tokens.js';
 import { sendHtml, sendJson, mediaType } from './http.js';
+import { FONT_STYLESHEET } from './fonts.js';
 import { escapeHtml, iso } from './util.js';
 
 export function createOptOut(ctx) {
   const { db } = ctx;
 
-  // optOutSms(userId, { source, channel, ip, userAgent, pageUrl, locale, confirm = true })
+  // optOutSms(userId, { source, channel, ip, userAgent, pageUrl, locale, confirm = true, background = false })
   //   -> { changed, alreadyOff, confirmationQueued }
-  async function optOutSms(userId, { source, channel = 'web', ip = null, userAgent = null, pageUrl = null, locale = null, token = null, confirm = true } = {}) {
+  // background: the confirmation text is sent without waiting for the provider (the link page
+  // answers in the same time whatever the token was).
+  async function optOutSms(userId, { source, channel = 'web', ip = null, userAgent = null, pageUrl = null, locale = null, token = null, confirm = true, background = false } = {}) {
     const now = ctx.now();
     let result = { changed: false, alreadyOff: true, confirmationQueued: false };
     let dispatchId = null;
@@ -67,7 +75,11 @@ export function createOptOut(ctx) {
         }
       }
     });
-    if (dispatchId != null) await ctx.messaging.dispatch([dispatchId]);
+    if (dispatchId != null) {
+      const sent = ctx.messaging.dispatch([dispatchId]);
+      if (background) sent.catch((e) => ctx.log.error(`[optout] confirmation ${dispatchId}: ${e.message}`));
+      else await sent;
+    }
     return result;
   }
 
@@ -75,6 +87,7 @@ export function createOptOut(ctx) {
 }
 
 // ------------------------------------------------------------------ pages
+// Every page is bilingual (EN, then SL): the language must not depend on whose token it is.
 const COPY = {
   en: {
     title: 'Stop text alerts',
@@ -82,11 +95,10 @@ const COPY = {
     detail: 'One tap switches off every SMS from Quorum. Your subscription, email and push notifications stay as they are.',
     button: 'Stop text alerts',
     doneTitle: 'Text alerts are off',
-    done: 'We will not text this number again. You get one text confirming this. Your subscription is unchanged.',
-    already: 'Text alerts for this number are already off. Your subscription is unchanged.',
+    done: 'We will not text this number again. One text confirms it, then nothing. Your subscription is unchanged.',
+    already: 'Nothing more to do: Quorum sends no text alerts for this link. Your subscription is unchanged.',
     account: 'Manage your account',
-    notFoundTitle: 'Link not recognised',
-    notFound: 'This stop link is not valid. If you still get texts, write to',
+    help: 'Still getting texts? Write to',
   },
   sl: {
     title: 'Odjava od SMS-obvestil',
@@ -94,24 +106,23 @@ const COPY = {
     detail: 'En dotik izklopi vse SMS-e Quoruma. Naročnina, e-pošta in potisna obvestila ostanejo nespremenjeni.',
     button: 'Izklopi SMS-obvestila',
     doneTitle: 'SMS-obvestila so izklopljena',
-    done: 'Na to številko vam ne bomo več pošiljali SMS-ov. Prejeli boste en SMS s potrditvijo. Naročnina ostaja nespremenjena.',
-    already: 'SMS-obvestila za to številko so že izklopljena. Naročnina ostaja nespremenjena.',
+    done: 'Na to številko ne bomo več pošiljali SMS-ov. En SMS to potrdi, nato nič več. Naročnina ostaja nespremenjena.',
+    already: 'Ničesar več ni treba storiti: Quorum za to povezavo ne pošilja SMS-obvestil. Naročnina ostaja nespremenjena.',
     account: 'Upravljanje računa',
-    notFoundTitle: 'Povezava ni prepoznana',
-    notFound: 'Ta povezava za odjavo ni veljavna. Če še vedno prejemate SMS-e, pišite na',
+    help: 'Še vedno prejemate SMS-e? Pišite na',
   },
 };
 
-function page({ locale, title, body }) {
+function page({ title, body }) {
   return `<!doctype html>
-<html lang="${locale}">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)} · Quorum Research</title>
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap">
+<link rel="stylesheet" href="${FONT_STYLESHEET}">
 <style>
 :root{color-scheme:light;--karst:#e3e6e4;--paper:#f4f5f3;--graphite:#111418;--slate:#545c63;--hairline:#aeb6b9}
 *{box-sizing:border-box}
@@ -119,9 +130,11 @@ body{margin:0;min-height:100vh;background:var(--karst);color:var(--graphite);fon
 main{max-width:34rem;width:100%;background:var(--paper);border:1px solid var(--hairline);padding:32px 24px}
 .brand{font-weight:700;letter-spacing:.08em;font-size:.8125rem;margin:0 0 24px}
 h1{font-stretch:70%;font-weight:700;font-size:2.25rem;line-height:1.05;margin:0 0 16px}
+h2{font-stretch:70%;font-weight:700;font-size:1.5rem;line-height:1.1;margin:0 0 12px}
 p{margin:0 0 16px;color:var(--graphite)}
 .muted{color:var(--slate);font-size:.9375rem}
 button{font:inherit;font-weight:600;background:var(--graphite);color:var(--karst);border:0;padding:14px 20px;min-height:48px;width:100%;cursor:pointer}
+button span{display:block}button span+span{font-weight:400;font-size:.9375rem}
 button:focus-visible,a:focus-visible{outline:2px solid var(--graphite);outline-offset:2px}
 a{color:var(--graphite)}
 hr{border:0;border-top:1px solid var(--hairline);margin:24px 0}
@@ -138,12 +151,27 @@ ${body}
 
 const HEADERS = { 'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex' };
 
-function renderNotFound(ctx) {
+// The confirmation page (GET): the same for every token.
+function renderAsk(token) {
+  const { en, sl } = COPY;
+  return page({
+    title: `${en.title} · ${sl.title}`,
+    body: `<h1>${en.ask}</h1><p class="muted">${en.detail}</p>
+<h2 lang="sl">${sl.ask}</h2><p class="muted" lang="sl">${sl.detail}</p>
+<form method="post" action="/u/${escapeHtml(token)}"><button type="submit"><span>${en.button}</span><span lang="sl">${sl.button}</span></button></form>`,
+  });
+}
+
+// The result page (POST): `changed` only when this request switched texts off.
+function renderDone(ctx, changed) {
+  const { en, sl } = COPY;
   const support = escapeHtml(ctx.config.supportEmail);
   return page({
-    locale: 'en',
-    title: COPY.en.notFoundTitle,
-    body: `<h1>${COPY.en.notFoundTitle}</h1><p>${COPY.en.notFound} <span>${support}</span>.</p><hr><h1 lang="sl">${COPY.sl.notFoundTitle}</h1><p lang="sl">${COPY.sl.notFound} <span>${support}</span>.</p>`,
+    title: `${en.doneTitle} · ${sl.doneTitle}`,
+    body: `<h1>${en.doneTitle}</h1><p>${changed ? en.done : en.already}</p>
+<h2 lang="sl">${sl.doneTitle}</h2><p lang="sl">${changed ? sl.done : sl.already}</p>
+<hr><p class="muted"><a href="/#account">${en.account}</a> · <a href="/#account" lang="sl">${sl.account}</a></p>
+<p class="muted">${en.help} <span>${support}</span>. <span lang="sl">${sl.help} ${support}.</span></p>`,
   });
 }
 
@@ -153,19 +181,20 @@ function wantsJson(req) {
 
 // Routes: GET /u/:token (no state change) and POST /u/:token (one-tap opt-out)
 export function registerOptOutRoutes(router, ctx) {
+  // known(token) -> the user row, or null (counted against the global budget for unknown tokens)
+  function known(token) {
+    const row = TOKEN_RE.test(token) ? userForToken(ctx.db, token) : null;
+    if (row && row.status !== 'deleted') return row;
+    ctx.budget?.('unknownOptOutTokens');
+    return null;
+  }
+
   router.add(
     'GET',
     '/u/:token',
     async (req, res, { params }) => {
-      const row = TOKEN_RE.test(params.token) ? userForToken(ctx.db, params.token) : null;
-      if (!row || row.status === 'deleted') return sendHtml(res, 404, renderNotFound(ctx), HEADERS);
-      const locale = row.locale === 'sl' ? 'sl' : 'en';
-      const c = COPY[locale];
-      const on = ctx.messaging.smsState(row.id).allowed || latestConsent(ctx.db, row.id, 'sms')?.action === 'grant';
-      const body = on
-        ? `<h1>${c.ask}</h1><p class="muted">${c.detail}</p><form method="post" action="/u/${escapeHtml(params.token)}"><button type="submit">${c.button}</button></form>`
-        : `<h1>${c.doneTitle}</h1><p>${c.already}</p><p><a href="/#account">${c.account}</a></p>`;
-      return sendHtml(res, 200, page({ locale, title: c.title, body }), HEADERS);
+      known(params.token);
+      return sendHtml(res, 200, renderAsk(params.token), HEADERS);
     },
     { rate: 'optout' },
   );
@@ -174,24 +203,22 @@ export function registerOptOutRoutes(router, ctx) {
     'POST',
     '/u/:token',
     async (req, res, { params, ip }) => {
-      const row = TOKEN_RE.test(params.token) ? userForToken(ctx.db, params.token) : null;
-      if (!row || row.status === 'deleted') {
-        if (wantsJson(req)) return sendJson(res, 404, { error: 'not_found', message: 'Unknown link' }, HEADERS);
-        return sendHtml(res, 404, renderNotFound(ctx), HEADERS);
+      const row = known(params.token);
+      let changed = false;
+      if (row) {
+        const r = await ctx.optout.optOutSms(row.id, {
+          source: 'link',
+          channel: 'sms_link',
+          ip,
+          userAgent: req.headers['user-agent'],
+          pageUrl: `${ctx.config.linkBase}/u/${params.token}`,
+          token: params.token,
+          background: true,
+        });
+        changed = r.changed;
       }
-      const r = await ctx.optout.optOutSms(row.id, {
-        source: 'link',
-        channel: 'sms_link',
-        ip,
-        userAgent: req.headers['user-agent'],
-        pageUrl: `${ctx.config.linkBase}/u/${params.token}`,
-        token: params.token,
-      });
-      if (wantsJson(req)) return sendJson(res, 200, { ok: true, smsOff: true, changed: r.changed }, HEADERS);
-      const locale = row.locale === 'sl' ? 'sl' : 'en';
-      const c = COPY[locale];
-      const body = `<h1>${c.doneTitle}</h1><p>${r.changed ? c.done : c.already}</p><p><a href="/#account">${c.account}</a></p>`;
-      return sendHtml(res, 200, page({ locale, title: c.doneTitle, body }), HEADERS);
+      if (wantsJson(req)) return sendJson(res, 200, { ok: true, smsOff: true, changed }, HEADERS);
+      return sendHtml(res, 200, renderDone(ctx, changed), HEADERS);
     },
     { accepts: ['form', 'json', 'empty'], limit: 'form', rate: 'optout', csrf: false },
   );

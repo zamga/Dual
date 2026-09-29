@@ -11,6 +11,18 @@
 //           short-interest and top idio-vol names + ~10-day negative drift after negative news
 //           + small positive drift after opportunistic insider cluster buys.
 //   jumps = earnings-day gaps at the open after each filing, news gaps, M&A premium gaps.
+//
+// Market caps. Prices are total-return prices, so a company's price compounds everything it ever
+// earned. Market cap = price x share count, and the share count carries the capital a company pays
+// out (dividends and buybacks) or raises (issuance): every day it shrinks by the net payout yield of
+// payoutYield(). That yield rises with the company's size relative to the median listed company
+// (tanh in log(mcap / median), plus a quadratic term above ~12x the median for the very largest) and
+// with the median's distance above a long-run anchor (HIDDEN.payoutAnchor). With growth independent
+// of size (Gibrat's law) the dispersion of log market caps grows without limit, and the largest firm
+// with it; a size-dependent drag keeps the cross-section in the shape of the real liquid US universe
+// on every date (without it the 2026 cross-section had a $60T company and a $55B median). The
+// fundamentals' dollar scale carries the same cumulative payout, so per-share figures and valuation
+// ratios (EPS, EV/EBIT, FCF yield, book-to-market) are unaffected, and returns never see it.
 import { tradingDaysBetween, addDays, isTradingDay, nextTradingDay, countTradingDays } from '../../core/calendar.js';
 import { makeRng } from '../lib/prng.js';
 import {
@@ -62,6 +74,17 @@ export const HIDDEN = Object.freeze({
   newsDrift: 0.012, // total over 10 days per unit severity
   negNewsRate: 0.7, // negative headlines per stock-year at theta <= 0
   insiderDrift: 0.02, // total over 63 days
+  // Net payout (dividends plus net buybacks, minus issuance) per year. Prices are total-return
+  // prices, so capital paid out never shows in them: it shrinks the share count (and the
+  // fundamentals' dollar scale) instead. Payout rises with size relative to the market median,
+  // which keeps the cross-section of market caps stationary in shape (see payoutYield).
+  payoutBase: 0.04,
+  payoutSize: 0.05, // extra yield per year at the saturation of tanh(log(mc / median) / payoutWidth)
+  payoutWidth: 1.0,
+  payoutMega: 0.03, // per year per squared log unit above payoutMegaFrom (the very largest firms)
+  payoutMegaFrom: 2.5,
+  payoutAnchor: 16e9, // long-run median market cap of the listed universe
+  payoutAnchorPull: 0.15, // uniform extra yield per year per log unit of median / payoutAnchor
 });
 
 const TD = 252;
@@ -271,6 +294,20 @@ function clip(x, lo, hi) {
   return x < lo ? lo : x > hi ? hi : x;
 }
 
+/**
+ * Net payout yield per year of a company with market cap `mc` when the median listed company is worth
+ * `ref`: the uniform payout, a uniform term for the median's distance from its long-run anchor, a size
+ * term that rises smoothly with log(mc / ref) (mature large caps return more capital, small ones issue
+ * shares) and a quadratic term for the very largest. It keeps the upper tail of market caps from
+ * compounding without limit while the total-return prices stay untouched.
+ */
+export function payoutYield(mc, ref, H = HIDDEN) {
+  if (!(mc > 0) || !(ref > 0)) return H.payoutBase;
+  const l = Math.log(mc / ref);
+  const over = Math.max(0, l - H.payoutMegaFrom);
+  return H.payoutBase + H.payoutAnchorPull * Math.log(ref / H.payoutAnchor) + H.payoutSize * Math.tanh(l / H.payoutWidth) + H.payoutMega * over * over;
+}
+
 function buildCompanies(dates, o) {
   const rng = makeRng(o.seed, 'companies');
   const S = dates.length;
@@ -323,6 +360,8 @@ function buildCompanies(dates, o) {
   };
   const usedNames = new Set();
   const usedTickers = new Set();
+  // tickers draw from their own stream: screening against the real US symbols never shifts company draws
+  const tickerRng = makeRng(o.seed, 'tickers');
   const usedIsin = new Set();
   const usedFigi = new Set();
   for (let i = 0; i < N; i++) {
@@ -353,7 +392,7 @@ function buildCompanies(dates, o) {
     c.m0[i] = (ipo ? 0.1 + 0.15 * rng.n() : 0.15 * rng.n()) - (o.params.mQuality ?? HIDDEN.mQuality) * c.q[i];
     const nm = makeName(rng, k, usedNames);
     c.name[i] = nm.name;
-    c.ticker[i] = makeTicker(rng, nm, usedTickers);
+    c.ticker[i] = makeTicker(tickerRng, nm, usedTickers);
     c.isin[i] = makeIsin(rng, usedIsin);
     c.figi[i] = makeFigi(rng, usedFigi);
     c.venue[i] = rng.u() < sp.nasdaq ? 'NASDAQ (simulated)' : 'NYSE (simulated)';
@@ -442,6 +481,7 @@ function buildFilingSchedule(dates, c, o) {
     end,
     // recorded during the simulation
     x: new Float64Array(F),
+    pay: new Float64Array(F),
     ls: new Float64Array(F),
     ss: new Float64Array(F),
     shares: new Float64Array(F),
@@ -529,6 +569,9 @@ export function simulateMarket(options = {}) {
   const preDealL = new Float64Array(N);
   const marginOU = new Float64Array(N);
   const lastU = new Float64Array(N);
+  const payY = new Float64Array(N); // net payout yield per year (updated monthly)
+  const payL = new Float64Array(N); // cumulative log payout since listing (scales the fundamentals)
+  let payRef = NaN; // median market cap of the listed companies at the last monthly update
   const fPtrPE = new Int32Array(N);
   const fPtrFI = new Int32Array(N);
   for (let i = 0; i < N; i++) {
@@ -602,6 +645,14 @@ export function simulateMarket(options = {}) {
         ivolP90 = sigs[Math.floor(sigs.length * 0.9)];
         ivolMed = sigs[Math.floor(sigs.length * 0.5)];
       }
+      // payout yields from yesterday's market caps relative to the median listed company
+      const caps = [];
+      for (let i = 0; i < N; i++) if (alive[i]) caps.push(lastClose[i] * shares[i]);
+      if (caps.length > 10) {
+        caps.sort((a, b) => a - b);
+        payRef = caps[caps.length >> 1];
+        for (let i = 0; i < N; i++) if (alive[i]) payY[i] = payoutYield(lastClose[i] * shares[i], payRef, H);
+      }
     }
     // short-interest settlement
     let settleToday = false;
@@ -622,6 +673,8 @@ export function simulateMarket(options = {}) {
           theta[i] = rngE.n();
           if (t > 0) jumpNext[i] = 0.08 + 0.12 * rngE.n(); // IPO first-day pop at the open
           volBoostNext[i] = t > 0 ? 4 : 1;
+          payY[i] = payoutYield(hc.mcap0[i], payRef, H);
+          payL[i] = 0;
         } else continue;
       }
       const k = hc.sector[i];
@@ -700,6 +753,12 @@ export function simulateMarket(options = {}) {
       open[base + i] = o_;
       close[base + i] = cl;
       lastClose[i] = cl;
+      if (t > 0) {
+        // capital paid out (or raised) today: the total-return price is unchanged, the share count is not
+        const dp = payY[i] / TD;
+        shares[i] *= Math.exp(-dp);
+        payL[i] -= dp;
+      }
       const absR = Math.abs(rOn + rId) / Math.max(sd, 1e-4);
       const vb = volBoostNext[i];
       volBoostNext[i] = 1;
@@ -727,6 +786,7 @@ export function simulateMarket(options = {}) {
         marginOU[i] = 0.7 * marginOU[i] + 0.06 * rngE.n() + 0.03 * u;
         fl.margin[fp] = marginOU[i];
         fl.x[fp] = X[i];
+        fl.pay[fp] = payL[i];
         fl.ls[fp] = mk.Ls[t];
         fl.ss[fp] = sec.Ss[k * S + t];
         lastU[i] = u;

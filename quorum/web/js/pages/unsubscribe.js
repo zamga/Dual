@@ -14,14 +14,15 @@ import { api, errorText } from './_api.js';
 import { previewPick, previewFromHero, buySms, quietHoursAt } from './_join.js';
 import { formatInZone, LJUBLJANA } from '../core/calendar.js';
 import { demo, modeNote, phoneThread } from './_member.js';
+import { CONTACT } from '../ui.js';
 
-const SUPPORT = 'support@qrm.si';
+const SUPPORT = CONTACT.support;
 
 export async function render(ctx) {
   const { L, locale, fmt } = ctx;
   const token = String(ctx.params?.token ?? '');
   const live = ctx.mode === 'live';
-  const hero = await ctx.data('hero').catch(() => null);
+  const [hero, launch] = await Promise.all([ctx.data('hero').catch(() => null), ctx.launch()]);
   const pick = previewFromHero(hero) ?? previewPick(await ctx.data('picks').catch(() => null));
   const already = !live && demo.prefs.sms === false && (!demo.token || demo.token === token);
 
@@ -117,7 +118,11 @@ export async function render(ctx) {
   const caption = h(
     'figcaption',
     { class: 'figcaption' },
-    lastText ? L(`The last text this link came in: pick #${pick.no}, ${fmt.date(pick.issueDate)}. Every text carries the same personal stop link.`, `Zadnji SMS s to povezavo: izbira #${pick.no}, ${fmt.date(pick.issueDate)}. Vsak SMS ima isto osebno povezavo za odjavo.`) : '',
+    lastText
+      ? launch.prelaunch
+        ? L(`A pick text with this link, as written for pick #${pick.no} on ${fmt.date(pick.issueDate)} (before launch no text is sent). Every text carries the same personal stop link.`, `SMS z izbiro s to povezavo, kot je pripravljen za izbiro #${pick.no} ${fmt.date(pick.issueDate)} (pred zagonom se SMS ne pošilja). Vsak SMS ima isto osebno povezavo za odjavo.`)
+        : L(`The last text this link came in: pick #${pick.no}, ${fmt.date(pick.issueDate)}. Every text carries the same personal stop link.`, `Zadnji SMS s to povezavo: izbira #${pick.no}, ${fmt.date(pick.issueDate)}. Vsak SMS ima isto osebno povezavo za odjavo.`)
+      : '',
   );
 
   const facts = [

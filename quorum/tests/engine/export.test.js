@@ -16,10 +16,13 @@ import { issueSlot, fmtLong, addTradingDays } from '../../core/calendar.js';
 import { checkContract } from './contract.js';
 import { deflatedSharpe, mean, std, skewness, kurtosis } from '../../core/stats.js';
 import { REASON_CODES } from '../../engine/record.js';
+import { isRealTicker } from '../../engine/sim/blocklist.js';
+import { pctRank } from '../../core/format.js';
 
 const dirs = [];
 let files; // parsed JSON of run 1
 let bytes; // raw text of both runs
+let run1; // model and validation of run 1
 
 async function runOnce() {
   const model = await buildModel({ universe: 'small', cache: false });
@@ -28,6 +31,7 @@ async function runOnce() {
   const dir = mkdtempSync(join(tmpdir(), 'quorum-export-'));
   dirs.push(dir);
   writeAll(buildAll(model, validation, record), dir);
+  run1 ??= { model, validation };
   return Object.fromEntries(FILES.map((f) => [f, readFileSync(join(dir, `${f}.json`), 'utf8')]));
 }
 
@@ -37,6 +41,14 @@ before(async () => {
   bytes = [a, b];
   files = Object.fromEntries(Object.entries(a).map(([k, v]) => [k, JSON.parse(v)]));
 });
+
+/** Every string anywhere in a JSON value. */
+function strings(v, out = []) {
+  if (typeof v === 'string') out.push(v);
+  else if (Array.isArray(v)) for (const x of v) strings(x, out);
+  else if (v && typeof v === 'object') for (const x of Object.values(v)) strings(x, out);
+  return out;
+}
 
 test.after(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
@@ -171,11 +183,17 @@ test('published outcomes recompute from the published prices and the records lin
       assert.ok(Math.abs(p.outcome.excess - (p.outcome.net - p.outcome.bench)) < 2e-6);
       assert.ok(p.outcome.net < p.outcome.gross, 'costs are deducted');
       assert.equal(p.outcome.exitDate, p.exitPlanned, 'exits at the planned 21-day open');
-      assert.equal(p.path.length, 22);
-      assert.deepEqual(p.path[21], [21, p.outcome.net, p.outcome.bench]);
+      // entry at the open (net of both legs' costs), the closes of days 0-20, the exit at the open of day 21
+      assert.equal(p.path.length, 23);
+      assert.deepEqual(p.path.map((r) => r[0]), [0, ...Array.from({ length: 21 }, (_, d) => d), 21]);
+      assert.deepEqual(p.path[22], [21, p.outcome.net, p.outcome.bench]);
     } else {
       assert.equal(p.status, 'open');
+      assert.equal(p.path[1][0], 0, 'an open record is marked from its entry-day close on');
     }
+    assert.equal(p.path[0][0], 0);
+    assert.equal(p.path[0][2], 0);
+    assert.ok(p.path[0][1] < 0 && p.path[0][1] > -0.006, 'day 0 at the open carries the entry and exit costs');
     if (p.kind === 'RENEW') {
       const prior = byNo.get(p.priorNo);
       assert.equal(prior.renewedAs, p.no);
@@ -187,7 +205,10 @@ test('published outcomes recompute from the published prices and the records lin
   const c = files.meta.counts;
   assert.equal(c.picks + c.renews, files.picks.length);
   assert.equal(c.closed + c.open, files.picks.length);
-  assert.equal(files.summary.nPicks, files.picks.length);
+  // a pick is a BUY; RENEW records continue held positions and are counted apart
+  assert.equal(files.summary.nPicks, c.picks);
+  assert.equal(files.summary.nRenews, c.renews);
+  assert.equal(files.summary.nRecords, files.picks.length);
   assert.equal(files.summary.nClosed, c.closed);
   assert.equal(c.issues, files.issues.length);
   for (const x of files.issues) for (const no of [...x.buys, ...x.renews, ...x.closes]) assert.ok(byNo.has(no));
@@ -216,11 +237,16 @@ test('hero is the issue of the most recently closed pick, with integer percentil
   assert.equal(h.pick.no, last.no);
   assert.equal(h.issueDate, last.issueDate);
   assert.equal(h.p.length, h.nScored * 4);
-  assert.ok(h.p.every((v) => Number.isInteger(v) && v >= -1 && v <= 1000));
+  assert.ok(h.p.every((v) => Number.isInteger(v) && v >= -1 && v <= 999));
   const row = h.p.slice(h.pick.index * 4, h.pick.index * 4 + 4);
-  ['A', 'B', 'C', 'D'].forEach((f, k) => assert.ok(Math.abs(row[k] - last.families[f].pct * 1000) <= 1, f));
+  ['A', 'B', 'C', 'D'].forEach((f, k) => assert.equal(row[k], last.families[f].pct === null ? -1 : Math.floor(last.families[f].pct * 1000 + 1e-9), f));
   assert.deepEqual(h.outcome, { excess: last.outcome.excess, net: last.outcome.net, bench: last.outcome.bench, exitDate: last.outcome.exitDate });
   assert.equal(h.smsAt, last.disseminatedAt);
+  // a RENEW is labelled as one, with the pick it continues
+  assert.equal(h.pick.kind, last.kind);
+  assert.equal(h.pick.priorNo, last.priorNo);
+  if (h.pick.kind === 'BUY') assert.equal(h.pick.priorNo, null);
+  else assert.ok(files.picks.some((p) => p.no === h.pick.priorNo && p.renewedAs === h.pick.no));
 });
 
 test('the backtest carries computed gates, the variant count and the calibration log', () => {
@@ -250,23 +276,48 @@ test('the backtest carries computed gates, the variant count and the calibration
   assert.equal(d.values.dsrRaw, dd.raw.dsr);
 });
 
-test('launch: amendment A-1, the pooled re-test of gate (d) and a status consistent with the gates', () => {
+test('launch: amendment A-1 splits gate (d) into d1 (research) and d2 (pooled PSR); status consistent with the gates', () => {
   const b = files.backtest;
   const L = b.launch;
   const P = L.pooled;
   const dd = b.dsrDetail;
   assert.equal(L.asOf, files.meta.asOf);
   assert.deepEqual(L.holdoutGates, b.gates.map((g) => ({ id: g.id, pass: g.pass })));
+  // original wording: gate (d) on the holdout, published unchanged
+  const d = b.gates.find((g) => g.id === 'd');
+  assert.equal(L.original.dsr, d.values.dsr);
+  assert.equal(L.original.pass, d.pass);
+  assert.equal(L.original.dsr, b.dsr);
+  // d1: clustered DSR on the research window and PBO across the variants
+  assert.equal(L.d1.dsrResearch, dd.clustered.dsrResearch);
+  assert.equal(L.d1.pbo, b.pbo);
+  assert.equal(L.d1.pass, L.d1.dsrResearch >= 0.95 && L.d1.pbo < 0.3);
+  // d2: PSR(SR > 0) of the pooled monthly series, recomputed from the published months
+  const ex = P.monthly.map((m) => m[1]);
+  const st = { sr: mean(ex) / std(ex), T: ex.length, skew: skewness(ex), kurt: kurtosis(ex) };
+  const psr = deflatedSharpe({ ...st, nTrials: 1, varSR: 0 });
+  assert.ok(Math.abs(psr - L.d2.psr) < 2e-3, `${psr} vs ${L.d2.psr}`);
+  assert.equal(L.d2.months, P.months);
+  assert.equal(L.d2.sharpe, P.sharpe);
+  assert.equal(L.d2.pass, L.d2.psr >= 0.95);
+  assert.equal(L.d2.history.length, P.sealedMonths, 're-tested at every month-end since the freeze');
+  assert.equal(L.d2.history[L.d2.history.length - 1].psr, L.d2.psr);
+  if (L.d2.pass) assert.equal(L.d2.monthsToPass, 0);
+  // status: (a), (b), (c), (e) on the holdout and both halves of A-1
   const others = b.gates.filter((g) => g.id !== 'd').every((g) => g.pass);
-  assert.equal(L.status, others && P.pass ? 'ready' : 'pre-launch');
-  assert.equal(P.pass, P.dsr >= 0.95 && b.pbo < 0.3);
+  assert.equal(L.status, others && L.d1.pass && L.d2.pass ? 'ready' : 'pre-launch');
+  // the amendment text: adopted after the holdout was opened, the original wording with its value
   assert.equal(L.amendment.id, 'A-1');
   assert.equal(L.amendment.date, files.meta.engineFrozen);
+  assert.match(L.amendment.text.en, /after the holdout had already been opened/);
   assert.match(L.amendment.text.en, /pooled out-of-sample record/);
-  // the pooled record is the holdout months followed by the sealed months, net of costs
-  const d = b.gates.find((g) => g.id === 'd');
+  assert.ok(L.amendment.text.en.includes(L.original.dsr.toFixed(2)), 'the original wording\'s value');
+  assert.match(L.amendment.text.en, L.original.pass ? /original wording passes/ : /original wording fails/);
+  // the pooled record (deflated figures kept for comparison) is the holdout months then the sealed months
   assert.equal(P.from, b.holdout.from);
-  assert.equal(P.to, files.meta.asOf);
+  assert.equal(P.to, P.monthToDate ? files.issues.filter((x) => x.date.slice(0, 7) < P.monthToDate.month).at(-1).date : files.meta.asOf, 'complete months only');
+  assert.equal(L.d2.monthToDate?.month ?? null, P.monthToDate?.month ?? null);
+  if (P.monthToDate) assert.ok(P.monthly.every(([m]) => m < P.monthToDate.month), 'the month to date is not counted as a full month');
   assert.equal(P.holdoutMonths, d.values.months);
   assert.equal(P.months, P.holdoutMonths + P.sealedMonths);
   assert.equal(P.monthly.length, P.months);
@@ -274,23 +325,20 @@ test('launch: amendment A-1, the pooled re-test of gate (d) and a status consist
   assert.equal(P.monthly[P.holdoutMonths][0], files.meta.sealedSince.slice(0, 7));
   assert.equal(P.nTrialsEff, dd.clustered.K);
   assert.equal(P.nTrialsRaw, b.variantsTried);
-  // recompute the pooled DSR from the published monthly series and the published deflation
-  const ex = P.monthly.map((m) => m[1]);
-  const st = { sr: mean(ex) / std(ex), T: ex.length, skew: skewness(ex), kurt: kurtosis(ex) };
+  assert.equal(P.pass, P.dsr >= 0.95 && b.pbo < 0.3);
   const again = deflatedSharpe({ ...st, nTrials: dd.clustered.K, varSR: dd.clustered.varSRMonthly });
   const againRaw = deflatedSharpe({ ...st, nTrials: dd.raw.nTrials, varSR: dd.raw.varSRMonthly });
   assert.ok(Math.abs(again - P.dsr) < 2e-3, `${again} vs ${P.dsr}`);
   assert.ok(Math.abs(againRaw - P.dsrRaw) < 2e-3, `${againRaw} vs ${P.dsrRaw}`);
   assert.ok(Math.abs(st.sr * Math.sqrt(12) - P.sharpe) < 1e-3);
-  // re-tested monthly since the freeze; the latest re-test is the published one
   assert.equal(P.history.length, P.sealedMonths);
   assert.equal(P.history[P.history.length - 1].dsr, P.dsr);
-  // remaining: one sentence per language, computed
+  // remaining: one computed sentence per language
   for (const loc of ['en', 'sl']) assert.ok(L.remaining[loc].length > 40 && !/NaN|undefined|null/.test(L.remaining[loc]));
-  if (L.status === 'ready') assert.equal(P.monthsToPass, 0);
-  else if (others && Number.isInteger(P.monthsToPass)) assert.ok(L.remaining.en.includes(`${P.monthsToPass} more month`));
+  if (others && L.d1.pass && !L.d2.pass && Number.isInteger(L.d2.monthsToPass)) assert.ok(L.remaining.en.includes(`${L.d2.monthsToPass} more month`));
   // the amendment is sealed in the genesis methodology entry
   assert.match(files.ledger.entries[0].body.summary.en, /amendment A-1/);
+  assert.match(files.ledger.entries[0].body.summary.en, /\(d1\).*\(d2\)/);
 });
 
 test('the alert-gap note explains the gap against the 30 bps trigger with computed numbers', () => {
@@ -301,7 +349,73 @@ test('the alert-gap note explains the gap against the 30 bps trigger with comput
   for (const loc of ['en', 'sl']) assert.ok(!/NaN|undefined|null/.test(s.alertGapNote[loc]));
   assert.match(s.alertGapNote.en, /no subscribers yet/);
   assert.equal(g.thresholdBps, 30);
-  assert.equal(g.windows, Math.max(0, s.nPicks - g.window + 1));
+  assert.equal(g.windows, Math.max(0, s.nRecords - g.window + 1));
   assert.ok(g.windowsAbove <= g.windows);
   assert.equal(files.meta.notes.stream.startsWith('EXPERIMENT'), false);
+});
+
+test('public copy never refers to "the brief", an internal document', () => {
+  for (const f of FILES) {
+    for (const t of strings(files[f])) {
+      assert.ok(!/\bthe brief\b|\bbrief's\b/i.test(t), `${f}: ${t.slice(0, 120)}`);
+      assert.ok(!/izhodišč/i.test(t), `${f}: ${t.slice(0, 120)}`);
+    }
+  }
+});
+
+test('no exported company uses a real US ticker', () => {
+  const tickers = new Set([...files.picks.map((p) => p.ticker), ...files.universe.rows.map((r) => r[0]), files.hero.pick?.ticker].filter(Boolean));
+  assert.ok(tickers.size > 20);
+  for (const t of tickers) assert.equal(isRealTicker(t), false, t);
+});
+
+test('published percentiles never round across the rule line: at or above topPct exactly when the family votes', () => {
+  const top = files.meta.rule.topPct;
+  let checked = 0;
+  for (const p of files.picks) {
+    for (const f of ['A', 'B', 'C', 'D']) {
+      const v = p.families[f].pct;
+      if (v === null || (p.crashSwitch && f === 'A')) continue;
+      assert.equal(v >= top, p.agreeing.includes(f), `#${p.no} ${f} ${v}`);
+      assert.equal(pctRank(v) >= Math.round(top * 100), p.agreeing.includes(f), `#${p.no} ${f} shows as ${pctRank(v)}`);
+      checked++;
+    }
+  }
+  assert.ok(checked > 50);
+  for (const r of files.universe.rows) assert.equal(r.slice(3, 7).filter((v) => v !== null && v >= top).length, r[7], r[0]);
+  // hero permille: 950 or more exactly when the family votes (the pick's row), and the agreement count
+  // of every row read from the permille values matches the rule
+  const h = files.hero;
+  const row = h.p.slice(h.pick.index * 4, h.pick.index * 4 + 4);
+  const crash = files.picks.find((p) => p.no === h.pick.no).crashSwitch;
+  ['A', 'B', 'C', 'D'].forEach((f, k) => {
+    if (!(crash && f === 'A')) assert.equal(row[k] >= top * 1000, h.pick.agreeing.includes(f), f);
+  });
+  assert.equal(h.p.length, h.nScored * 4);
+});
+
+test('the LLM news-veto stand-in is not backtested: no veto before the sealed record, would-be blocks published apart', () => {
+  const { model, validation } = run1;
+  const sealedSince = files.meta.sealedSince;
+  for (const period of ['research', 'holdout']) {
+    const run = validation[period].run;
+    for (const iss of run.issues) {
+      assert.ok(iss.date < sealedSince);
+      assert.equal(iss.vetoes.llm, 0, `${period} ${iss.date}`);
+    }
+    const shadow = run.issues.reduce((a, x) => a + x.llmShadow.candidates, 0);
+    assert.equal(files.backtest.llmVetoShadow[period].candidates, shadow);
+  }
+  assert.equal(files.backtest.llmVetoShadow.appliedFrom, sealedSince);
+  // the stand-in still fires in the sealed record, where it is validated live
+  assert.equal(model.periods.sealed[0], sealedSince);
+});
+
+test('the research follow portfolio holds its last picks to the end of the window (no spurious cash at the seam)', () => {
+  const R = run1.validation.research;
+  const open = R.run.records.filter((r) => !r.outcome);
+  assert.ok(open.length > 0, 'the research window ends with picks whose exits fall in the holdout');
+  const eq = R.equity;
+  const last = eq.active.length - 1;
+  assert.ok(eq.active[last] >= open.length, 'every unmeasured record is still in the portfolio on the last day');
 });

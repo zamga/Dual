@@ -8,6 +8,7 @@
 // the whole template set NEEDS REVIEW BY A NATIVE SPEAKER before launch.
 import { validateNumbers } from '../core/numeric-validator.js';
 import { fmtLong } from '../core/calendar.js';
+import { pctRank } from '../core/format.js';
 
 const FAMILY_NAME = {
   en: { A: 'trend', B: 'fundamental momentum', C: 'quality/value', D: 'the ML ranker' },
@@ -35,8 +36,10 @@ function num(x, d, locale) {
 function pctText(x, d, locale) {
   return `${num(x * 100, d, locale)}${locale === 'sl' ? ' %' : '%'}`;
 }
+// Percentile ranks are truncated like everywhere on the site (core/format.js pctRank): a family at
+// 0.9486 is "at the 94th percentile", never the 95th, which would read as inside the top 5%.
 function rank(p) {
-  return Math.min(100, Math.max(0, Math.round(p * 100)));
+  return pctRank(p) ?? 0;
 }
 function ordinalEn(n) {
   const t = n % 100;

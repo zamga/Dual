@@ -50,7 +50,9 @@ export async function render(ctx) {
         `Vsa priporočila, objavljena v dvanajstih mesecih do ${fmt.date(asOf)}: ${fmt.int(list.length)}, ustvarjena iz zapečatene knjige. Časi so po ljubljanskem času; ob fokusu na čas se pokaže ISO 8601 z zamikom, UTC ter čas izdelave in objave.`,
       ),
     ),
-    ctx.tier === 'free' ? h('p', { class: 'small muted' }, L('Viewing as Free: open recommendations show as sealed until they close.', 'Pogled Brezplačno: odprta priporočila so zapečatena do zaprtja.')) : null,
+    list.some((p) => isSealedFor(p, ctx.tier, byNo))
+      ? h('p', { class: 'small muted' }, ctx.mode === 'live' ? L('Open recommendations show as sealed until they close; then they are revealed to everyone.', 'Odprta priporočila so zapečatena do zaprtja; takrat se razkrijejo vsem.') : L('Viewing as Free: open recommendations show as sealed until they close.', 'Pogled Brezplačno: odprta priporočila so zapečatena do zaprtja.'))
+      : null,
     h(
       'div',
       { class: 'table-wrap dc-table' },

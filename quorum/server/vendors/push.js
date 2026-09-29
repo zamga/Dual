@@ -1,11 +1,16 @@
 // Web Push with node:crypto only: VAPID (RFC 8292, an ES256 JWT) and aes128gcm payload encryption
 // (RFC 8291 message encryption over the RFC 8188 content coding, one record).
-//   createWebPush({ vapid: { publicKey, privateKey, subject }, fetch, clock }) -> { kind, publicKey, send }
+//   createWebPush({ vapid: { publicKey, privateKey, subject }, fetch, clock, timeoutMs, resolveHost })
+//     -> { kind, publicKey, send }
 //   createConsolePush({ log, clock }) -> the same interface; records what it would send
 // send(subscription, payload, { ttl, urgency, topic }) -> { ok, status, gone, id }
 //   subscription = { endpoint, keys: { p256dh, auth } } (base64url, as the browser's PushSubscription gives them)
 //   gone = true on 404/410: the subscription no longer exists and should be revoked.
+// Every request has a deadline (timeoutMs, headers and body), and the endpoint's host must resolve
+// to public addresses only: a push endpoint can never make the server call itself or its network.
 import { createECDH, createHmac, createCipheriv, createPrivateKey, createPublicKey, randomBytes, sign, verify } from 'node:crypto';
+import { lookup as dnsLookup } from 'node:dns/promises';
+import { BlockList, isIP } from 'node:net';
 
 export const b64u = {
   enc: (buf) => Buffer.from(buf).toString('base64url'),
@@ -21,6 +26,39 @@ export class PushError extends Error {
     this.name = 'PushError';
     this.status = status;
   }
+}
+
+// Loopback, private, link-local, shared (CGNAT), documentation, benchmarking, multicast and reserved
+// ranges: never a push service.
+const NON_PUBLIC = new BlockList();
+for (const [a, p] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4]]) {
+  NON_PUBLIC.addSubnet(a, p, 'ipv4');
+}
+// (IPv4-mapped IPv6 addresses are checked as the IPv4 address they carry, below.)
+for (const [a, p] of [['::', 127], ['100::', 64], ['2001:db8::', 32], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]]) NON_PUBLIC.addSubnet(a, p, 'ipv6');
+
+// isPublicAddress('10.0.0.5') -> false; isPublicAddress('142.250.1.1') -> true
+export function isPublicAddress(ip) {
+  const s = String(ip).toLowerCase();
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  if (mapped) return isPublicAddress(mapped[1]);
+  if (/^::ffff:[0-9a-f]{1,4}:[0-9a-f]{1,4}$/.test(s)) return false; // mapped, hex form: refuse rather than decode
+  const v = isIP(s);
+  return v !== 0 && !NON_PUBLIC.check(s, v === 4 ? 'ipv4' : 'ipv6');
+}
+
+const defaultResolve = async (hostname) => (await dnsLookup(hostname, { all: true, verbatim: true })).map((a) => a.address);
+
+// assertPublicHost(hostname, resolveHost) -> the addresses; throws a permanent PushError when any is not public.
+export async function assertPublicHost(hostname, resolveHost = defaultResolve) {
+  const host = String(hostname).replace(/^\[|\]$/g, '');
+  const addrs = isIP(host) ? [host] : await resolveHost(host);
+  if (!addrs?.length || addrs.some((a) => !isPublicAddress(a))) {
+    const e = new PushError(403, `endpoint host ${host} does not resolve to public addresses only`);
+    e.permanent = true;
+    throw e;
+  }
+  return addrs;
 }
 
 // deriveKeys(...) exposes the RFC 8291 §3.3-§3.4 intermediate values (tests compare them with the
@@ -115,7 +153,7 @@ export function verifyVapidJwt(jwt, publicKey) {
 }
 
 // ------------------------------------------------------------------ transports
-export function createWebPush({ vapid, fetch = globalThis.fetch, clock = () => new Date() } = {}) {
+export function createWebPush({ vapid, fetch = globalThis.fetch, clock = () => new Date(), timeoutMs = 10_000, resolveHost = defaultResolve } = {}) {
   if (!vapid?.privateKey || !vapid?.subject) throw new Error('push: VAPID_PRIVATE_KEY and VAPID_SUBJECT are required');
   const { publicKey } = vapidKeyObjects(vapid.privateKey);
   if (vapid.publicKey && vapid.publicKey !== publicKey) throw new Error('push: VAPID_PUBLIC_KEY does not belong to VAPID_PRIVATE_KEY');
@@ -133,7 +171,9 @@ export function createWebPush({ vapid, fetch = globalThis.fetch, clock = () => n
         'content-type': 'application/octet-stream',
       };
       if (topic) headers.topic = topic;
-      const res = await fetch(subscription.endpoint, { method: 'POST', headers, body });
+      await assertPublicHost(new URL(subscription.endpoint).hostname, resolveHost);
+      const signal = AbortSignal.timeout(timeoutMs);
+      const res = await fetch(subscription.endpoint, { method: 'POST', headers, body, signal, redirect: 'error' });
       const text = await res.text().catch(() => '');
       if (res.status === 404 || res.status === 410) return { ok: false, status: res.status, gone: true, id: null };
       if (!res.ok) throw new PushError(res.status, text);

@@ -1,5 +1,11 @@
-// Recognisable real US tickers (and ETF / index symbols) that a simulated company must never use.
-// A generated ticker that appears here is rejected and another candidate is derived.
+// Real US tickers that a simulated company must never use. Two layers:
+//   REAL_TICKERS     the recognisable names, ETFs, index symbols and famous symbols of the 2008-2014
+//                    part of the simulated history (hand list, kept for readability and for the tests);
+//   US_SYMBOL_SET    every root symbol listed on a US exchange since 2015 (engine/sim/us-symbols.txt,
+//                    about 22,000 symbols from the exchange symbol directories).
+// A generated ticker in either is rejected and another candidate is derived (engine/sim/names.js).
+import { readFileSync } from 'node:fs';
+
 export const REAL_TICKERS = [
   // mega and large caps
   'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'GOOG', 'META', 'FB', 'TSLA', 'NVDA', 'BRK', 'BRKA', 'BRKB', 'JPM', 'JNJ',
@@ -34,9 +40,25 @@ export const REAL_TICKERS = [
   'SPY', 'QQQ', 'DIA', 'IWM', 'VOO', 'VTI', 'IVV', 'VEA', 'VWO', 'EFA', 'EEM', 'AGG', 'BND', 'TLT', 'GLD',
   'SLV', 'USO', 'XLK', 'XLF', 'XLE', 'XLV', 'XLI', 'XLY', 'XLP', 'XLU', 'XLB', 'XLRE', 'XLC', 'ARKK',
   'VIX', 'SPX', 'NDX', 'DJI', 'RUT', 'TQQQ', 'SQQQ', 'SOXX', 'SMH', 'HYG', 'LQD', 'SCHD', 'VIG', 'VYM',
+  // famous symbols of 2008-2014 that were gone before the symbol snapshots begin
+  'LEH', 'BSC', 'FNM', 'FRE', 'ENE', 'WCOM', 'KFT', 'PALM', 'RIMM', 'NOVL', 'EK', 'TOY', 'WAMU', 'NCC',
+  'HNZ', 'MOT', 'KMP', 'MER', 'WB', 'CFC', 'YHOO', 'SUNW', 'JAVA', 'AOL', 'DTV', 'GENZ', 'EMC', 'TWX',
 ];
 
 export const REAL_TICKER_SET = new Set(REAL_TICKERS);
+
+/** Every root symbol of engine/sim/us-symbols.txt (exchange-listed US securities since 2015). */
+export const US_SYMBOL_SET = new Set(
+  readFileSync(new URL('./us-symbols.txt', import.meta.url), 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#')),
+);
+
+/** True when `t` is, or has been, a real US ticker: never usable for a simulated company. */
+export function isRealTicker(t) {
+  return REAL_TICKER_SET.has(t) || US_SYMBOL_SET.has(t);
+}
 
 // Words that are well-known company names or brands on their own; never used as a name stem.
 export const REAL_NAME_WORDS = new Set(

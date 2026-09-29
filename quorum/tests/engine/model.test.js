@@ -96,6 +96,13 @@ test('the D pipeline logs every configuration tried, the independence check and 
   for (let k = 1; k < wf.length; k++) assert.ok(wf[k].nRows > wf[k - 1].nRows, 'expanding window');
 });
 
+test('D never learns from the LLM veto stand-in: its news flag is not a D input', () => {
+  // brief §3.3: LLM components are backtested only after the training cutoff; a D trained on the
+  // stand-in's labels would dodge every flagged stock and leave the 48-hour veto nothing to block
+  assert.ok(!model.dModel.features.includes('news_neg'));
+  for (const e of model.trainingLog.filter((x) => Array.isArray(x.features))) assert.ok(!e.features.includes('news_neg'), e.step);
+});
+
 test('veto flags, drivers and insider data for a scored name', () => {
   const { T, N } = model;
   const t = T - 40;

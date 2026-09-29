@@ -242,6 +242,15 @@ function fmtH(x, locale = 'en') {
 }
 
 /**
+ * Positions of the follow-every-pick paper portfolio of a run: measured records from entry to their
+ * exit (closeT), unmeasured ones (exit after the run's exitLimit) to their planned exit, which
+ * followEquity truncates at the end of the window it is given.
+ */
+export function followPositions(model, records) {
+  return records.map((r) => (r.outcome ? { i: r.i, t: r.t, tExit: r.closeT, cost: r.outcome.cost } : { i: r.i, t: r.t, tExit: r.tExit, cost: model.oneWayCost(r.s, r.i), open: true }));
+}
+
+/**
  * Evaluate a period (holdout or research) of the chosen rule: the capped daily run, the comparison
  * sets measured like picks, the follow-every-pick portfolio, and the universe statistics.
  */
@@ -252,10 +261,11 @@ export function evaluatePeriod(model, rule, period, { composite } = {}) {
   const measured = run.records.filter((r) => r.outcome);
   const top = rule.topPct;
   const comp = composite || compositeABC(model);
-  const sets = episodeSets(model, {
+  const setsAll = episodeSets(model, {
     from,
     to,
     exitLimit,
+    includeOpen: true,
     topPct: top,
     extra: { comp, N: model.N },
     sets: {
@@ -267,6 +277,8 @@ export function evaluatePeriod(model, rule, period, { composite } = {}) {
       compositeABC: (q, n2, x) => x.comp[q] >= top,
     },
   });
+  // outcome statistics use measured positions only; the equity below also holds the open ones
+  const sets = Object.fromEntries(Object.entries(setsAll).map(([k, v]) => [k, v.filter((p) => !p.open)]));
   const quorum = outcomeStats(measured.map((r) => r.outcome));
   const byAgreement = {
     '4/4': outcomeStats(measured.filter((r) => r.agreement === 4).map((r) => r.outcome)),
@@ -274,10 +286,14 @@ export function evaluatePeriod(model, rule, period, { composite } = {}) {
     '2/4 shadow': outcomeStats(sets.twoOfFour),
   };
   const setStats = Object.fromEntries(Object.entries(sets).map(([k, v]) => [k, outcomeStats(v)]));
-  // follow-every-pick portfolio (and the comparison sets) from the first issue to the last exit
+  // follow-every-pick portfolio (and the comparison sets) from the first issue to the last exit. Every
+  // record is held: a record whose exit lies after exitLimit (the research window's last picks, whose
+  // exits fall in the holdout the research run must not read) has no outcome but stays in the portfolio,
+  // marked to the close of the period's last day; dropping it would leave the portfolio in cash for the
+  // period's last weeks and book the benchmark's move in those weeks as excess return.
   const end = Math.min(model.T - 1, Math.max(to, ...measured.map((r) => r.closeT ?? to)));
-  const eq = followEquity(model, measured.map((r) => ({ i: r.i, t: r.t, tExit: r.closeT, cost: r.outcome.cost })), from, end);
-  const eqSets = Object.fromEntries(['twoOfFour', 'A', 'B', 'C', 'D'].map((k) => [k, followEquity(model, sets[k], from, end)]));
+  const eq = followEquity(model, followPositions(model, run.records), from, end);
+  const eqSets = Object.fromEntries(['twoOfFour', 'A', 'B', 'C', 'D'].map((k) => [k, followEquity(model, setsAll[k], from, end)]));
   // monthly excess of the follow portfolio over the benchmark, for the months of the period
   const lastDate = model.dates[to];
   const mq = monthlyReturns(eq.dates, eq.idx).filter(([m]) => m <= lastDate.slice(0, 7));
@@ -310,7 +326,8 @@ export function evaluatePeriod(model, rule, period, { composite } = {}) {
     quorum,
     byAgreement,
     sets: setStats,
-    setsRaw: sets,
+    setsRaw: setsAll,
+    llmShadow: run.issues.reduce((a, x) => ({ candidates: a.candidates + x.llmShadow.candidates, renewals: a.renewals + x.llmShadow.renewals }), { candidates: 0, renewals: 0 }),
     picksPerMonth: picksPerMonth(model, run).mean,
     renewsPerMonth: picksPerMonth(model, run, { kinds: ['RENEW'] }).mean,
     equity: eq,

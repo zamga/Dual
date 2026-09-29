@@ -57,18 +57,31 @@ export function fmtEur(x, { digits = 0, locale = 'en' } = {}) {
   return locale === 'sl' ? `${s}${body} €` : `${s}€${body}`;
 }
 
-// 0.962 -> "96" (the percentile a family gave a stock)
+// 0.962 -> "96" (the percentile a family gave a stock). Truncated, never rounded up: a stock at 0.9486
+// shows as 94, so a displayed 95 always means the family's score is at or above the 0.95 rule line.
+export function pctRank(p) {
+  if (!Number.isFinite(p)) return null;
+  return Math.min(99, Math.max(0, Math.floor(p * 100 + 1e-9)));
+}
+
 export function fmtPctRank(p) {
-  if (!Number.isFinite(p)) return '–';
-  return String(Math.min(100, Math.max(0, Math.round(p * 100))));
+  const r = pctRank(p);
+  return r === null ? '–' : String(r);
 }
 
-export function arrow(x) {
-  if (!Number.isFinite(x) || x === 0) return '→';
-  return x > 0 ? '↑' : '↓';
+// Direction of a percentage as it is printed: 0.000061 prints as "0.0%", so it is flat, not a gain.
+// `digits` is the number of decimals shown in percent (fmtPct's default is 1).
+function printedSign(x, digits) {
+  if (!Number.isFinite(x)) return 0;
+  return Math.sign(Math.round(x * 10 ** (digits + 2)));
 }
 
-export function signClass(x) {
-  if (!Number.isFinite(x) || x === 0) return 'flat';
-  return x > 0 ? 'gain' : 'loss';
+export function arrow(x, { digits = 1 } = {}) {
+  const s = printedSign(x, digits);
+  return s > 0 ? '↑' : s < 0 ? '↓' : '→';
+}
+
+export function signClass(x, { digits = 1 } = {}) {
+  const s = printedSign(x, digits);
+  return s > 0 ? 'gain' : s < 0 ? 'loss' : 'flat';
 }

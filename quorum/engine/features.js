@@ -36,10 +36,15 @@ export const FEATURES = [
   { key: 'turnover', family: null, label: { en: 'Share turnover (21 days)', sl: 'Obrat delnic (21 dni)' }, rawUnit: 'ratio' },
   { key: 'dtc', family: null, label: { en: 'Days to cover (short interest)', sl: 'Dnevi za pokritje (kratke pozicije)' }, rawUnit: 'days' },
   { key: 'days_to_earn', family: null, label: { en: 'Trading days to next earnings', sl: 'Dnevi trgovanja do naslednjih rezultatov' }, rawUnit: 'days' },
-  { key: 'news_neg', family: null, label: { en: 'Negative headline in the last 5 days', sl: 'Negativna novica v zadnjih 5 dneh' }, rawUnit: 'flag' },
+  // The LLM veto stand-in's own classification. Computed for display, never a D input: the brief
+  // (§3.3) backtests LLM components only after the training cutoff, and a D that learns the veto's
+  // labels would dodge every flagged stock itself, leaving the 48-hour veto nothing to block.
+  { key: 'news_neg', family: null, label: { en: 'Negative headline in the last 5 days', sl: 'Negativna novica v zadnjih 5 dneh' }, rawUnit: 'flag', llmStandIn: true },
 ];
 export const FEATURE_KEYS = FEATURES.map((f) => f.key);
 export const FEATURE_INDEX = Object.fromEntries(FEATURE_KEYS.map((k, j) => [k, j]));
+/** Features the ML ranker may use: every stored feature except the LLM stand-in's outputs. */
+export const D_INPUT_KEYS = FEATURES.filter((f) => !f.llmStandIn).map((f) => f.key);
 
 const W_LONG = 252;
 const W_SHORT = 60;

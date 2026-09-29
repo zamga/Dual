@@ -374,8 +374,9 @@
   --content: 0;
 }
 
+/* The note's content appears block by block (level.js sets visibility): never at a partial opacity (an
+   ultramarine badge at half opacity on Paper reads as lavender) and never cropped mid-line */
 .lv__note > :not(.lv__notechart) {
-  opacity: var(--content);
   padding-inline: var(--inset);
 }
 
@@ -464,6 +465,7 @@
 
 .lv__endlabel {
   position: absolute;
+  z-index: 1;
   right: 10px;
   transform: translateY(calc(-100% - 10px));
   font-family: var(--font-mono);
@@ -473,6 +475,13 @@
   opacity: 0;
   background: var(--paper);
   padding: 0 4px;
+}
+
+/* below 1200 a loss ends under the lintel: its label goes under the end point, away from the zero line */
+@media (max-width: 1199.98px) {
+  .lv__endlabel.is-below {
+    transform: translateY(10px);
+  }
 }
 
 .lv__daylabel {
@@ -714,9 +723,11 @@
     width: min(270px, 76vw);
     max-height: none;
   }
+  /* the caption has moved up into the headline's place, so the note starts under it, not under the
+     (hidden) headline: the whole note, advice line included, fits a 780 px tall phone */
   .lv__note {
-    grid-row: cap / steps;
-    margin-top: 8px;
+    grid-row: head / steps;
+    margin-top: calc(var(--caps-h, 64px) + clamp(10px, 2vh, 22px) + 14px);
   }
   .lv__stepnav {
     background: var(--chamber);
@@ -731,9 +742,11 @@
     gap: 2px 14px;
   }
   .lv__notechart {
-    min-height: 110px;
+    min-height: 92px; /* 18 px less than before, so the advice line always fits */
   }
-  .lv__noteadvice {
+  /* phones: the result row below already prints the big signed result; no in-plot label to collide
+     with the lintel */
+  .lv__endlabel {
     display: none;
   }
   .lv__cap {
@@ -1199,10 +1212,12 @@
   .how-step__tick {
     display: none;
   }
+  /* the threshold's number goes under the lintel, centred in bay 1 where no column or value stands */
   .how-quorum__thr .label {
     right: auto;
-    left: 0;
-    top: -1.6em;
+    left: calc(100% / 6);
+    top: 14px;
+    transform: translateX(-50%);
   }
 }
 
@@ -1219,29 +1234,16 @@
   }
 }
 
+/* Below 1024 the four families no longer fit a bay each: a 2 × 2 of equal halves between rule 1 and
+   rule 4 (never two bays beside one), so no family is squeezed. */
 @media (max-width: 1023.98px) {
   .how-fams {
-    grid-template-columns: var(--cols);
+    grid-column: r1 / r4;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: 22px;
   }
-  .how-fam:nth-child(1) {
-    grid-column: r1 / r3;
-  }
-  .how-fam:nth-child(2) {
-    grid-column: r3 / full-end;
-  }
-  .how-fam:nth-child(3) {
-    grid-column: r1 / r3;
-  }
-  .how-fam:nth-child(4) {
-    grid-column: r3 / full-end;
-  }
-}
-
-@media (min-width: 640px) and (max-width: 1023.98px) {
-  .how-fam:nth-child(2),
-  .how-fam:nth-child(4) {
-    grid-column: r3 / r4;
+  .how-fam:nth-child(n) {
+    grid-column: auto;
   }
 }
 
@@ -1367,11 +1369,6 @@
   border-bottom-color: var(--rule-dark);
 }
 
-@media (min-width: 1024px) {
-  .ledger-stats .stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
 
 @media (max-width: 1023.98px) {
   .chain__row {
@@ -1411,9 +1408,6 @@
   .chain__anchor {
     grid-row: 4;
     justify-self: end;
-  }
-  .ledger-stats .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1551,6 +1545,33 @@
 .sb__tick.is-coin {
   color: var(--graphite);
   font-weight: 600;
+}
+
+/* ticks on a rule sit beside it, never across it (the rule would strike the digits) */
+.sb__tick.is-start,
+.sb__tick.is-mid {
+  transform: translateX(6px);
+}
+
+.sb__tick.is-end {
+  transform: translateX(calc(-100% - 6px));
+}
+
+/* the coin-flip / no-skill note on its own line under the middle tick, so it never runs into the next */
+.sb__ticks {
+  height: 34px;
+}
+
+.sb__coin {
+  display: block;
+  font-weight: 400;
+}
+
+@media (max-width: 639.98px) {
+  /* phones: the rule ticks and the quartiles only */
+  .sb__tick.is-minor {
+    display: none;
+  }
 }
 
 @media (min-width: 640px) and (max-width: 1023.98px) {
@@ -1951,6 +1972,88 @@
   font-size: var(--fs-small);
 }
 
+/* a figure in a long-form section spans the page on the rules, under the text */
+.content-fig {
+  grid-column: full-start / full-end;
+  display: grid;
+  grid-template-columns: subgrid;
+  margin-top: var(--s-6);
+}
+
+.content-fig > .how-quorum,
+.content-fig > .how-steps {
+  grid-row: auto;
+  margin-top: 0;
+}
+
+.content-fig > .hw-funnel {
+  grid-column: r1 / r4;
+  padding-inline: var(--inset);
+}
+
+/* #how-it-works: the daily cadence as a timetable (the home page's how-step rows, one line each) */
+.hw-times .how-step {
+  padding-block: 14px;
+}
+
+.hw-times__text {
+  max-width: 58ch;
+}
+
+/* #how-it-works: the sealed record's funnel */
+.hw-funnel__list {
+  display: grid;
+  border-top: 1px solid var(--fg);
+}
+
+.hw-funnel__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(4.5em, auto);
+  gap: 6px 16px;
+  align-items: center;
+  padding-block: 9px;
+  border-bottom: 1px solid var(--rule-inner);
+  background: var(--bg);
+  font-size: var(--fs-small);
+}
+
+.hw-funnel__track {
+  position: relative;
+  height: 10px;
+}
+
+.hw-funnel__bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--w);
+  background: var(--fg);
+}
+
+.hw-funnel__bar.is-minus {
+  background: transparent;
+  border: 1px solid var(--fg-2);
+}
+
+.hw-funnel__bar.is-quorum {
+  background: var(--quorum);
+}
+
+.hw-funnel__v {
+  text-align: right;
+}
+
+@media (max-width: 639.98px) {
+  .hw-funnel__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .hw-funnel__track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 /* ---- changelog ---------------------------------------------------------------------------------- */
 .changelog {
   grid-column: full-start / full-end;
@@ -2245,7 +2348,7 @@
    ============================================================================================ */
 .pk-head {
   padding-block: clamp(3.5rem, 2rem + 5vw, 7rem) clamp(2.5rem, 1.5rem + 3vw, 4.5rem);
-  row-gap: var(--s-4);
+  row-gap: var(--s-5); /* the shared masthead rhythm: kicker, then the h1 (.masthead .display) */
 }
 
 .pk-h1 {
@@ -2369,15 +2472,6 @@
   margin-top: var(--s-2);
 }
 
-.pk-stats {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-
-@media (min-width: 1024px) {
-  .pk-stats {
-    grid-template-columns: repeat(var(--n, 6), minmax(0, 1fr));
-  }
-}
 
 /* the thesis: Newsreader, the checks in the strip */
 .pk-thesis__text {
@@ -2947,16 +3041,18 @@
   }
 }
 
+/* 640–1279: two equal halves between rule 1 and rule 4, every bar starting at its own drawn zero line */
 @media (min-width: 640px) and (max-width: 1279.98px) {
   .col-drivers {
+    grid-column: r1 / r4;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 0;
   }
-  .col-fam:nth-child(odd) {
-    grid-column: r1 / r3;
-    padding-right: calc(var(--inset) * 2);
+  .col-fam:nth-child(n) {
+    grid-column: auto;
   }
-  .col-fam:nth-child(even) {
-    grid-column: r3 / r4;
+  .col-fam:nth-child(odd) {
+    padding-right: calc(var(--inset) * 2);
   }
   .col-drv {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
@@ -2969,11 +3065,15 @@
 }
 
 @media (max-width: 1023.98px) {
+  /* no right margin to hang the band label in: it goes under the lintel, centred in bay 1, where no
+     column stands, on a Paper ground */
   .col-thrlabel {
-    left: auto;
-    right: 6px;
+    left: calc(100% / 6);
     bottom: auto;
-    top: 4px;
+    top: calc((1 - var(--thr)) * 100% + 16px);
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 0 4px;
   }
   .col-grid__v {
     right: auto;
@@ -3172,6 +3272,8 @@
   font-size: 0.75rem;
 }
 
+/* End labels are placed by path.js endLabelYs() (clear of each other and of the zero line) and wear an
+   opaque ground, so no line of the chart runs through their text. */
 .path-end {
   position: absolute;
   left: calc(var(--x) + var(--inset));
@@ -3183,14 +3285,8 @@
   white-space: nowrap;
   font-size: var(--fs-small);
   font-weight: 560;
-}
-
-.path-end.is-up {
-  transform: translateY(-110%);
-}
-
-.path-end.is-down {
-  transform: translateY(10%);
+  background: var(--bg);
+  padding: 1px 4px;
 }
 
 .path-end.is-bench {
@@ -3211,6 +3307,8 @@
   font-family: var(--font-mono);
   font-stretch: var(--wdth-mono);
   font-size: 0.6875rem;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase; /* one case for axis labels, as the hero note's DAY 0 */
   color: var(--fg-2);
 }
 
@@ -3233,26 +3331,20 @@
 }
 
 @media (max-width: 1023.98px) {
+  /* the ticks move inside the plot: above their line on an opaque ground, so a series passes behind */
   .path-tick {
     right: auto;
-    left: 6px;
-    transform: translateY(15%);
+    left: 4px;
+    transform: translateY(calc(-100% - 2px));
+    background: var(--bg);
+    padding: 0 3px;
+  }
+  .path-tick.is-top {
+    transform: translateY(2px);
   }
   .path-end {
     left: auto;
     right: 6px;
-  }
-  .path-end.is-net {
-    transform: translateY(-120%);
-  }
-  .path-end.is-bench {
-    transform: translateY(20%);
-  }
-  .path-end.is-net.is-down {
-    transform: translateY(20%);
-  }
-  .path-end.is-bench.is-up {
-    transform: translateY(-120%);
   }
 }
 
@@ -3284,17 +3376,6 @@
   border-top-color: var(--fg);
 }
 
-@media (min-width: 1024px) {
-  .lg-stats__strip .stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 639.98px) {
-  .lg-stats__strip .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 
 .lg-gap {
   display: grid;
@@ -3497,6 +3578,8 @@
   white-space: nowrap;
 }
 
+/* the record table's columns sit on the rules from 1024 px only: below that its cells are opaque like
+   every other table, so no rule strikes a number */
 .lg-status.is-open {
   font-weight: 600;
 }
@@ -3504,6 +3587,16 @@
 .lg-row.is-open td,
 .lg-row.is-open th {
   background: color-mix(in srgb, var(--paper) 55%, transparent);
+}
+
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .lg-table :is(th, td) {
+    background: var(--bg);
+  }
+  .lg-row.is-open td,
+  .lg-row.is-open th {
+    background: color-mix(in srgb, var(--paper) 55%, var(--bg));
+  }
 }
 
 .lg-row:hover td,
@@ -3565,27 +3658,34 @@
   .lg-table thead {
     display: none;
   }
+  /* the card spans rule 1 to rule 4 and its three columns are the three bays, text inset from each
+     rule: the number with its models badge and status, the stock, then dates (issued, entry, exit)
+     and results (net, benchmark, excess) as two rows in the same order as the desktop columns */
+  .lg-table {
+    width: calc(100% + 2 * var(--inset));
+    margin-inline: calc(-1 * var(--inset));
+  }
   .lg-table tr.lg-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-areas:
-      'no stock stock'
-      'issued exit models'
-      'net bench excess'
-      'entry status status';
-    gap: 6px 12px;
+      'no models status'
+      'stock stock stock'
+      'issued entry exit'
+      'net bench excess';
+    gap: 8px 0;
     padding: 12px 0 14px;
     line-height: 1.3;
     border-bottom: 1px solid var(--rule-inner);
   }
   .lg-table tr.lg-row > * {
-    padding: 0;
+    padding: 0 var(--inset);
     border: 0;
     text-align: left;
     background: transparent;
   }
   .lg-table td.num {
-    padding: 0;
+    padding: 0 var(--inset);
     text-align: left;
   }
   .lg-table td[data-label]::before {
@@ -3602,13 +3702,21 @@
   .lg-c-no {
     grid-area: no;
   }
-  .lg-table td.lg-c-status {
-    padding-left: 0;
-    text-align: right;
-    align-self: end;
+  .lg-table td.lg-c-status,
+  .lg-table td.lg-c-agreement {
+    align-self: center;
   }
-  .lg-c-status::before {
+  .lg-c-status::before,
+  .lg-c-agreement::before {
     display: none !important;
+  }
+  .lg-table .lg-status {
+    white-space: normal;
+    font-family: var(--font-mono);
+    font-stretch: var(--wdth-mono);
+    font-size: 0.625rem;
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
   }
   .lg-c-ticker {
     grid-area: stock;
@@ -3808,7 +3916,7 @@
 }
 
 .cb__head > .cb__anchor {
-  grid-column: r3 / full-end;
+  grid-column: r3 / r4; /* the tags wrap inside the bay; never past rule 4 */
 }
 
 .cb__q {
@@ -3844,6 +3952,12 @@
   flex-wrap: wrap;
   gap: 4px 8px;
   flex-basis: 100%;
+  min-width: 0;
+}
+
+.cb__tags .tag {
+  max-width: 100%;
+  white-space: normal;
 }
 
 .cb__anchor .tag {
@@ -3907,6 +4021,40 @@
   }
 }
 
+
+/* the holdout view of the scoreboard and deciles is backtest output: hatched like #backtest, Graphite */
+.lg-sb.is-hypothetical,
+.lg-ds.is-hypothetical {
+  position: relative;
+}
+
+.lg-sb.is-hypothetical > .hatch,
+.lg-ds.is-hypothetical > .hatch {
+  z-index: 0;
+  pointer-events: none;
+}
+
+.lg-sb.is-hypothetical > .sb,
+.lg-ds.is-hypothetical > :not(.hatch) {
+  position: relative;
+  z-index: 1;
+}
+
+.figcaption.is-hypothetical,
+.lg-period.is-hypothetical {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.sb__dot.is-hypo {
+  background: var(--graphite);
+}
+
+.lg-corr__t td.is-over {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 .lg-period {
   margin-top: calc(-1 * var(--s-3));
@@ -4404,10 +4552,17 @@
 }
 
 @media (max-width: 1023.98px) {
+  /* the ticks move inside the plot: above their line on an opaque ground, so the series pass behind */
   .eq-tick {
     right: auto;
-    left: 6px;
-    transform: translateY(10%);
+    left: 4px;
+    transform: translateY(calc(-100% - 2px));
+    background: var(--bg);
+    padding: 0 3px;
+    z-index: 1;
+  }
+  .eq-tick.is-top {
+    transform: translateY(2px);
   }
   .eq-end {
     display: none;
@@ -4549,17 +4704,6 @@
   border-top-color: var(--fg);
 }
 
-@media (min-width: 1024px) {
-  .is-funnel {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 639.98px) {
-  .is-funnel {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 
 /* picks and exits as cards on the bays */
 .is-cards {
@@ -4782,11 +4926,6 @@
   margin-top: var(--s-5);
 }
 
-@media (min-width: 1024px) {
-  .st-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
 
 .st-gate {
   display: grid;
@@ -5094,7 +5233,7 @@
 
 .bt-annual tr.is-holdout th,
 .bt-annual tr.is-holdout td {
-  background: color-mix(in srgb, var(--hairline) 22%, transparent);
+  background: color-mix(in srgb, var(--hairline) 22%, var(--bg)); /* opaque: the rules pass behind */
 }
 
 .bt-excell {
@@ -5202,11 +5341,60 @@
   }
 }
 
-/* the launch block */
+/* the launch block: the gates that decide (A-1), each with its figure under the name and the verdict */
 @media (min-width: 1024px) {
   .bt-launch > .bt-launch__gates {
     grid-row: 2 / span 2;
   }
+}
+
+.bt-launch__gates > div {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.bt-launch__gates dt {
+  display: grid;
+  gap: 3px;
+  color: var(--fg);
+}
+
+.bt-lv__k {
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.bt-launch__gates .bt-lv {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.bt-lv.is-fail {
+  font-weight: 600;
+}
+
+.bt-launch__gates > .bt-lv--orig {
+  border-top: 1px dashed var(--rule);
+}
+
+.bt-launch__gates > .bt-lv--orig dt {
+  color: var(--fg-2);
+}
+
+p.bt-lv {
+  font-family: var(--font-mono);
+  font-stretch: var(--wdth-mono);
+  font-size: 0.8125rem;
+}
+
+.bt-compare {
+  margin-top: var(--s-5);
+}
+
+.bt-compare .prose {
+  padding-block: 4px 12px;
 }
 
 
@@ -5234,9 +5422,10 @@
   margin-top: var(--s-5);
 }
 
+/* (d1) and (d2) side by side: the two halves of the amended gate, each on two bays */
 .bt-pooled__grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-5) calc(var(--inset) * 2);
   border-top: 1px solid var(--fg);
   padding-top: var(--s-4);
@@ -5285,14 +5474,6 @@
   color: var(--fg);
 }
 
-@media (max-width: 1023.98px) {
-  .bt-pooled__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .bt-pooled__dl {
-    grid-column: 1 / -1;
-  }
-}
 
 @media (max-width: 639.98px) {
   .bt-pooled__grid {
@@ -5307,6 +5488,11 @@
 .bt-od {
   grid-template-columns: 1fr;
   align-self: start;
+}
+
+/* a one-column strip in the metadata strip: text keeps the inset from rule 3 on the left only */
+.bt-od .stat {
+  padding-inline: 0;
 }
 
 .bt-crash {
@@ -5333,7 +5519,7 @@
   position: relative;
   height: clamp(200px, 20vw, 300px);
   border-bottom: 1px solid var(--fg);
-  margin-top: 64px;
+  margin-top: calc(var(--rows, 3) * 22px + 2px);
 }
 
 .vh-bar {
@@ -5350,13 +5536,17 @@
 .vh-mark {
   position: absolute;
   left: var(--x);
-  top: calc(-64px + var(--row) * 22px);
+  top: calc((var(--row) - var(--rows, 3)) * 22px - 2px);
   bottom: 0;
   border-left: 1.5px dashed var(--fg);
 }
 
 .vh-mark.is-hold {
   border-left: 2px solid var(--fg);
+}
+
+.vh-mark.is-research {
+  border-left: 2px dotted var(--fg);
 }
 
 .vh-mark__l {
@@ -7159,6 +7349,12 @@
   align-items: start;
 }
 
+/* the section's own hairline closes the list: no second rule and empty band under the last record */
+.app-items > .app-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
 .app-item__id {
   display: grid;
   gap: var(--s-4);
@@ -7687,12 +7883,9 @@
   transition: width var(--t-mid) var(--ease);
 }
 
-.rx-hist__row.is-quorum {
+.rx-sum__quorum dd {
   color: var(--quorum);
-}
-
-.rx-hist__row.is-quorum .rx-hist__bar i {
-  background: var(--quorum);
+  font-weight: 600;
 }
 
 .rx-hist__v {
@@ -7904,7 +8097,7 @@
   scrollbar-color: var(--rule-dark-strong) transparent;
 }
 
-.rx-scroll:focus-visible {
+.rx-grid:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -7927,7 +8120,7 @@
   background: rgb(201 207 210 / 0.05);
 }
 
-.rx-scroll:focus-visible .rx-datarow.is-active {
+.rx-grid:focus-visible .rx-datarow.is-active {
   background: rgb(201 207 210 / 0.09);
   box-shadow: inset 3px 0 0 var(--mist);
 }
@@ -8084,6 +8277,12 @@
 .rx-c-agree.is-quorum .rx-agree {
   color: var(--quorum);
   font-weight: 600;
+}
+
+/* 3/4 or 4/4 stopped by a veto: hollow Mist markers, never the quorum colour */
+.rx-dots.is-blocked i.is-on {
+  background: transparent;
+  border-color: var(--mist);
 }
 
 .rx-c-veto {

@@ -170,8 +170,14 @@ function median(xs) {
 }
 
 // The screener summary of a set of rows.
-//   -> { n, byAgree: [n0..n4], quorum, vetoed, byVeto: {key: n}, sectors: [[name, n]] (desc),
+//   -> { n, byAgree: [n0..n4], quorum, met, blocked, vetoed, byVeto: {key: n}, sectors: [[name, n]] (desc),
 //        median: {A,B,C,D,ret21}, inTop: {A,B,C,D} }
+// quorum counts every row at 3/4 or 4/4; met counts those with no veto (they met the rule: the only rows
+// the explorer draws in the quorum colour); blocked counts those a veto kept out.
+export function meetsRule(r) {
+  return (r?.agree ?? 0) >= 3 && !r?.veto;
+}
+
 export function summarize(rows, topPct = 0.95) {
   const byAgree = [0, 0, 0, 0, 0];
   const byVeto = Object.fromEntries(VETOES.map((k) => [k, 0]));
@@ -188,10 +194,13 @@ export function summarize(rows, topPct = 0.95) {
     sectors.set(r.sector, (sectors.get(r.sector) ?? 0) + 1);
     for (const f of FAMILIES) if (Number.isFinite(r[f]) && r[f] >= topPct) inTop[f]++;
   }
+  const met = rows.filter(meetsRule).length;
   return {
     n: rows.length,
     byAgree,
     quorum: byAgree[3] + byAgree[4],
+    met,
+    blocked: byAgree[3] + byAgree[4] - met,
     vetoed,
     byVeto,
     sectors: [...sectors.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)),

@@ -42,7 +42,9 @@ export function buildFundamentals({ fl, c, dates, S, N, mk, sec }) {
     const L0 = mk.L[c.listIdx[i]];
     const Sl0 = sec.Slev[k * S + c.listIdx[i]];
     const zBase = c.mcap0[i] * Math.exp(-c.m0[i] - c.beta[i] * L0 - c.gload[i] * Sl0);
-    const Z = zBase * Math.exp(fl.x[f] + c.beta[i] * fl.ls[f] + c.gload[i] * fl.ss[f]);
+    // the dollar scale follows the value path and the market, less the capital paid out since listing
+    // (payouts shrink the share count and the firm alike, so per-share and valuation ratios ignore them)
+    const Z = zBase * Math.exp(fl.x[f] + fl.pay[f] + c.beta[i] * fl.ls[f] + c.gload[i] * fl.ss[f]);
     const u = fl.u[f];
     const mg = fl.margin[f];
     const gm = c.gm[i] * Math.exp(0.5 * mg);

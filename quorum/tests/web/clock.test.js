@@ -55,3 +55,19 @@ test('remaining() and minute alignment', () => {
   assert.equal(remaining(61 * 60000).text, '1h 1m');
   assert.ok(msToNextMinute(Date.UTC(2026, 8, 28, 12, 0, 30)) <= 30020);
 });
+
+test('a clock created before the horizon pins itself once the horizon passes (the page stays open)', () => {
+  let real = new Date('2026-09-29T11:58:00Z'); // 13:58 CEST on 29.09, before the 14:00 slot after asOf
+  const c = createClock({ asOf: '2026-09-28', realNow: () => real });
+  assert.equal(c.mode, 'live');
+  assert.equal(clockMode(c), 'live');
+  assert.equal(c.now().toISOString(), '2026-09-29T11:58:00.000Z');
+  real = new Date('2026-09-29T12:03:00Z'); // 14:03 CEST: past the horizon
+  assert.equal(clockMode(c), 'pinned');
+  assert.equal(c.now().toISOString(), '2026-09-28T20:30:00.000Z', 'now() stops at the pinned instant');
+  real = new Date('2026-09-29T13:03:00Z');
+  assert.equal(c.now().toISOString(), '2026-09-28T20:30:00.000Z', 'and no longer ticks');
+  const st = pillState(c.now(), issues);
+  assert.equal(st.kind, 'countdown');
+  assert.equal(st.left.text, '15h 30m');
+});

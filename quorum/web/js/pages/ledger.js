@@ -7,15 +7,15 @@
 // SL: first draft, needs native review.
 import { h, announce, copyText } from '../dom.js';
 import { href } from '../router.js';
-import { statStrip, trackRecordLabel, sectionHead, signed, hashChip, familyName } from '../ui.js';
+import { statStrip, trackRecordLabel, sectionHead, signed, hashChip, familyName, recordCounts } from '../ui.js';
 import { masthead, toc } from './_content.js';
 import { ruleLabels } from '../rule.js';
-import { recordRows, sortRows, filterRows, indexPicks, isRevealed, issueBlocks, tamperTarget, tamperCopy } from './_records.js';
+import { recordRows, recordsCsv, sortRows, filterRows, indexPicks, isRevealed, issueBlocks, tamperTarget, tamperCopy } from './_records.js';
 import { verifyLedger, verifyInSlices, verifyReveals, rehashAt } from './_verify.js';
 import { chainBlocks } from '../charts/chain.js';
 import { dotPlot, HIT_DOMAIN, IC_DOMAIN } from '../charts/scoreboard.js';
 import { staircase, icSparklines } from '../charts/deciles.js';
-import { lineChart } from '../charts/equity.js';
+import { lineChart, hatchLayer } from '../charts/equity.js';
 import { silenceCalendar } from '../charts/silence-calendar.js';
 import { ledgerCsv } from '../core/ledger.js';
 import { fmtUsd } from '../core/format.js';
@@ -24,7 +24,7 @@ const PAGE = 40;
 
 export async function render(ctx) {
   const { L, fmt, locale } = ctx;
-  const [summary, picks, ledger, issues, meta, scoreboard, deciles] = await Promise.all([
+  const [summary, picks, ledger, issues, meta, scoreboard, deciles, launch] = await Promise.all([
     ctx.data('summary'),
     ctx.data('picks'),
     ctx.data('ledger'),
@@ -32,6 +32,7 @@ export async function render(ctx) {
     ctx.data('meta').catch(() => null),
     ctx.data('scoreboard').catch(() => null),
     ctx.data('deciles').catch(() => null),
+    ctx.launch(),
   ]);
   const R = ruleLabels(meta ?? scoreboard, locale);
   const byNo = indexPicks(picks);
@@ -59,23 +60,24 @@ export async function render(ctx) {
     'div',
     { class: 'page ledger' },
     head,
-    statsSection(ctx, summary),
+    statsSection(ctx, summary, meta),
     recordSection(ctx, picks, ledger, meta),
     chainSection(ctx, ledger, picks, byNo),
     scoreboardSection(ctx, scoreboard, meta, R),
     decilesSection(ctx, deciles, scoreboard, meta, R),
-    calendarSection(ctx, issues),
+    calendarSection(ctx, issues, launch),
     listsSection(ctx),
   );
   return { title: L('Ledger', 'Knjiga'), node };
 }
 
 // ---- 01 headline statistics (fixed order, never animated, never the largest element) ---------------------
-function statsSection(ctx, summary) {
+function statsSection(ctx, summary, meta) {
   const { L, fmt, locale } = ctx;
   const eq = summary.equity ?? [];
   const note = summary.alertGapNote?.[locale] ?? summary.alertGapNote?.en ?? null;
   const cum = summary.cumulative;
+  const rc = recordCounts(summary, meta?.counts);
   const chart = eq.length
     ? lineChart({
         dates: eq.map((r) => r[0]),
@@ -100,17 +102,17 @@ function statsSection(ctx, summary) {
     h(
       'p',
       { class: 'c-meta small muted lg-stats__order' },
-      L('Always in this order: picks, hit rate, median before mean, the worst pick, the drawdown, the alert gap.', 'Vedno v tem vrstnem redu: izbire, delež uspešnih, mediana pred povprečjem, najslabša izbira, padec, razlika ob obvestilu.'),
+      L('Always in this order: recommendations, hit rate, median before mean, the worst pick, the drawdown, the alert gap.', 'Vedno v tem vrstnem redu: priporočila, delež uspešnih, mediana pred povprečjem, najslabša izbira, padec, razlika ob obvestilu.'),
     ),
-    h('div', { class: 'c-wide lg-stats__strip' }, statStrip(summary, { t: ctx.t, fmt, locale })),
+    h('div', { class: 'c-wide lg-stats__strip' }, statStrip(summary, { t: ctx.t, fmt, locale, counts: meta?.counts })),
     h('p', { class: 'c-body rec-note' }, trackRecordLabel(locale)),
     cum
       ? h(
           'p',
           { class: 'c-meta rec-note' },
           L(
-            `Cumulative since ${fmt.date(summary.liveSince)}, ${fmt.int(summary.nPicks)} picks: follow every pick ${fmt.pct(cum.follow, { sign: true })}, benchmark ${fmt.pct(cum.bench, { sign: true })}. Not annualised: the record is under twelve months old.`,
-            `Skupaj od ${fmt.date(summary.liveSince)}, ${fmt.int(summary.nPicks)} izbir: vse izbire ${fmt.pct(cum.follow, { sign: true })}, merilo ${fmt.pct(cum.bench, { sign: true })}. Brez anualizacije: zapis je mlajši od dvanajstih mesecev.`,
+            `Cumulative since ${fmt.date(summary.liveSince)}, ${fmt.int(rc.records)} recommendations${Number.isFinite(rc.picks) ? ` (${fmt.int(rc.picks)} new picks, ${fmt.int(rc.renews)} renewals)` : ''}: follow every pick ${fmt.pct(cum.follow, { sign: true })}, benchmark ${fmt.pct(cum.bench, { sign: true })}. Not annualised: the record is under twelve months old.`,
+            `Skupaj od ${fmt.date(summary.liveSince)}, ${fmt.int(rc.records)} priporočil${Number.isFinite(rc.picks) ? ` (${fmt.int(rc.picks)} novih izbir, ${fmt.int(rc.renews)} podaljšanj)` : ''}: vse izbire ${fmt.pct(cum.follow, { sign: true })}, merilo ${fmt.pct(cum.bench, { sign: true })}. Brez anualizacije: zapis je mlajši od dvanajstih mesecev.`,
           ),
         )
       : null,
@@ -264,7 +266,7 @@ function recordSection(ctx, picks, ledger, meta) {
     { class: 'c-wide lg-table-wrap' },
     h(
       'table',
-      { class: 'table lg-table', role: 'table', 'aria-label': L('Every BUY and RENEW record', 'Vsi zapisi NAKUP in PODALJŠANJE') },
+      { class: 'table table--on-rules lg-table', role: 'table', 'aria-label': L('Every BUY and RENEW record', 'Vsi zapisi NAKUP in PODALJŠANJE') },
       h('thead', { role: 'rowgroup' }, h('tr', { role: 'row' }, headCells)),
       tbody,
     ),
@@ -298,6 +300,18 @@ function recordSection(ctx, picks, ledger, meta) {
     raw,
   );
   const live = ctx.mode === 'live' ? h('a', { class: 'arrow-link', href: '/api/ledger.csv' }, L('ledger.csv from the server', 'ledger.csv s strežnika')) : null;
+  // The picks themselves as CSV, as this viewer sees them (open tickers for Signal and Research only)
+  const picksCsv = recordsCsv(rows);
+  const picksBtn = h('button', { type: 'button', class: 'btn btn--ghost' }, L('Copy the picks as CSV', 'Kopiraj izbire kot CSV'));
+  picksBtn.addEventListener('click', async () => {
+    const ok = await copyText(picksCsv);
+    const n = rows.length;
+    const sealedN = rows.filter((r) => r.sealed).length;
+    copyStatus.textContent = ok
+      ? L(`Copied: ${fmt.int(n)} picks${sealedN ? `, ${fmt.int(sealedN)} of them sealed` : ''}.`, `Kopirano: ${fmt.int(n)} izbir${sealedN ? `, od tega ${fmt.int(sealedN)} zapečatenih` : ''}.`)
+      : L('Copy was blocked here. Select the table instead.', 'Kopiranje je tu onemogočeno. Namesto tega izberite tabelo.');
+    announce(copyStatus.textContent);
+  });
 
   return h(
     'section',
@@ -307,11 +321,11 @@ function recordSection(ctx, picks, ledger, meta) {
       'p',
       { class: 'lede c-body' },
       L(
-        `Every BUY and RENEW, measured from the US open on the issue day to the open 21 trading days later, after costs. Open picks are marked to the latest close (shown lighter).${ctx.tier === 'free' ? ' You are viewing as Free: open picks stay sealed until they close.' : ''}`,
-        `Vsak NAKUP in PODALJŠANJE, merjeno od odprtja ameriškega trga na dan izdaje do odprtja 21 trgovalnih dni pozneje, po stroških. Odprte izbire so vrednotene ob zadnjem zaprtju (svetlejše).${ctx.tier === 'free' ? ' Gledate kot Brezplačno: odprte izbire ostanejo zapečatene do zaprtja.' : ''}`,
+        `Every BUY and RENEW, measured from the US open on the issue day to the open 21 trading days later, after costs. Open picks are marked to the latest close (shown lighter).${ctx.tier === 'free' ? (ctx.mode === 'live' ? ' Open picks stay sealed until they close.' : ' You are viewing as Free: open picks stay sealed until they close.') : ''}`,
+        `Vsak NAKUP in PODALJŠANJE, merjeno od odprtja ameriškega trga na dan izdaje do odprtja 21 trgovalnih dni pozneje, po stroških. Odprte izbire so vrednotene ob zadnjem zaprtju (svetlejše).${ctx.tier === 'free' ? (ctx.mode === 'live' ? ' Odprte izbire ostanejo zapečatene do zaprtja.' : ' Gledate kot Brezplačno: odprte izbire ostanejo zapečatene do zaprtja.') : ''}`,
       ),
     ),
-    h('div', { class: 'c-meta lg-csv' }, h('p', { class: 'label' }, L('Take it with you', 'Vzemite s seboj')), h('p', { class: 'lg-csv__row' }, copyBtn, live), copyStatus),
+    h('div', { class: 'c-meta lg-csv' }, h('p', { class: 'label' }, L('Take it with you', 'Vzemite s seboj')), h('p', { class: 'lg-csv__row' }, copyBtn, picksBtn, live), copyStatus),
     controls,
     h('div', { class: 'c-wide lg-count-row' }, count),
     table,
@@ -375,7 +389,9 @@ function chainSection(ctx, ledger, picks, byNo) {
     setProg(1);
     btn.disabled = false;
     const c = res.chain;
+    // replaceChildren() would print a null child as the text "null": drop the lines that do not apply
     results.replaceChildren(
+      ...[
       c.ok
         ? line(true, L(`${fmt.int(c.checked)} record hashes recomputed: SHA-256 of canonical JSON.`, `${fmt.int(c.checked)} zgoščenih vrednosti zapisov ponovno izračunanih: SHA-256 kanoničnega JSON.`))
         : line(false, L(`Chain broken at record #${c.firstBad}: ${c.reason}.`, `Veriga je pretrgana pri zapisu #${c.firstBad}: ${c.reason}.`)),
@@ -386,6 +402,7 @@ function chainSection(ctx, ledger, picks, byNo) {
       res.anchors.ok
         ? line(true, L(`${fmt.int(res.anchors.checked)} daily Merkle roots recomputed and matched.`, `${fmt.int(res.anchors.checked)} dnevnih Merklovih korenov ponovno izračunanih in ujemajočih.`))
         : line(false, L(`Anchor of ${fmt.date(res.anchors.bad[0].date)}: ${res.anchors.bad[0].reason}.`, `Sidro ${fmt.date(res.anchors.bad[0].date)}: ${res.anchors.bad[0].reason}.`)),
+      ].filter(Boolean),
     );
     phase.textContent = res.ok
       ? L(`Verified in ${fmt.int(res.ms)} ms with WebCrypto, in this tab. The chain is intact.`, `Preverjeno v ${fmt.int(res.ms)} ms z WebCrypto, v tem zavihku. Veriga je nepoškodovana.`)
@@ -468,6 +485,7 @@ function tamperDemo(ctx, entries) {
     const rev = preset === 'reveal' ? await verifyReveals(forged.entries) : null;
     run.disabled = false;
     out.replaceChildren(
+      ...[
       h('p', { class: 'td__what' }, h('span', { class: 'label' }, L(`Record #${target.seq} · ${target.label}`, `Zapis #${target.seq} · ${target.label}`)), diff(forged.before, forged.after, forged.at)),
       h(
         'p',
@@ -483,6 +501,7 @@ function tamperDemo(ctx, entries) {
             h('span', {}, L(`And the forged reveal of #${rev.bad[0].no} no longer hashes to the commitment sealed in record #${rev.bad[0].commitSeq}.`, `Ponarejeno razkritje #${rev.bad[0].no} se ne ujema več z zavezo, zapečateno v zapisu #${rev.bad[0].commitSeq}.`)),
           )
         : null,
+      ].filter(Boolean),
     );
     rehash.hidden = false;
   });
@@ -523,7 +542,16 @@ function scoreboardSection(ctx, sb, meta, R) {
   const R2 = ruleLabels({ rule: { topPct: sb.topPct ?? R.topPct } }, locale);
   const draw = () => {
     const p = sb.periods?.[period];
-    periodText.textContent = p ? L(`${period === 'sealed' ? 'Sealed record' : 'Holdout (opened once, after the freeze)'}: ${fmt.date(p.from)} to ${fmt.date(p.to)}.`, `${period === 'sealed' ? 'Zapečaten zapis' : 'Preizkusno obdobje (odprto enkrat, po zamrznitvi)'}: ${fmt.date(p.from)} do ${fmt.date(p.to)}.`) : '';
+    // The holdout is backtest output (ARCHITECTURE.md §0): labelled HYPOTHETICAL, hatched, and its quorum
+    // dots drawn in Graphite, because only the sealed record's picks are quorum marks.
+    const hypo = period === 'holdout';
+    periodText.textContent = p
+      ? hypo
+        ? L(`Hypothetical backtest · holdout (opened once, after the freeze): ${fmt.date(p.from)} to ${fmt.date(p.to)}. Not live results; the full backtest is on its own page.`, `Hipotetični povratni test · preizkusno obdobje (odprto enkrat, po zamrznitvi): ${fmt.date(p.from)} do ${fmt.date(p.to)}. Niso rezultati v živo; celoten povratni test je na svoji strani.`)
+        : L(`Sealed record: ${fmt.date(p.from)} to ${fmt.date(p.to)}.`, `Zapečaten zapis: ${fmt.date(p.from)} do ${fmt.date(p.to)}.`)
+      : '';
+    periodText.classList.toggle('is-hypothetical', hypo);
+    for (const w of [plotWrap, icWrap]) w.classList.toggle('is-hypothetical', hypo);
     const famRows = (sb.families ?? []).map((f) => ({
       key: f.id,
       title: f.id,
@@ -540,7 +568,7 @@ function scoreboardSection(ctx, sb, meta, R) {
       v: a[period]?.hit,
       ci: a[period]?.hitCI,
       n: a[period]?.n,
-      kind: a.k === '2/4 shadow' ? 'shadow' : 'quorum',
+      kind: a.k === '2/4 shadow' ? 'shadow' : hypo ? 'hypo' : 'quorum',
       note: Number.isFinite(a[period]?.medianExcess) ? L(`median excess ${fmt.pct(a[period].medianExcess, { sign: true })}`, `mediana presežka ${fmt.pct(a[period].medianExcess, { sign: true })}`) : null,
     }));
     plotWrap.replaceChildren(
@@ -572,6 +600,7 @@ function scoreboardSection(ctx, sb, meta, R) {
         },
       ),
     );
+    if (hypo) for (const w of [plotWrap, icWrap]) w.prepend(hatchLayer());
   };
   const seg = h(
     'div',
@@ -598,14 +627,36 @@ function scoreboardSection(ctx, sb, meta, R) {
   );
   const corr = sb.correlations;
   if (corr?.matrix) {
+    // The retrain rule (brief §3.2) applies on validation data at the annual retrain; the sealed-record
+    // matrix is monitored. Cells above 0.5 are flagged and named, so the caption never contradicts them.
+    const dIdx = corr.order.indexOf('D');
+    const over = [];
+    corr.matrix.forEach((row, i) => row.forEach((v, j) => j > i && v > 0.5 && over.push(`${corr.order[i]}–${corr.order[j]} ${fmt.num(v, 2)}`)));
+    const dOver = dIdx >= 0 && corr.matrix[dIdx].some((v, j) => j !== dIdx && v > 0.5);
+    const val = corr.validation?.maxD ?? corr.validationMaxD ?? null;
+    const capEn = `Mean monthly cross-sectional Spearman, ${corr.period === 'holdout' ? 'holdout' : 'sealed record'}. The retrain rule applies to validation data at the annual retrain: if the ML ranker (D) correlates above 0.5 with another family there, it is retrained without that family’s inputs${Number.isFinite(val) ? ` (latest validation: highest D correlation ${fmt.num(val, 3)})` : ''}. In the sealed record the matrix is monitored, and D stays frozen until the retrain.${over.length ? ` Above 0.5 here: ${over.join(', ')}${dOver ? ', reviewed at the next annual retrain' : ''}.` : ''}`;
+    const capSl = `Povprečni mesečni presečni Spearman, ${corr.period === 'holdout' ? 'preizkusno obdobje' : 'zapečaten zapis'}. Pravilo ponovnega učenja velja za validacijske podatke ob letnem ponovnem učenju: če rangirnik ML (D) tam z drugo družino korelira nad 0,5, ga naučimo brez vhodov te družine${Number.isFinite(val) ? ` (zadnja validacija: največja korelacija D ${fmt.num(val, 3)})` : ''}. V zapečatenem zapisu matriko spremljamo, D pa ostane zamrznjen do ponovnega učenja.${over.length ? ` Nad 0,5 tukaj: ${over.join(', ')}${dOver ? ', pregled ob naslednjem letnem ponovnem učenju' : ''}.` : ''}`;
     corrWrap.append(
       h('p', { class: 'label' }, L('Rank correlation between families', 'Rangovna korelacija med družinami')),
       h(
         'table',
         { class: 'table lg-corr__t' },
-        h('caption', {}, L('Mean monthly cross-sectional Spearman, sealed record. Above 0.5 for the ML ranker would trigger a retrain.', 'Povprečni mesečni presečni Spearman, zapečaten zapis. Nad 0,5 za rangirnik ML bi sprožilo ponovno učenje.')),
+        h('caption', {}, L(capEn, capSl)),
         h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, h('span', { class: 'visually-hidden' }, L('Family', 'Družina'))), corr.order.map((f) => h('th', { scope: 'col', class: 'num' }, f)))),
-        h('tbody', {}, corr.order.map((f, i) => h('tr', {}, h('th', { scope: 'row' }, f), corr.matrix[i].map((v, j) => h('td', { class: ['num', i === j && 'muted'] }, i === j ? '–' : fmt.num(v, 2)))))),
+        h(
+          'tbody',
+          {},
+          corr.order.map((f, i) =>
+            h(
+              'tr',
+              {},
+              h('th', { scope: 'row' }, f),
+              corr.matrix[i].map((v, j) =>
+                h('td', { class: ['num', i === j && 'muted', i !== j && v > 0.5 && 'is-over'] }, i === j ? '–' : fmt.num(v, 2), i !== j && v > 0.5 ? h('span', { class: 'visually-hidden' }, L(' (above 0.5)', ' (nad 0,5)')) : null),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -647,9 +698,14 @@ function decilesSection(ctx, deciles, sb, meta, R) {
     const title = score === 'combined' ? L('Combined score', 'Skupna ocena') : `${score} · ${name(score)}`;
     wrap.replaceChildren(staircase(rows, { fmt, L, title }));
     const months = deciles.months?.[period];
+    // the holdout is backtest output: labelled HYPOTHETICAL and hatched, as on #backtest
+    const hypo = period === 'holdout';
+    wrap.classList.toggle('is-hypothetical', hypo);
+    if (hypo) wrap.prepend(hatchLayer());
+    cap.classList.toggle('is-hypothetical', hypo);
     cap.textContent = L(
-      `${title}, ${period === 'sealed' ? 'sealed record' : 'holdout'}${months ? `, ${months} month-ends` : ''}. Every eligible stock, not just picks: mean 21-day excess return by decile, before costs, with 95% intervals.`,
-      `${title}, ${period === 'sealed' ? 'zapečaten zapis' : 'preizkusno obdobje'}${months ? `, ${months} koncev mesecev` : ''}. Vse upravičene delnice, ne samo izbire: povprečni 21-dnevni presežni donos po decilih, pred stroški, s 95-odstotnimi intervali.`,
+      `${hypo ? 'Hypothetical backtest · ' : ''}${title}, ${period === 'sealed' ? 'sealed record' : 'holdout, not live results'}${months ? `, ${months} month-ends` : ''}. Every eligible stock, not just picks: mean 21-day excess return by decile, before costs, with 95% intervals.`,
+      `${hypo ? 'Hipotetični povratni test · ' : ''}${title}, ${period === 'sealed' ? 'zapečaten zapis' : 'preizkusno obdobje, ne rezultati v živo'}${months ? `, ${months} koncev mesecev` : ''}. Vse upravičene delnice, ne samo izbire: povprečni 21-dnevni presežni donos po decilih, pred stroški, s 95-odstotnimi intervali.`,
     );
   };
   const mkSeg = (label, options, get, set) => {
@@ -704,7 +760,7 @@ function decilesSection(ctx, deciles, sb, meta, R) {
 }
 
 // ---- 06 the Silence Calendar ---------------------------------------------------------------------------------------
-function calendarSection(ctx, issues) {
+function calendarSection(ctx, issues, launch) {
   const { L, fmt, locale } = ctx;
   const readout = h('p', { class: 'sc-readout mono', 'aria-hidden': 'true' });
   const cal = silenceCalendar(issues, {
@@ -721,11 +777,11 @@ function calendarSection(ctx, issues) {
   return h(
     'section',
     { class: 'section grid rec-sec home-cal lg-cal', id: 'calendar', 'aria-labelledby': 'lg-cal-h' },
-    ...sectionHead({ index: '06', kicker: L('The Silence Calendar', 'Koledar tišine'), title: L('Most days: no quorum.', 'Večino dni: brez kvoruma.'), id: 'lg-cal-h', size: 'd3' }),
+    ...sectionHead({ index: '06', kicker: L('The Silence Calendar', 'Koledar tišine'), title: L('Most days: no new pick.', 'Večino dni: brez nove izbire.'), id: 'lg-cal-h', size: 'd3' }),
     h(
       'p',
       { class: 'lede c-body' },
-      L(`${fmt.int(issues.length)} issues since ${fmt.date(issues[0]?.date)}, one every US trading day at 14:00; ${fmt.int(q)} had a quorum. Each cell opens that day’s issue.`, `${fmt.int(issues.length)} izdaj od ${fmt.date(issues[0]?.date)}, vsak dan trgovanja v ZDA ob 14:00; ${fmt.int(q)} s kvorumom. Vsaka celica odpre izdajo tistega dne.`),
+      L(`${fmt.int(issues.length)} issues since ${fmt.date(issues[0]?.date)}, one every US trading day at 14:00; ${fmt.int(q)} carried a new pick or a renewal. On the others the stocks that met the rule were already open picks, capped or cooling down. Each cell opens that day’s issue.`, `${fmt.int(issues.length)} izdaj od ${fmt.date(issues[0]?.date)}, vsak dan trgovanja v ZDA ob 14:00; ${fmt.int(q)} z novo izbiro ali podaljšanjem. Ob drugih so bile delnice, ki so izpolnile pravilo, že odprte izbire, omejene ali v premoru. Vsaka celica odpre izdajo tistega dne.`),
     ),
     h(
       'div',
@@ -733,7 +789,7 @@ function calendarSection(ctx, issues) {
       h(
         'ul',
         { class: 'sc-legend' },
-        [L('Issue, no quorum', 'Izdaja brez kvoruma'), L('Quorum: a pick', 'Kvorum: izbira'), L('Exit texted', 'Poslan izstop')].map((text, i) =>
+        [L('No new pick', 'Brez nove izbire'), L('Quorum: a pick', 'Kvorum: izbira'), launch?.prelaunch ? L('Exit, text due', 'Izstop, predviden SMS') : L('Exit texted', 'Poslan izstop')].map((text, i) =>
           h('li', {}, h('span', { class: `sc-key sc-${['n', 'q', 'x'][i]}`, 'aria-hidden': 'true' }), text),
         ),
       ),

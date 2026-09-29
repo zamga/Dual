@@ -68,3 +68,39 @@ test('validateSms enforces the content rules', () => {
   assert.match(bad('x'.repeat(161)).join(), /segment/);
   assert.match(bad('QUORUM zadnja priloznost').join(), /zadnja/);
 });
+
+test('validateSms rejects price targets, return claims and urgency (brief §2.5)', () => {
+  const bad = (t) => validateSms(t).errors.join('; ');
+  const tail = 'Not personal advice: qrm.si/p/0417 Stop: qrm.si/u/7Kq2xZ';
+  // the reviewer's cases, each of which used to pass
+  assert.match(bad(`QUORUM #0417 BUY ACME. Target 145.20. Up 12% expected. ${tail}`), /target.*decimal.*percent/);
+  assert.match(bad(`QUORUM #0417 BUY ACME at 123.45 ${tail}`), /price-like decimal/);
+  assert.match(bad('Buy immediately before the open!'), /immediately.*exclamation/);
+  // every claim word, whole words only
+  for (const w of ['Target', 'targets', 'upside', 'return', 'returns', 'gain', 'gains', 'profit', 'profitable', 'sure', 'surely', 'immediately', 'today', 'fast', 'cilj', 'donos', 'dobicek', 'zasluzek', 'zanesljivo', 'gotovo', 'danes']) {
+    assert.match(bad(`QUORUM ACME ${w}`), /forbidden word/, w);
+  }
+  assert.equal(bad('QUORUM again measure fastener returned'), '', 'whole words only');
+  // decimals in any locale; a percent sign alone is a return claim
+  assert.match(bad('QUORUM ACME 12,5'), /decimal/);
+  assert.match(bad('QUORUM ACME up 12 %'), /percent/);
+  // dates as the templates write them are not prices, and neither are links
+  assert.equal(bad('QUORUM 28.09.26 14:00 CEST. US open 28.09. Izstop: 27.10. odprtje 28.9. qrm.si/p/0417.'), '');
+  assert.match(bad('QUORUM ACME 12.50. x'), /decimal/, 'not a date: there is no month 50');
+});
+
+test('every template passes the stricter rules on every issue date of a year', () => {
+  let d = '2026-01-02';
+  for (let k = 0; k < 260; k++) {
+    for (const kind of ['BUY', 'CLOSE', 'RENEW']) {
+      for (const locale of LOCALES) {
+        const t = renderSms(kind, locale, { no: String(k + 1).padStart(4, '0'), ticker: 'QRST', issueDate: d, exitDate: d, agreement: 4, token: 'a1B2c3' });
+        const r = validateSms(t);
+        assert.ok(r.ok, `${t}: ${r.errors.join('; ')}`);
+      }
+    }
+    const [y, m, dd] = d.split('-').map(Number);
+    const next = new Date(Date.UTC(y, m - 1, dd + 1));
+    d = next.toISOString().slice(0, 10);
+  }
+});

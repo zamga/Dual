@@ -102,7 +102,9 @@ function safeJson(s) {
 
 // deleteAccount(ctx, userId, { ip }) -> summary. Anonymises the user; keeps the append-only
 // compliance rows (consent_events, opt_outs, processed_events, delivery_events, access_log) and
-// billing records the law requires, which then point at an anonymised user id.
+// billing records the law requires, which then point at an anonymised user id. Sessions (with their
+// IP address and user agent) are deleted. The provider logs hold nothing personal to scrub: they
+// are minimised when written (server/privacy.js).
 export async function deleteAccount(ctx, userId, { ip = null } = {}) {
   const { db } = ctx;
   await ctx.billing.cancelAllForDeletion(userId); // throws if Stripe is down: we never stop tracking a live subscription
@@ -110,7 +112,7 @@ export async function deleteAccount(ctx, userId, { ip = null } = {}) {
   const now = iso(ctx.now());
   db.tx(() => {
     revokeAll(db, userId, 'deleted', ctx.now());
-    db.run('UPDATE sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE user_id = ?', now, userId);
+    db.run('DELETE FROM sessions WHERE user_id = ?', userId);
     db.run('DELETE FROM magic_links WHERE user_id = ?', userId);
     db.run('DELETE FROM geo_checks WHERE user_id = ?', userId);
     db.run('DELETE FROM phone_numbers WHERE user_id = ?', userId);
@@ -128,11 +130,14 @@ export async function deleteAccount(ctx, userId, { ip = null } = {}) {
   });
   return {
     deleted: true,
+    // Exactly what stays, all of it keyed to the anonymised user id (nothing else is kept).
     retained: [
-      { data: 'consent records (text version and hash, time, IP, user agent, page)', why: 'proof of consent, kept 5 years (brief §2.7)' },
-      { data: 'opt-out records', why: 'proof that texts stopped' },
-      { data: 'subscription, payment, refund and withdrawal records', why: 'accounting and tax law' },
-      { data: 'delivery receipts (phone number stored only as a hash)', why: 'messaging audit' },
+      { data: 'consent records (text version and hash, time, IP address, user agent, page)', why: 'proof of consent, kept 5 years (brief §2.7)' },
+      { data: 'opt-out records (channel, source, time)', why: 'proof that texts stopped' },
+      { data: 'subscription, payment, refund and withdrawal records (Stripe ids, amounts, dates, billing country; for a withdrawal also its time, IP address and user agent)', why: 'accounting, tax and consumer law' },
+      { data: 'payment provider events (ids, amounts, dates, statuses, billing country; no name, email or address)', why: 'accounting and tax law' },
+      { data: 'message log (channel, kind, status, times, provider message id; no address and no text)', why: 'messaging audit' },
+      { data: 'delivery receipts (provider message id, status, error code; no phone number)', why: 'messaging audit' },
     ],
   };
 }

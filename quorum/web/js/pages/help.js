@@ -17,7 +17,7 @@ const COPY = {
 <div><dt>Sender</dt><dd>QUORUM (alphanumeric, one-way)</dd></div>
 <div><dt>When</dt><dd>14:00 Ljubljana time, US trading days only</dd></div>
 <div><dt>What</dt><dd>BUY, CLOSE and RENEW only. No marketing texts, ever.</dd></div>
-<div><dt>How many</dt><dd>At most 16 a month, picks and exits together. Most days, none.</dd></div>
+<div><dt>How many</dt><dd>At most 16 a month, picks and exits together. On many days, none.</dd></div>
 <div><dt>Countries</dt><dd>Slovenia, Austria, Germany, Croatia, Italy</dd></div>
 <div><dt>Quiet hours</dt><dd>Nothing outside 08:00–21:00 in your time zone, enforced in code</dd></div>
 <div><dt>Cost</dt><dd>We charge nothing per text. Your operator may charge for roaming.</dd></div>
@@ -26,17 +26,17 @@ const COPY = {
     },
     stop: {
       title: 'Stop the texts',
-      body: `<ol><li><strong>Tap the stop link</strong> at the end of any text (qrm.si/u/…). It opens a confirmation page; one tap turns SMS off immediately, across every message.</li><li>Or switch SMS off in <a href="${href('account')}">your account</a>.</li><li>Or email <span class="mono">support@quorum.example</span> from the address on your account.</li></ol><p>You get one final text confirming that SMS is off. Your subscription is not affected: picks still arrive by email and push.</p>`,
+      body: `<ol><li><strong>Tap the stop link</strong> at the end of any text (qrm.si/u/…). It opens a confirmation page; one tap turns SMS off immediately, across every message.</li><li>Or switch SMS off in <a href="${href('account')}">your account</a>.</li><li>Or email {{contact:support}} from the address on your account.</li></ol><p>You get one final text confirming that SMS is off. Your subscription is not affected: picks still arrive by email and push.</p>`,
     },
     missing: {
       title: 'Not receiving texts?',
-      body: `<ul><li>Most days there is no quorum and no text. Check <a href="${href('ledger')}">the latest issue</a> first.</li><li>Check that your number is verified and SMS is on in <a href="${href('account')}">your account</a>.</li><li>Texts are sent only to numbers in the five SMS countries.</li><li>Some phones file alphanumeric senders separately; look for QUORUM in your message list.</li><li>Delivery status for each channel is on <a href="${href('status')}">the status page</a>.</li></ul>`,
+      body: `<ul><li>Many days bring no new pick and no exit, so no text. Check <a href="${href('ledger')}">the latest issue</a> first.</li><li>Check that your number is verified and SMS is on in <a href="${href('account')}">your account</a>.</li><li>Texts are sent only to numbers in the five SMS countries.</li><li>Some phones file alphanumeric senders separately; look for QUORUM in your message list.</li><li>Delivery status for each channel is on <a href="${href('status')}">the status page</a>.</li></ul>`,
     },
     faq: {
       title: 'Questions',
       items: [
         ['Is this investment advice?', '<p>No. We publish general research to the public. It does not take your situation into account, and we cannot tell you whether to buy or sell. Support and any assistant will refuse that question.</p>'],
-        ['Why was there no text today?', '<p>Because no stock had at least three of four families {inTop} without a veto. The issue still published at 14:00, with the number of stocks scored and the closest agreement reached.</p>'],
+        ['Why was there no text today?', '<p>Because the issue had no BUY, RENEW or CLOSE. A stock becomes a pick only when at least three of four families rank it {inTop}, no veto fires and the caps leave room: at most 2 new picks an issue, 8 a month and 3 open per sector, and never a stock that is already open or closed in the last 10 trading days. On most days some stock meets the rule but is already an open pick, capped or cooling down; the issue says which. It still publishes at 14:00, with the stocks scored and the closest agreement.</p>'],
         ['What does 3/4 mean?', '<p>Three of our four model families ranked the stock {inTop} that day. 4/4 means all four. We show conviction only this way, never as a probability or a score.</p>'],
         ['When is a pick measured from?', '<p>From the US regular-session open on the issue day, 90 minutes after the text (60 minutes in the weeks when the EU and US change clocks on different dates). The exit is the open 21 trading days later.</p>'],
         ['What is the alert gap?', '<p>The difference between the price when the pick was published and the entry open. We publish it for every pick. If the median gap exceeds 30 bps over 20 picks, the liquidity floor doubles.</p>'],
@@ -59,7 +59,7 @@ const COPY = {
 <div><dt>Pošiljatelj</dt><dd>QUORUM (alfanumerični, enosmerni)</dd></div>
 <div><dt>Kdaj</dt><dd>Ob 14:00 po ljubljanskem času, samo na dneve trgovanja v ZDA</dd></div>
 <div><dt>Kaj</dt><dd>Samo NAKUP, ZAPRTJE in PODALJŠANJE. Nikoli trženjski SMS.</dd></div>
-<div><dt>Koliko</dt><dd>Največ 16 na mesec, izbire in izhodi skupaj. Večino dni nobenega.</dd></div>
+<div><dt>Koliko</dt><dd>Največ 16 na mesec, izbire in izhodi skupaj. Veliko dni nobenega.</dd></div>
 <div><dt>Države</dt><dd>Slovenija, Avstrija, Nemčija, Hrvaška, Italija</dd></div>
 <div><dt>Mirne ure</dt><dd>Nič zunaj 08:00–21:00 v vašem časovnem pasu, zagotovljeno v kodi</dd></div>
 <div><dt>Strošek</dt><dd>Za SMS ne zaračunavamo ničesar. Vaš operater lahko zaračuna gostovanje.</dd></div>
@@ -68,17 +68,17 @@ const COPY = {
     },
     stop: {
       title: 'Ustavite SMS',
-      body: `<ol><li><strong>Tapnite povezavo za odjavo</strong> na koncu katerega koli SMS (qrm.si/u/…). Odpre stran za potrditev; en dotik takoj izklopi SMS za vsa sporočila.</li><li>Ali izklopite SMS v <a href="${href('account')}">svojem računu</a>.</li><li>Ali pišite na <span class="mono">support@quorum.example</span> z naslova, ki je povezan z računom.</li></ol><p>Prejmete še en SMS s potrditvijo, da so SMS izklopljeni. Naročnina ostane nespremenjena: izbire še vedno prejemate po e-pošti in s potisnimi obvestili.</p>`,
+      body: `<ol><li><strong>Tapnite povezavo za odjavo</strong> na koncu katerega koli SMS (qrm.si/u/…). Odpre stran za potrditev; en dotik takoj izklopi SMS za vsa sporočila.</li><li>Ali izklopite SMS v <a href="${href('account')}">svojem računu</a>.</li><li>Ali pišite na {{contact:support}} z naslova, ki je povezan z računom.</li></ol><p>Prejmete še en SMS s potrditvijo, da so SMS izklopljeni. Naročnina ostane nespremenjena: izbire še vedno prejemate po e-pošti in s potisnimi obvestili.</p>`,
     },
     missing: {
       title: 'Ne prejemate SMS?',
-      body: `<ul><li>Večino dni ni kvoruma in ni SMS. Najprej preverite <a href="${href('ledger')}">zadnjo izdajo</a>.</li><li>Preverite, ali je vaša številka potrjena in SMS vklopljen v <a href="${href('account')}">vašem računu</a>.</li><li>SMS pošiljamo samo na številke v petih državah SMS.</li><li>Nekateri telefoni alfanumerične pošiljatelje razvrstijo posebej; poiščite QUORUM med sporočili.</li><li>Stanje dostave za vsak kanal je na <a href="${href('status')}">strani s stanjem</a>.</li></ul>`,
+      body: `<ul><li>Veliko dni ne prinese nove izbire ne izstopa, zato ni SMS. Najprej preverite <a href="${href('ledger')}">zadnjo izdajo</a>.</li><li>Preverite, ali je vaša številka potrjena in SMS vklopljen v <a href="${href('account')}">vašem računu</a>.</li><li>SMS pošiljamo samo na številke v petih državah SMS.</li><li>Nekateri telefoni alfanumerične pošiljatelje razvrstijo posebej; poiščite QUORUM med sporočili.</li><li>Stanje dostave za vsak kanal je na <a href="${href('status')}">strani s stanjem</a>.</li></ul>`,
     },
     faq: {
       title: 'Vprašanja',
       items: [
         ['Je to investicijski nasvet?', '<p>Ne. Javnosti objavljamo splošne raziskave. Ne upoštevajo vaših okoliščin in vam ne moremo reči, ali kupiti ali prodati. Podpora in vsak pomočnik bosta to vprašanje zavrnila.</p>'],
-        ['Zakaj danes ni bilo SMS?', '<p>Ker nobena delnica ni imela vsaj treh od štirih družin {inTop} brez veta. Izdaja je kljub temu izšla ob 14:00, s številom ocenjenih delnic in največjim doseženim soglasjem.</p>'],
+        ['Zakaj danes ni bilo SMS?', '<p>Ker izdaja ni imela NAKUPA, PODALJŠANJA ali ZAPRTJA. Delnica postane izbira samo, ko jo vsaj tri od štirih družin uvrstijo {inTop}, se ne sproži noben veto in omejitve dopuščajo: največ 2 novi izbiri na izdajo, 8 na mesec in 3 odprte na sektor, nikoli pa delnica, ki je že odprta ali zaprta v zadnjih 10 trgovalnih dneh. Večino dni kakšna delnica izpolni pravilo, a je že odprta izbira, omejena ali v premoru; izdaja pove, kaj velja. Izdaja vseeno izide ob 14:00, s številom ocenjenih delnic in največjim soglasjem.</p>'],
         ['Kaj pomeni 3/4?', '<p>Tri od naših štirih družin modelov so delnico tisti dan uvrstile {inTop}. 4/4 pomeni vse štiri. Prepričanje prikažemo samo tako, nikoli kot verjetnost ali oceno.</p>'],
         ['Od kdaj se meri izbira?', '<p>Od rednega odprtja ameriškega trga na dan izdaje, 90 minut po SMS (60 minut v tednih, ko EU in ZDA premikata uro na različna dneva). Izstop je odprtje 21 trgovalnih dni pozneje.</p>'],
         ['Kaj je razlika ob obvestilu?', '<p>Razlika med ceno ob objavi izbire in vstopno ceno ob odprtju. Objavimo jo za vsako izbiro. Če mediana v 20 izbirah preseže 30 b.t., se prag likvidnosti podvoji.</p>'],

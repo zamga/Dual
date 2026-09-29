@@ -88,6 +88,9 @@ test('sorting: by agreement then combined score; nulls last both ways; stable ti
 
 test('the screener summary adds up', () => {
   const s = summarize(rows, topPct);
+  // only 3/4+ rows with no veto met the rule; the rest of the 3/4+ rows were vetoed
+  assert.equal(s.met + s.blocked, s.quorum);
+  assert.equal(s.met, rows.filter((r) => (r.agree ?? 0) >= 3 && !r.veto).length);
   assert.equal(s.n, rows.length);
   assert.equal(s.byAgree.reduce((a, b) => a + b, 0), rows.length);
   assert.equal(s.quorum, rows.filter((r) => r.agree >= 3).length);

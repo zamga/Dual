@@ -69,7 +69,7 @@ export function lineChart({ dates, series, log = false, bands = [], markers = []
   if (hatch) plot.append(hatchLayer());
   plot.append(...bandEls, s);
   for (const v of Y.ticks) {
-    const tk = h('span', { class: 'eq-tick' }, yLabel(v));
+    const tk = h('span', { class: ['eq-tick', Y.scale(v) < 90 && 'is-top'] }, yLabel(v));
     tk.style.setProperty('--y', `${Y.scale(v) / 10}%`);
     plot.append(tk);
   }

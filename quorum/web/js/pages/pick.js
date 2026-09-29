@@ -1,5 +1,6 @@
 // #p-NNNN: the pick research note (brief §7 and §5). Summary box at the top, the colonnade (data), the
-// thesis (opinion), the checks, the path and the outcome or mark-to-market, the texts exactly as sent,
+// thesis (opinion), the checks, the path and the outcome or mark-to-market, the texts as written (sent
+// to subscribers only once SMS alerts launch: ctx.launch()),
 // commit–reveal with in-browser verification, the RENEW chain and earlier picks on the stock, and the
 // full MAR disclosure block at the bottom. Free viewers of an open pick see the sealed record only.
 //
@@ -45,12 +46,13 @@ function person(meta, id) {
 export async function render(ctx) {
   const { L, fmt, locale } = ctx;
   const no = ctx.params.no;
-  const [picks, meta, ledger] = await Promise.all([ctx.data('picks'), ctx.data('meta').catch(() => null), ctx.data('ledger').catch(() => null)]);
+  const [picks, meta, ledger, launch] = await Promise.all([ctx.data('picks'), ctx.data('meta').catch(() => null), ctx.data('ledger').catch(() => null), ctx.launch()]);
+  const pre = launch.prelaunch;
   const byNo = indexPicks(picks);
   const pick = byNo.get(no);
   if (!pick) return missing(ctx, no);
   const R = ruleLabels(meta, locale);
-  if (isSealedFor(pick, ctx.tier, byNo)) return sealedNote(ctx, pick, { meta, byNo, R });
+  if (isSealedFor(pick, ctx.tier, byNo)) return sealedNote(ctx, pick, { meta, byNo, R, pre });
 
   const final = !!pick.outcome;
   const res = resultOf(pick);
@@ -67,7 +69,7 @@ export async function render(ctx) {
   // ---- header ----------------------------------------------------------------------------------------
   const head = h(
     'header',
-    { class: 'grid pk-head' },
+    { class: 'grid masthead pk-head' },
     h(
       'p',
       { class: 'label c-head pk-kicker' },
@@ -214,10 +216,11 @@ export async function render(ctx) {
         [L('Benchmark', 'Merilo'), signed(out.bench, { fmt }), ctx.t('common.benchmark')],
         [L('Net in euro', 'Neto v evrih'), signed(out.eurNet, { fmt }), L('includes currency', 'vključuje tečaj')],
         [L('Alert gap', 'Razlika ob obvestilu'), fmt.bps(out.alertGapBps), L('dissemination price vs entry open', 'cena ob objavi proti vstopni')],
+        // d5 and d63 are open-to-open excess over the benchmark, after costs (engine/backtest.js measure())
         [
-          L('63 trading days', '63 trgovalnih dni'),
+          L('Excess at 63 trading days', 'Presežek po 63 trgovalnih dneh'),
           out.d63 != null ? signed(out.d63, { fmt }) : h('span', { class: 'muted' }, L('not yet', 'še ne')),
-          h('span', {}, L('5 days ', '5 dni '), signed(out.d5, { fmt }), L(' · net, context only', ' · neto, samo kontekst')),
+          h('span', {}, L('at 5 days ', 'po 5 dneh '), signed(out.d5, { fmt }), L(' · excess vs S&P 500 TR, context only', ' · presežek nad S&P 500 TR, samo kontekst')),
         ],
       ]
     : [
@@ -248,8 +251,8 @@ export async function render(ctx) {
       'p',
       { class: 'lede c-body' },
       L(
-        `On ${fmt.date(pick.issueDate)} ${pick.agreement} of the four model families placed ${pick.ticker} ${R.inTop}. The lintel rests on the columns that qualified; the drivers under each column are the factors behind its score, in standard deviations from the universe (the rule is zero).`,
-        `${fmt.date(pick.issueDate)} so ${pick.agreement} od štirih družin modelov uvrstile ${pick.ticker} ${R.inTop}. Preklada leži na stebrih, ki so se uvrstili; dejavniki pod vsakim stebrom so razlogi za oceno, v standardnih odklonih od univerzuma (črta je nič).`,
+        `On ${fmt.date(pick.issueDate)} ${pick.agreement} of the four model families placed ${pick.ticker} ${R.inTop}. The lintel rests on the columns that qualified; the drivers under each column are the factors behind its score, in standard deviations from the universe; each bar starts at zero (z = 0), which on wide screens is the column’s own rule.`,
+        `${fmt.date(pick.issueDate)} so ${pick.agreement} od štirih družin modelov uvrstile ${pick.ticker} ${R.inTop}. Preklada leži na stebrih, ki so se uvrstili; dejavniki pod vsakim stebrom so razlogi za oceno, v standardnih odklonih od univerzuma; vsak stolpec se začne pri nič (z = 0), kar je na širokih zaslonih črta stebra.`,
       ),
     ),
     h(
@@ -370,24 +373,29 @@ export async function render(ctx) {
     pathChart(pick, { fmt, L, final, locale }),
   );
 
-  // ---- 04 the texts, exactly as sent ------------------------------------------------------------------
+  // ---- 04 the texts (as sent once launched; as written before) ------------------------------------------
   const smsSec = h(
     'section',
     { class: 'section grid paper ruled pk-sec pk-sms', id: 'texts', 'aria-labelledby': 'pk-sms-h' },
     ...sectionHead({
       index: '04',
-      kicker: L('The texts', 'Sporočila SMS'),
-      title: L('Exactly as sent.', 'Natanko tako, kot so bila poslana.'),
+      kicker: pre ? L('The texts · pre-launch, not sent', 'Sporočila SMS · pred zagonom, niso poslana') : L('The texts', 'Sporočila SMS'),
+      title: pre ? L('As written for 14:00.', 'Kot so pripravljena za 14:00.') : L('Exactly as sent.', 'Natanko tako, kot so bila poslana.'),
       id: 'pk-sms-h',
       size: 'd3',
     }),
     h(
       'p',
       { class: 'lede c-body' },
-      L(
-        `One GSM-7 segment each, sent at ${dis.time} ${dis.tz} to every subscriber in the same second. No price, no target, no urgency; the link leads here.`,
-        `Vsako en segment GSM-7, poslano ob ${dis.time} ${dis.tz} vsem naročnikom v isti sekundi. Brez cene, cilja in pritiska; povezava vodi sem.`,
-      ),
+      pre
+        ? L(
+            `One GSM-7 segment each, rendered for this record at ${dis.time} ${dis.tz}. Once SMS alerts launch, every subscriber gets the text in the same second; before launch there are no subscribers and nothing was sent. No price, no target, no urgency; the link leads here.`,
+            `Vsako en segment GSM-7, pripravljeno za ta zapis ob ${dis.time} ${dis.tz}. Ko se obvestila SMS zaženejo, vsi naročniki SMS prejmejo v isti sekundi; pred zagonom naročnikov ni in nič ni bilo poslano. Brez cene, cilja in pritiska; povezava vodi sem.`,
+          )
+        : L(
+            `One GSM-7 segment each, sent at ${dis.time} ${dis.tz} to every subscriber in the same second. No price, no target, no urgency; the link leads here.`,
+            `Vsako en segment GSM-7, poslano ob ${dis.time} ${dis.tz} vsem naročnikom v isti sekundi. Brez cene, cilja in pritiska; povezava vodi sem.`,
+          ),
     ),
     h(
       'div',
@@ -658,6 +666,19 @@ function marBlock(ctx, pick, { meta, R, approver, hist, mVer }) {
       h('span', { class: 'label' }, ctx.t('common.draft')),
       h('span', {}, L('Company in formation; wording to be approved by counsel.', 'Družba v ustanavljanju; besedilo mora odobriti odvetnik.')),
     ),
+    // The demo is not a service and a fictional company's record is not a recommendation: say so first.
+    ctx.mode === 'live'
+      ? null
+      : h(
+          'p',
+          { class: 'c-body pk-mar__sample' },
+          h('b', {}, L('Sample disclosure.', 'Vzorec razkritja.')),
+          ' ',
+          L(
+            'In production this block reads as follows. In this demo the company and the issuer are fictional, and nothing on this page is a recommendation.',
+            'V produkciji se ta del glasi tako, kot sledi. V tem demu sta podjetje in izdajatelj izmišljena in nič na tej strani ni priporočilo.',
+          ),
+        ),
     h(
       'dl',
       { class: 'c-body boxed pk-mar__list' },
@@ -759,7 +780,7 @@ function neighbours(ctx, pick, picks, byNo) {
 }
 
 // ---- the sealed record (Free viewers, open pick) ----------------------------------------------------------
-function sealedNote(ctx, pick, { byNo }) {
+function sealedNote(ctx, pick, { byNo, pre = true }) {
   const { L, fmt } = ctx;
   const sealAt = localTime(pick.producedAt);
   const dis = localTime(pick.disseminatedAt);
@@ -770,7 +791,7 @@ function sealedNote(ctx, pick, { byNo }) {
     { class: 'pk pk--sealed' },
     h(
       'header',
-      { class: 'grid pk-head' },
+      { class: 'grid masthead pk-head' },
       h(
         'p',
         { class: 'label c-head pk-kicker' },
@@ -781,8 +802,8 @@ function sealedNote(ctx, pick, { byNo }) {
         'p',
         { class: 'lede c-body' },
         L(
-          `Sealed at ${sealAt.time} ${sealAt.tz} and published at ${dis.time} ${dis.tz} on ${fmt.date(pick.issueDate)}. The ticker, the thesis and the chart are revealed when the pick closes${pick.status === 'renewed' || chainFinal !== pick ? ' (it was renewed; the chain closes last)' : ''}. Subscribers saw all of it at 14:00; tiers differ in breadth, never in timing.`,
-          `Zapečateno ob ${sealAt.time} ${sealAt.tz} in objavljeno ob ${dis.time} ${dis.tz} ${fmt.date(pick.issueDate)}. Oznaka, teza in graf se razkrijejo ob zaprtju izbire${pick.status === 'renewed' || chainFinal !== pick ? ' (bila je podaljšana; veriga se zapre zadnja)' : ''}. Naročniki so vse videli ob 14:00; paketi se razlikujejo po obsegu, nikoli po času.`,
+          `Sealed at ${sealAt.time} ${sealAt.tz} and published at ${dis.time} ${dis.tz} on ${fmt.date(pick.issueDate)}. The ticker, the thesis and the chart are revealed to everyone when the pick closes${pick.status === 'renewed' || chainFinal !== pick ? ' (it was renewed; the chain closes last)' : ''}. On the free Ledger tier an open pick stays sealed (number, time, hash) until then; the paid tiers see it from 14:00${pre ? ' once SMS alerts launch (there are no subscribers before launch)' : ''}.`,
+          `Zapečateno ob ${sealAt.time} ${sealAt.tz} in objavljeno ob ${dis.time} ${dis.tz} ${fmt.date(pick.issueDate)}. Oznaka, teza in graf se vsem razkrijejo ob zaprtju izbire${pick.status === 'renewed' || chainFinal !== pick ? ' (bila je podaljšana; veriga se zapre zadnja)' : ''}. V brezplačnem paketu Ledger ostane odprta izbira do takrat zapečatena (številka, čas, zgoščena vrednost); plačljiva paketa jo vidita od 14:00${pre ? ', ko se obvestila SMS zaženejo (pred zagonom naročnikov ni)' : ''}.`,
         ),
       ),
       h(

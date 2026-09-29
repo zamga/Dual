@@ -1,6 +1,6 @@
 // The Silence Calendar: one cell per issue since the sealed record began.
 // Hollow = an issue published with no quorum. Ultramarine = a quorum (a pick).
-// A small base tick marks days that texted an exit (CLOSE) without a new pick.
+// A small base tick marks days with an exit (CLOSE, a text-worthy item) and no new pick.
 // Desktop: 12 months across rules 1–4, four months per bay; each month is weeks × weekdays.
 // Below 1024 px: one row per month. Cells are links to #issue-DATE with a roving tabindex.
 import { h } from '../dom.js';
@@ -40,8 +40,10 @@ export function cellText(row, { fmt, L }) {
     const nos = [...(row.buys ?? []), ...(row.renews ?? [])].map((n) => `#${n}`).join(', ');
     return `${base} · ${L('quorum', 'kvorum')} ${row.closest}/4 · ${nos}`;
   }
-  const exits = row.closes?.length ? ` · ${L('exit texted', 'izstop poslan')} ${row.closes.map((n) => `#${n}`).join(', ')}` : '';
-  return `${base} · ${L('closest', 'največ')} ${row.closest}/4${exits}`;
+  const exits = row.closes?.length ? ` · ${L('exit', 'izstop')} ${row.closes.map((n) => `#${n}`).join(', ')}` : '';
+  // a day whose qualifying stocks were all held, capped or cooling down is "no new pick", not "no quorum"
+  const met = (row.closest ?? 0) >= (row.required ?? 3) && (row.reached ?? 0) > 0;
+  return `${base} · ${met ? L(`${row.closest}/4 met, no new pick`, `${row.closest}/4 izpolnjeno, brez nove izbire`) : `${L('closest', 'največ')} ${row.closest}/4`}${exits}`;
 }
 
 const MONTHS = {

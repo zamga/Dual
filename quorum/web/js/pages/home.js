@@ -6,16 +6,19 @@ import { createLevel } from '../hero/level.js';
 import { silenceCalendar } from '../charts/silence-calendar.js';
 import { hashChip, timestamp, statStrip, trackRecordLabel, sectionHead, familyName, familyDef } from '../ui.js';
 import { ruleLabels } from '../rule.js';
+import { issueCounts } from './_records.js';
+import { axisTicks, HIT_DOMAIN } from '../charts/scoreboard.js';
+import { quorumExample } from '../charts/quorum-example.js';
 
 const T = {
   en: {
     title: 'We only text when the models agree',
     cal: {
       kicker: 'The daily issue',
-      title: 'Most days: no quorum.',
+      title: 'Most days: no new pick.',
       lede: (x) =>
-        `An issue is published at 14:00 Ljubljana time on every US trading day, pick or not. Since the sealed record began on ${x.since}: ${x.issues} issues, ${x.q} with a quorum. Texts went out on ${x.texted} days; on the other ${x.silent}, nobody’s phone moved.`,
-      legend: ['Issue, no quorum', 'Quorum: a pick', 'Exit texted'],
+        `An issue is published at 14:00 Ljubljana time on every US trading day, pick or not. Since the sealed record began on ${x.since}: ${x.issues} issues, ${x.q} with a new pick or a renewal. ${x.metAll ? 'On every issue at least one stock met the rule' : `On ${x.met} issues at least one stock met the rule`}; on the days without a new pick, those stocks were already open picks, capped or cooling down. ${x.pre ? `A text was due on ${x.texted} days (a BUY, RENEW or CLOSE); SMS alerts have not launched, so none was sent.` : `Texts went out on ${x.texted} days; on the other ${x.silent}, nobody’s phone moved.`}`,
+      legend: (pre) => ['No new pick', 'Quorum: a pick', pre ? 'Exit, text due' : 'Exit texted'],
       readout: 'Selected issue',
       how: 'Arrow keys move through the issues; Enter opens one.',
       caption: (x) => `Every issue from ${x.from} to ${x.to}. Each cell links to that day’s issue.`,
@@ -54,12 +57,12 @@ const T = {
         {
           time: '14:00',
           title: 'The issue is published. Every trading day.',
-          body: 'With a pick or without one. An empty issue says “No quorum today”, how many stocks were scored and how close they came.',
+          body: 'With a pick or without one. An issue without a new pick says so, how many stocks were scored, and what held back the ones that met the rule: picks already open, the caps or a cooldown.',
         },
         {
           time: '14:00',
           title: 'A text goes out only for BUY, CLOSE or RENEW.',
-          body: 'One message, one segment, the same second for every subscriber. No prices, no urgency, and a stop link in every one.',
+          body: 'One message, one segment, the same second for every subscriber once SMS alerts launch. No prices, no urgency, and a stop link in every one.',
         },
         {
           time: '15:30',
@@ -97,7 +100,10 @@ const T = {
     score: {
       kicker: 'Does the gate work?',
       title: 'Is agreement worth waiting for?',
-      lede: 'The 2/4 shadow set is every stock exactly two families liked: published after close as the control. If quorum picks do not beat it, the gate adds nothing, and this chart would say so.',
+      lede: 'The 2/4 shadow set is every stock exactly two families liked: published after close as the control. If quorum picks do not beat it, the gate adds nothing.',
+      verdict: (x) =>
+        `${x.fail ? 'So far it does not' : x.level ? 'So far the evidence is mixed' : 'So far it does'}: on the holdout the gate ${x.fail ? 'failed' : 'passed'} its test (quorum ${x.hq} a pick against ${x.h2} for the 2/4 set), and in the sealed record the two are ${x.level ? 'level' : x.ahead ? 'apart, quorum ahead' : 'apart, quorum behind'} (${x.sq} against ${x.s2} beating the benchmark).`,
+      gateLink: 'The gate test (b)',
       axis: 'Share of picks that beat the benchmark over 21 trading days',
       coin: 'coin flip',
       rows: { '4/4': 'Four of four', '3/4': 'Three of four', '2/4 shadow': 'Two of four (shadow, not picks)' },
@@ -108,7 +114,7 @@ const T = {
     price: {
       kicker: 'What do I get?',
       title: 'One price for everyone.',
-      lede: 'Tiers differ in data breadth, never in pick timing. Every subscriber receives the same text in the same second.',
+      lede: 'The paid tiers differ in data breadth, never in pick timing: every subscriber gets the same text in the same second. On the free tier open picks stay sealed until they close.',
       honest: 'Expect picks to beat the benchmark 53–58% of the time. A sustained live rate above 60% is treated as a bug until proven otherwise.',
       tiers: [
         { name: 'Ledger', price: '€0', per: 'always free', items: ['The public ledger and the daily issue', 'Closed picks revealed; open picks sealed', 'Per-model scoreboard and methodology', 'Weekly Sunday email'], cta: 'Open the ledger', href: href('ledger') },
@@ -123,10 +129,10 @@ const T = {
     title: 'SMS pošljemo samo, ko se modeli strinjajo',
     cal: {
       kicker: 'Dnevna izdaja',
-      title: 'Večino dni: brez kvoruma.',
+      title: 'Večino dni: brez nove izbire.',
       lede: (x) =>
-        `Izdaja izide ob 14:00 po ljubljanskem času vsak dan trgovanja v ZDA, z izbiro ali brez nje. Od začetka zapečatenega zapisa ${x.since}: ${x.issues} izdaj, ${x.q} s kvorumom. SMS je šel ven ${x.texted} dni; ostalih ${x.silent} se ni zganil noben telefon.`,
-      legend: ['Izdaja brez kvoruma', 'Kvorum: izbira', 'Poslan izstop'],
+        `Izdaja izide ob 14:00 po ljubljanskem času vsak dan trgovanja v ZDA, z izbiro ali brez nje. Od začetka zapečatenega zapisa ${x.since}: ${x.issues} izdaj, ${x.q} z novo izbiro ali podaljšanjem. ${x.metAll ? 'V vsaki izdaji je vsaj ena delnica izpolnila pravilo' : `V ${x.met} izdajah je vsaj ena delnica izpolnila pravilo`}; na dneve brez nove izbire so bile te delnice že odprte izbire, omejene ali v premoru. ${x.pre ? `SMS bi bil predviden ${x.texted} dni (NAKUP, PODALJŠANJE ali ZAPRTJE); obvestila SMS še niso zagnana, zato ni bil poslan noben.` : `SMS je šel ven ${x.texted} dni; ostalih ${x.silent} se ni zganil noben telefon.`}`,
+      legend: (pre) => ['Brez nove izbire', 'Kvorum: izbira', pre ? 'Izstop, predviden SMS' : 'Poslan izstop'],
       readout: 'Izbrana izdaja',
       how: 'S puščicami se premikate med izdajami; Enter jo odpre.',
       caption: (x) => `Vse izdaje od ${x.from} do ${x.to}. Vsaka celica vodi do izdaje tistega dne.`,
@@ -142,7 +148,7 @@ const T = {
         { time: '11:30', title: 'Pet vetov jo lahko še ustavi.', body: 'Močno kratko prodana (zgornji decil dni pokritja), nenavadno volatilna sama po sebi (zgornji decil idiosinkratske volatilnosti), rezultati v treh trgovalnih dneh, napovedana združitev ali razdelitev ali pomembna negativna novica v zadnjih 48 urah.' },
         { time: '12:00', title: 'Imenovana odobriteljica lahko izbiro odstrani. Nikoli doda.', body: 'Vsaka odstranitev je zabeležena z razlogom in javno šteta. Brez odobritelja ni izbire.' },
         { time: '13:45', title: 'Zapečateno.', body: 'Zapis je kanoničen JSON, zgoščen s SHA-256 in povezan s prejšnjim zapisom. Oznaka ostane skrita za zgoščeno zavezo, dokler se izbira ne zapre.' },
-        { time: '14:00', title: 'Izdaja izide. Vsak dan trgovanja.', body: 'Z izbiro ali brez. Prazna izdaja pove »Danes brez kvoruma«, koliko delnic je bilo ocenjenih in kako blizu so bile.' },
+        { time: '14:00', title: 'Izdaja izide. Vsak dan trgovanja.', body: 'Z izbiro ali brez. Izdaja brez nove izbire to pove, koliko delnic je bilo ocenjenih in kaj je zadržalo tiste, ki so izpolnile pravilo: že odprte izbire, omejitve ali premor.' },
         { time: '14:00', title: 'SMS gre ven samo za NAKUP, ZAPRTJE ali PODALJŠANJE.', body: 'Eno sporočilo, en segment, ista sekunda za vse naročnike. Brez cen, brez pritiska in s povezavo za odjavo v vsakem.' },
         { time: '15:30', title: 'Merjeno od odprtja ameriškega trga, 90 minut pozneje.', body: 'Vstop je naslednje redno odprtje, cena, ki jo naročnik dejansko lahko dobi. Izstop je določen ob vstopu: odprtje 21 trgovalnih dni pozneje. Brez stop-loss naročil in ciljnih cen.' },
       ],
@@ -176,7 +182,10 @@ const T = {
     score: {
       kicker: 'Ali pravilo deluje?',
       title: 'Se soglasje splača počakati?',
-      lede: 'Senčni niz 2/4 so vse delnice, ki sta jih izbrali natanko dve družini: objavimo ga po zaprtju kot kontrolo. Če izbire s kvorumom ne premagajo tega niza, pravilo ne doda ničesar, in ta graf bi to pokazal.',
+      lede: 'Senčni niz 2/4 so vse delnice, ki sta jih izbrali natanko dve družini: objavimo ga po zaprtju kot kontrolo. Če izbire s kvorumom ne premagajo tega niza, pravilo ne doda ničesar.',
+      verdict: (x) =>
+        `${x.fail ? 'Doslej ga ne' : x.level ? 'Doslej so dokazi mešani' : 'Doslej ga'}: na preizkusnem obdobju pravilo preizkusa ${x.fail ? 'ni prestalo' : 'je prestalo'} (kvorum ${x.hq} na izbiro proti ${x.h2} za niz 2/4), v zapečatenem zapisu pa sta ${x.level ? 'izenačena' : x.ahead ? 'narazen, kvorum spredaj' : 'narazen, kvorum zadaj'} (${x.sq} proti ${x.s2} nad merilom).`,
+      gateLink: 'Preizkus pravila (b)',
       axis: 'Delež izbir, ki so v 21 trgovalnih dneh premagale merilo',
       coin: 'met kovanca',
       rows: { '4/4': 'Štiri od štirih', '3/4': 'Tri od štirih', '2/4 shadow': 'Dve od štirih (senčni niz, ne izbire)' },
@@ -187,7 +196,7 @@ const T = {
     price: {
       kicker: 'Kaj dobim?',
       title: 'Ena cena za vse.',
-      lede: 'Paketi se razlikujejo po obsegu podatkov, nikoli po času izbir. Vsak naročnik prejme isti SMS v isti sekundi.',
+      lede: 'Plačljiva paketa se razlikujeta po obsegu podatkov, nikoli po času izbir: vsak naročnik prejme isti SMS v isti sekundi. V brezplačnem paketu ostanejo odprte izbire zapečatene do zaprtja.',
       honest: 'Pričakujte, da bodo izbire premagale merilo v 53–58 % primerov. Trajen delež nad 60 % obravnavamo kot napako, dokler se ne dokaže drugače.',
       tiers: [
         { name: 'Ledger', price: '0 €', per: 'vedno brezplačno', items: ['Javna knjiga in dnevna izdaja', 'Zaprte izbire razkrite, odprte zapečatene', 'Preglednica modelov in metodologija', 'Tedenska nedeljska e-pošta'], cta: 'Odpri knjigo', href: href('ledger') },
@@ -202,15 +211,15 @@ const T = {
 
 export async function render(ctx) {
   const C = T[ctx.locale] ?? T.en;
-  const [hero, meta] = await Promise.all([ctx.data('hero'), ctx.data('meta').catch(() => null)]);
-  const level = createLevel(ctx, hero, { meta });
+  const [hero, meta, launch] = await Promise.all([ctx.data('hero'), ctx.data('meta').catch(() => null), ctx.launch()]);
+  const level = createLevel(ctx, hero, { meta, prelaunch: launch.prelaunch });
   const node = h(
     'div',
     { class: 'home' },
     level.node,
-    calendarSection(ctx, C.cal),
+    calendarSection(ctx, C.cal, launch),
     howSection(ctx, C.how, hero, meta),
-    ledgerSection(ctx, C.ledger),
+    ledgerSection(ctx, C.ledger, meta),
     scoreSection(ctx, C.score),
     priceSection(ctx, C.price),
   );
@@ -224,7 +233,7 @@ export async function render(ctx) {
 }
 
 // ---- 01 Silence Calendar ------------------------------------------------------------------------------
-function calendarSection(ctx, C) {
+function calendarSection(ctx, C, launch) {
   const { fmt, L } = ctx;
   const figure = h('div', { class: 'sc-figure c-wide flush' });
   const readout = h('p', { class: 'sc-readout mono', 'aria-hidden': 'true' });
@@ -233,7 +242,7 @@ function calendarSection(ctx, C) {
   const legend = h(
     'ul',
     { class: 'sc-legend' },
-    C.legend.map((text, i) => h('li', {}, h('span', { class: `sc-key sc-${['n', 'q', 'x'][i]}`, 'aria-hidden': 'true' }), text)),
+    C.legend(launch.prelaunch).map((text, i) => h('li', {}, h('span', { class: `sc-key sc-${['n', 'q', 'x'][i]}`, 'aria-hidden': 'true' }), text)),
   );
   const section = h(
     'section',
@@ -250,7 +259,8 @@ function calendarSection(ctx, C) {
     .then((issues) => {
       const q = issues.filter((r) => r.quorum).length;
       const texted = issues.filter((r) => r.buys?.length || r.renews?.length || r.closes?.length).length;
-      lede.textContent = C.lede({ since: fmt.date(issues[0].date), issues: fmt.int(issues.length), q: fmt.int(q), texted: fmt.int(texted), silent: fmt.int(issues.length - texted) });
+      const met = issues.filter((r) => issueCounts(r).quorumMet).length;
+      lede.textContent = C.lede({ since: fmt.date(issues[0].date), issues: fmt.int(issues.length), q: fmt.int(q), met: fmt.int(met), metAll: met === issues.length, texted: fmt.int(texted), silent: fmt.int(issues.length - texted), pre: launch.prelaunch });
       caption.textContent = C.caption({ from: fmt.date(issues[0].date), to: fmt.date(issues[issues.length - 1].date) });
       const cal = silenceCalendar(issues, {
         fmt,
@@ -273,9 +283,6 @@ function calendarSection(ctx, C) {
 // ---- 02 How a pick happens: a timeline on rule 1; the families on all four rules ---------------------
 function howSection(ctx, C, hero, meta) {
   const { fmt } = ctx;
-  const pick = hero.pick;
-  const row = [0, 1, 2, 3].map((k) => hero.p[pick.index * 4 + k]);
-  const agree = new Set(pick.agreeing);
   const R = ruleLabels(meta, ctx.locale);
 
   const famRow = h(
@@ -293,27 +300,7 @@ function howSection(ctx, C, hero, meta) {
   );
 
   // the quorum example: columns at the four rules, the lintel at the rule threshold (meta.rule.topPct)
-  const thr = h('span', { class: 'how-quorum__thr' }, h('span', { class: 'label' }, R.pctileNum != null ? String(R.pctileNum) : ''));
-  const colH = (v) => Math.max(0, v) / 10; // 0..100
-  const quorumFig = h(
-    'figure',
-    { class: 'how-quorum c-full flush', 'aria-label': `${C.exampleLabel}: ${pick.ticker}, ${['A', 'B', 'C', 'D'].map((f, k) => `${f} ${Math.round(colH(row[k]))}`).join(', ')}` },
-    h(
-      'div',
-      { class: 'how-quorum__plot', 'aria-hidden': 'true' },
-      thr,
-      h('span', { class: 'how-quorum__lintel' }),
-      ['A', 'B', 'C', 'D'].map((f, k) => {
-        const col = h('span', { class: ['how-col', agree.has(f) ? 'is-agree' : 'is-miss', k === 3 && 'is-last'] }, h('b', {}, String(Math.round(colH(row[k])))));
-        col.style.setProperty('--h', String(colH(row[k]) / 100));
-        col.style.setProperty('--i', String(k));
-        return col;
-      }),
-    ),
-    h('figcaption', { class: 'label how-quorum__cap' }, `${C.exampleLabel} · `, h('a', { href: href('pick', pick.no) }, `#${pick.no} ${pick.ticker}`), ` · ${pick.agreeing.length}/4`),
-  );
-
-  if (R.topPct) quorumFig.style.setProperty('--thr', String(R.topPct));
+  const quorumFig = quorumExample(hero, { meta, locale: ctx.locale, label: C.exampleLabel });
 
   const vetoAside = h('p', { class: 'small muted' });
   const sealAside = h('div', { class: 'how-aside' });
@@ -376,7 +363,7 @@ function howSection(ctx, C, hero, meta) {
 }
 
 // ---- 03 Ledger preview on Chamber, with in-browser verification and the headline statistics --------
-function ledgerSection(ctx, C) {
+function ledgerSection(ctx, C, meta) {
   const { fmt, L } = ctx;
   const chain = h('ol', { class: 'chain c-full flush', 'aria-label': C.caption });
   const status = h('p', { class: 'verify__status', role: 'status', 'aria-live': 'polite' });
@@ -460,7 +447,7 @@ function ledgerSection(ctx, C) {
         }),
       );
       statsLabel.textContent = summary.label?.[ctx.locale] ?? summary.label?.en ?? '';
-      stats.replaceChildren(statStrip(summary, { t: ctx.t, fmt, locale: ctx.locale }));
+      stats.replaceChildren(statStrip(summary, { t: ctx.t, fmt, locale: ctx.locale, counts: meta?.counts }));
     })
     .catch(() => {
       chain.replaceChildren(h('li', { class: 'lede' }, ctx.t('error.data.body', { file: 'ledger.json' })));
@@ -473,18 +460,39 @@ function ledgerSection(ctx, C) {
 function scoreSection(ctx, C) {
   const { fmt } = ctx;
   const plot = h('div', { class: 'sb c-full flush' });
+  // the answer so far, computed: holdout gate (b) and the sealed record's hit rates side by side
+  const verdict = h('p', { class: 'c-body home-score__verdict' });
   const section = h(
     'section',
     { class: 'section grid home-score', 'aria-labelledby': 'h-score' },
     ...sectionHead({ index: '04', kicker: C.kicker, title: C.title, id: 'h-score' }),
     h('p', { class: 'lede c-body' }, C.lede),
+    verdict,
     plot,
     h('p', { class: 'figcaption c-body' }, C.caption),
     h('p', { class: 'c-body' }, h('a', { class: 'arrow-link', href: href('ledger', null, 'scoreboard') }, C.link, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
   );
-  ctx
-    .data('scoreboard')
-    .then((sb) => {
+  Promise.all([ctx.data('scoreboard'), ctx.data('backtest').catch(() => null), ctx.data('summary').catch(() => null)])
+    .then(([sb, bt, summary]) => {
+      const gate = bt?.gates?.find((g) => g.id === 'b');
+      const two = sb.agreement.find((a) => a.k === '2/4 shadow')?.sealed;
+      const qHit = summary?.hitRate;
+      if (gate?.values && two && Number.isFinite(qHit)) {
+        const diff = qHit - two.hit;
+        verdict.replaceChildren(
+          C.verdict({
+            fail: !gate.pass,
+            level: Math.abs(diff) < 0.02,
+            ahead: diff > 0,
+            hq: fmt.pct(gate.values.quorum, { sign: true, digits: 2 }),
+            h2: fmt.pct(gate.values.twoOfFour, { sign: true, digits: 2 }),
+            sq: fmt.pct(qHit),
+            s2: fmt.pct(two.hit),
+          }),
+          ' ',
+          h('a', { class: 'nowrap', href: href('backtest', null, 'gates') }, `${C.gateLink} →`),
+        );
+      }
       // domain 10%..90% across rules 2..4, so 50% (a coin flip) is rule 3
       const X = (v) => ((Math.min(0.9, Math.max(0.1, v)) - 0.1) / 0.8) * 100;
       const rows = sb.agreement.map((a) => {
@@ -514,11 +522,7 @@ function scoreSection(ctx, C) {
           ),
         );
       });
-      const ticks = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8].map((v) => {
-        const tk = h('span', { class: ['sb__tick', v === 0.5 && 'is-coin'] }, v === 0.5 ? `${fmt.pct0(v)} · ${C.coin}` : fmt.pct0(v));
-        tk.style.setProperty('--x', `${X(v)}%`);
-        return tk;
-      });
+      const ticks = axisTicks([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8], HIT_DOMAIN, { tickLabel: (v) => fmt.pct0(v), coin: C.coin });
       plot.replaceChildren(
         h('div', { class: 'sb__grid', role: 'table', 'aria-label': C.axis }, rows),
         h('div', { class: 'sb__axis', 'aria-hidden': 'true' }, h('span', { class: 'sb__axislabel label' }, C.axis), h('div', { class: 'sb__ticks' }, ticks)),

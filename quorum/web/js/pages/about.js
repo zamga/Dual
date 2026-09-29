@@ -23,7 +23,8 @@ const COPY = {
     title: 'About',
     kicker: 'About Quorum',
     h1: 'A small research publisher in Ljubljana.',
-    lede: 'Quorum Research d.o.o. is a company in formation in Ljubljana, Slovenia. We publish one daily issue of general research to the public, and we text our subscribers only when our models agree.',
+    lede: 'Quorum Research d.o.o. is a company in formation in Ljubljana, Slovenia. We publish one daily issue of general research to the public, and we text subscribers only when our models agree.',
+    ledePre: 'Quorum Research d.o.o. is a company in formation in Ljubljana, Slovenia. We publish one daily issue of general research to the public. Once SMS alerts launch we will text subscribers only when our models agree; there are none yet.',
     people: 'Responsible persons',
     peopleNote: 'Every person on this page is fictional, like every company and price in this demo.',
     fictional: 'fictional',
@@ -41,7 +42,7 @@ const COPY = {
       {
         id: 'contact',
         title: 'Contact',
-        body: `<dl class="dl dl--wide"><div><dt>Support</dt><dd>support@quorum.example</dd></div><div><dt>Press</dt><dd>press@quorum.example</dd></div><div><dt>Address</dt><dd>[Address to be registered], Ljubljana, Slovenia</dd></div><div><dt>Registration</dt><dd>Pending (company in formation)</dd></div></dl>`,
+        body: `<dl class="dl dl--wide"><div><dt>Support</dt><dd>{{contact:support}}</dd></div><div><dt>Press</dt><dd>{{contact:press}}</dd></div><div><dt>Address</dt><dd>[Address to be registered], Ljubljana, Slovenia</dd></div><div><dt>Registration</dt><dd>Pending (company in formation)</dd></div></dl>`,
       },
     ],
   },
@@ -50,6 +51,7 @@ const COPY = {
     kicker: 'O Quorumu',
     h1: 'Majhen založnik raziskav v Ljubljani.',
     lede: 'Quorum Research d.o.o. je podjetje v ustanavljanju v Ljubljani. Javnosti objavljamo eno dnevno izdajo splošnih raziskav, naročnikom pa SMS pošljemo samo, ko se naši modeli strinjajo.',
+    ledePre: 'Quorum Research d.o.o. je podjetje v ustanavljanju v Ljubljani. Javnosti objavljamo eno dnevno izdajo splošnih raziskav. Ko se obvestila SMS zaženejo, bomo naročnikom SMS pošiljali samo, ko se naši modeli strinjajo; naročnikov še ni.',
     people: 'Odgovorne osebe',
     peopleNote: 'Vse osebe na tej strani so izmišljene, tako kot vsa podjetja in cene v tem demu.',
     fictional: 'izmišljeno',
@@ -67,7 +69,7 @@ const COPY = {
       {
         id: 'contact',
         title: 'Kontakt',
-        body: `<dl class="dl dl--wide"><div><dt>Podpora</dt><dd>support@quorum.example</dd></div><div><dt>Mediji</dt><dd>press@quorum.example</dd></div><div><dt>Naslov</dt><dd>[Naslov bo vpisan], Ljubljana, Slovenija</dd></div><div><dt>Vpis</dt><dd>V teku (podjetje v ustanavljanju)</dd></div></dl>`,
+        body: `<dl class="dl dl--wide"><div><dt>Podpora</dt><dd>{{contact:support}}</dd></div><div><dt>Mediji</dt><dd>{{contact:press}}</dd></div><div><dt>Naslov</dt><dd>[Naslov bo vpisan], Ljubljana, Slovenija</dd></div><div><dt>Vpis</dt><dd>V teku (podjetje v ustanavljanju)</dd></div></dl>`,
       },
     ],
   },
@@ -93,6 +95,7 @@ export async function render(ctx) {
     ),
     h('p', { class: 'c-body small muted people__note' }, C.peopleNote),
   );
-  const node = page(masthead({ kicker: C.kicker, title: C.h1, lede: C.lede }), people, ...contentSections(C.sections));
+  const launch = await ctx.launch();
+  const node = page(masthead({ kicker: C.kicker, title: C.h1, lede: launch.prelaunch ? C.ledePre : C.lede }), people, ...contentSections(C.sections));
   return { title: C.title, node };
 }

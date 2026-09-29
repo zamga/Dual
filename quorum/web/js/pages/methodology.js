@@ -2,6 +2,7 @@
 // look-ahead controls, measurement and the retirement rule. SL: first draft, needs native review.
 import { h } from '../dom.js';
 import { href } from '../router.js';
+import { launchInfo } from '../launch.js';
 import { masthead, contentSections, toc, page, table } from './_content.js';
 import { familyName } from '../ui.js';
 
@@ -40,7 +41,7 @@ const COPY = {
       title: 'Validation, and the gates we had to pass',
       short: 'Validation',
       body: (x) =>
-        `<ol><li><strong>Walk-forward.</strong> An expanding training window, retrained once a year. Every prediction uses only data from before its training cutoff.</li><li><strong>Hyperparameters</strong> by purged k-fold cross-validation with a 21-day purge and a one-month embargo.</li><li><strong>Every configuration tried is logged:</strong> ${x.variants} variants. We report the Deflated Sharpe Ratio (${x.dsr}) and the Probability of Backtest Overfitting (${x.pbo}).</li><li><strong>An untouched holdout</strong> from ${x.hFrom} to ${x.hTo}, opened once, after the engine was frozen.</li></ol><p>All five ship gates had to pass on that holdout, net of costs:</p>`,
+        `<ol><li><strong>Walk-forward.</strong> An expanding training window, retrained once a year. Every prediction uses only data from before its training cutoff.</li><li><strong>Hyperparameters</strong> by purged k-fold cross-validation with a 21-day purge and a one-month embargo.</li><li><strong>Every configuration tried is logged:</strong> ${x.variants} variants. We report the Deflated Sharpe Ratio (${x.dsr}) and the Probability of Backtest Overfitting (${x.pbo}).</li><li><strong>An untouched holdout</strong> from ${x.hFrom} to ${x.hTo}, opened once, after the engine was frozen.</li></ol><p>All five ship gates had to pass on that holdout, net of costs. The results as measured:</p>`,
       head: ['Gate', 'Test', 'Holdout result', 'Pass'],
       pass: 'pass',
       fail: 'fail',
@@ -95,7 +96,7 @@ const COPY = {
       title: 'Validacija in pogoji, ki smo jih morali izpolniti',
       short: 'Validacija',
       body: (x) =>
-        `<ol><li><strong>Drseče okno.</strong> Razširjajoče se učno okno, enkrat letno ponovno naučeno. Vsaka napoved uporablja samo podatke pred mejnim datumom učenja.</li><li><strong>Hiperparametri</strong> s prečiščeno k-kratno navzkrižno validacijo z 21-dnevnim čiščenjem in enomesečnim embargom.</li><li><strong>Vsaka preizkušena nastavitev je zabeležena:</strong> ${x.variants} različic. Poročamo deflacionirano Sharpovo razmerje (${x.dsr}) in verjetnost prekomernega prilagajanja (${x.pbo}).</li><li><strong>Nedotaknjeno preizkusno obdobje</strong> od ${x.hFrom} do ${x.hTo}, odprto enkrat, po zamrznitvi pogona.</li></ol><p>Vseh pet pogojev za zagon je moralo biti izpolnjenih v tem obdobju, po stroških:</p>`,
+        `<ol><li><strong>Drseče okno.</strong> Razširjajoče se učno okno, enkrat letno ponovno naučeno. Vsaka napoved uporablja samo podatke pred mejnim datumom učenja.</li><li><strong>Hiperparametri</strong> s prečiščeno k-kratno navzkrižno validacijo z 21-dnevnim čiščenjem in enomesečnim embargom.</li><li><strong>Vsaka preizkušena nastavitev je zabeležena:</strong> ${x.variants} različic. Poročamo deflacionirano Sharpovo razmerje (${x.dsr}) in verjetnost prekomernega prilagajanja (${x.pbo}).</li><li><strong>Nedotaknjeno preizkusno obdobje</strong> od ${x.hFrom} do ${x.hTo}, odprto enkrat, po zamrznitvi pogona.</li></ol><p>Vseh pet pogojev za zagon je moralo biti izpolnjenih v tem obdobju, po stroških. Rezultati, kot so bili izmerjeni:</p>`,
       head: ['Pogoj', 'Preizkus', 'Rezultat', 'Izpolnjen'],
       pass: 'da',
       fail: 'ne',
@@ -174,6 +175,7 @@ export async function render(ctx) {
           }),
         ),
         gateTable,
+        gateVerdict(ctx, bt),
         h('p', {}, h('a', { class: 'arrow-link', href: href('backtest') }, C.validation.backtest, h('span', { class: 'btn__arrow', 'aria-hidden': 'true' }, '→'))),
       ],
       aside: C.validation.aside,
@@ -199,4 +201,26 @@ function frag(htmlStr) {
   const t = document.createElement('template');
   t.innerHTML = htmlStr;
   return [...t.content.childNodes];
+}
+
+// Under the gates table, computed from the export: which gates failed, what that means under the brief,
+// and the amendment to gate (d). Never "all five passed" unless they did.
+function gateVerdict(ctx, bt) {
+  const gates = bt?.gates ?? [];
+  if (!gates.length) return null;
+  const L = (en, sl) => (ctx.locale === 'sl' ? sl : en);
+  const failed = gates.filter((g) => !g.pass).map((g) => `(${g.id})`);
+  const join = (ids, and) => (ids.length < 2 ? ids.join('') : `${ids.slice(0, -1).join(', ')} ${and} ${ids.at(-1)}`);
+  const amend = bt.launch?.amendment;
+  const info = launchInfo(bt);
+  if (!failed.length) return h('p', { class: 'small' }, L('All five passed.', 'Vseh pet je izpolnjenih.'));
+  return h(
+    'p',
+    { class: 'small met-verdict' },
+    L(
+      `${failed.length === 1 ? 'Gate' : 'Gates'} ${join(failed, 'and')} failed. ${info.research ? 'Under the brief the engine returns to research and SMS alerts do not launch. ' : ''}${amend ? `Gate (d) was amended after the holdout was opened (${amend.id}); both results are published. ` : ''}`,
+      `${failed.length === 1 ? 'Pogoj' : 'Pogoji'} ${join(failed, 'in')} ${failed.length === 1 ? 'ni izpolnjen' : 'niso izpolnjeni'}. ${info.research ? 'Po izhodiščih se pogon vrne v raziskave in obvestila SMS se ne zaženejo. ' : ''}${amend ? `Pogoj (d) je bil spremenjen, potem ko je bilo preizkusno obdobje odprto (${amend.id}); objavljena sta oba rezultata. ` : ''}`,
+    ),
+    h('a', { href: href('backtest', null, 'launch') }, L('The launch test →', 'Preizkus za zagon →')),
+  );
 }

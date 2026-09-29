@@ -13,7 +13,27 @@ export function axisPos(v, [lo, hi]) {
   return ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * 100;
 }
 
-// rows: [{ key, title, sub, v, ci: [lo, hi], n, kind: 'quorum'|'family'|'shadow', note }]
+// Axis ticks. A tick that falls on a rule (the domain ends and the middle) is written beside the rule,
+// never across it: the left end and the middle start just right of their rule, the right end ends just
+// left of it. The "coin flip" / "no skill" note is its own span so phones can put it on a second line.
+// Ticks that are not round quartiles are marked minor (phones show only the rule ticks and the quartiles).
+export function axisTicks(ticks, domain, { tickLabel, coin }) {
+  const [lo, hi] = domain;
+  const mid = (lo + hi) / 2;
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  return ticks.map((v) => {
+    const isMid = near(v, mid);
+    const at = near(v, lo) ? 'is-start' : near(v, hi) ? 'is-end' : isMid ? 'is-mid' : null;
+    const q = (v - lo) / (hi - lo);
+    const major = at || [0.125, 0.875].some((m) => near(q, m));
+    const tk = h('span', { class: ['sb__tick', isMid && 'is-coin', at, !major && 'is-minor'] }, tickLabel(v), isMid && coin ? h('span', { class: 'sb__coin' }, ` · ${coin}`) : null);
+    tk.style.setProperty('--x', `${axisPos(v, domain)}%`);
+    return tk;
+  });
+}
+
+// rows: [{ key, title, sub, v, ci: [lo, hi], n, kind: 'quorum'|'family'|'shadow'|'hypo', note }]
+// ('hypo': a quorum row measured in the hypothetical backtest: Graphite, never ultramarine)
 export function dotPlot(rows, { domain, ticks, tickLabel, axisLabel, valueLabel, ciLabel, nLabel, coin, caption }) {
   const grid = h(
     'div',
@@ -49,12 +69,7 @@ export function dotPlot(rows, { domain, ticks, tickLabel, axisLabel, valueLabel,
       );
     }),
   );
-  const tickEls = ticks.map((v) => {
-    const isMid = Math.abs(v - (domain[0] + domain[1]) / 2) < 1e-9;
-    const tk = h('span', { class: ['sb__tick', isMid && 'is-coin'] }, isMid && coin ? `${tickLabel(v)} · ${coin}` : tickLabel(v));
-    tk.style.setProperty('--x', `${axisPos(v, domain)}%`);
-    return tk;
-  });
+  const tickEls = axisTicks(ticks, domain, { tickLabel, coin });
   return h(
     'div',
     { class: 'sb sb--full c-full flush' },

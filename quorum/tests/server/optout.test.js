@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderSms, validateSms } from '../../core/sms-templates.js';
-import { ensureUnsubscribeToken, TOKEN_RE } from '../../server/tokens.js';
+import { ensureUnsubscribeToken, TOKEN_RE, TOKEN_LENGTH } from '../../server/tokens.js';
 import { openDb } from '../../server/db.js';
 import { makeApp, readyUser, checkoutAndPay, smsTo, grant } from './helpers.js';
 
@@ -19,13 +19,22 @@ const counts = (t) => ({
   revokes: t.db.get("SELECT COUNT(*) AS n FROM consent_events WHERE kind = 'sms' AND action = 'revoke'").n,
 });
 
-test('tokens: at least 6 base62 characters, one per user, unique across users', () => {
+test('tokens: new ones are 8 base62 characters (earlier 6-character ones stay valid), one per user, unique', () => {
   const db = openDb(':memory:');
   const now = new Date('2026-09-28T10:00:00Z').toISOString();
   for (const id of ['usr_a', 'usr_b', 'usr_c']) db.run('INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, ?, ?)', id, `${id}@x.si`, now, now);
   const a = ensureUnsubscribeToken(db, 'usr_a');
-  assert.match(a, /^[0-9A-Za-z]{6,}$/);
+  assert.equal(TOKEN_LENGTH, 8);
+  assert.match(a, /^[0-9A-Za-z]{8}$/);
   assert.ok(TOKEN_RE.test(a));
+  assert.ok(TOKEN_RE.test('Zz9Zz9'), 'a 6-character token already sent in a text still works');
+  // The longest template still fits one GSM-7 segment with an 8-character token.
+  for (const kind of ['BUY', 'RENEW', 'CLOSE', 'OPT_IN']) {
+    for (const locale of ['en', 'sl']) {
+      const text = renderSms(kind, locale, { no: '99999', ticker: 'WWWWW', issueDate: '2026-10-23', entryDate: '2026-10-23', exitDate: '2026-11-23', agreement: 4, token: 'Z'.repeat(TOKEN_LENGTH) });
+      assert.ok(validateSms(text).ok, `${kind} ${locale}: ${text.length}`);
+    }
+  }
   assert.equal(ensureUnsubscribeToken(db, 'usr_a'), a, 'stable per user');
   // A generator that collides first must still give usr_b a different token.
   const seq = [a, a, 'Zz9Zz9'];
@@ -54,10 +63,13 @@ test('GET /u/:token shows a confirmation page and changes nothing', async () => 
     assert.equal(t.db.get('SELECT sms FROM channel_prefs').sms, 1);
     assert.equal(t.db.get('SELECT used_at FROM unsubscribe_tokens').used_at, null);
     assert.equal(smsTo(t, PHONE, 'OPT_OUT').length, 0);
-    const unknown = await anon.get('/u/NoSuch1');
-    assert.equal(unknown.status, 404);
-    assert.match(unknown.text, /not valid/);
-    assert.equal((await anon.get('/u/abc')).status, 404, 'too short to be a token');
+    // No validity oracle: an unknown or malformed token gets the very same page.
+    const page = (await anon.get(`/u/${token}`)).text;
+    for (const other of ['NoSuch12', 'abc']) {
+      const r = await anon.get(`/u/${other}`);
+      assert.equal(r.status, 200);
+      assert.equal(r.text, page.replaceAll(token, other));
+    }
   } finally {
     await t.close();
   }
@@ -91,8 +103,13 @@ test('POST /u/:token: one tap opts out of all SMS and sends exactly one confirma
     const me = await (await readyClient(t, user)).get('/api/me');
     assert.equal(me.body.entitlements.picks.active, true);
     assert.equal(me.body.sms.on, false);
-    // The page now says it is already off.
-    assert.match((await anon.get(`/u/${token}`)).text, /already off/);
+    // Tapping again says there is nothing more to do, exactly as an unknown link does (no oracle).
+    const again = await anon.request('POST', `/u/${token}`, { form: {} });
+    assert.match(again.text, /Nothing more to do/);
+    const unknown = await anon.request('POST', '/u/NoSuch12', { form: {} });
+    assert.equal(unknown.status, 200);
+    assert.equal(unknown.text, again.text);
+    assert.deepEqual((await anon.request('POST', '/u/NoSuch12', { json: {} })).body, j.body);
   } finally {
     await t.close();
   }

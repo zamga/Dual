@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { simulateMarket, SIM_DEFAULTS } from '../../engine/sim/market.js';
+import { simulateMarket, SIM_DEFAULTS, HIDDEN, payoutYield } from '../../engine/sim/market.js';
 import { SMALL_UNIVERSE } from '../../engine/model.js';
-import { REAL_TICKERS, REAL_TICKER_SET } from '../../engine/sim/blocklist.js';
+import { REAL_TICKERS, REAL_TICKER_SET, US_SYMBOL_SET, isRealTicker } from '../../engine/sim/blocklist.js';
 import { isValidIsin, isinCheckDigit } from '../../engine/sim/names.js';
 import { standInIsNegative } from '../../engine/sim/headlines.js';
 import { countTradingDays, isTradingDay } from '../../core/calendar.js';
@@ -64,12 +64,24 @@ test('identifiers: valid ZZ ISINs, SIM FIGIs, simulated venues, unique non-block
     assert.ok(isValidIsin(c.isin[i]), c.isin[i]);
     assert.match(c.figi[i], /^SIM[A-Z0-9]{9}$/);
     assert.ok(['NYSE (simulated)', 'NASDAQ (simulated)'].includes(c.venue[i]));
-    assert.match(c.ticker[i], /^[A-Z]{2,5}$/);
+    assert.match(c.ticker[i], /^[A-Z]{2,4}$/);
     assert.ok(!REAL_TICKER_SET.has(c.ticker[i]), c.ticker[i]);
+    assert.ok(!isRealTicker(c.ticker[i]), `${c.ticker[i]} is a real US symbol`);
     assert.ok(!tick.has(c.ticker[i]));
     tick.add(c.ticker[i]);
   }
   assert.equal(new Set(c.name).size, m1.N);
+});
+
+test('the real-symbol screen covers the whole US listed universe, not only famous names', () => {
+  assert.ok(US_SYMBOL_SET.size > 15000, `${US_SYMBOL_SET.size} symbols`);
+  for (const t of US_SYMBOL_SET) assert.match(t, /^[A-Z]{1,5}$/);
+  // symbols a hand list missed, among them two the sealed record once issued BUY and RENEW records on
+  for (const t of ['GCI', 'PRA', 'MGM', 'AES', 'GAP', 'NVS', 'KSS', 'VFC', 'GRAB', 'DOC', 'TPL', 'HES', 'COLD', 'OGE', 'HALO', 'DAVE', 'EMB', 'IWR', 'IVE', 'DBC']) {
+    assert.ok(isRealTicker(t), t);
+  }
+  for (const t of ['LEH', 'BSC', 'AAPL', 'SPY']) assert.ok(isRealTicker(t), t);
+  assert.equal(isRealTicker('QXZV'), false);
 });
 
 test('eligibility is exactly price > $5, market cap > $2B and 60-day ADV > $25M', () => {
@@ -136,8 +148,20 @@ test('headlines are fictional and the stand-in classifier is deterministic', () 
   assert.equal(standInIsNegative('Karst Robotics announces investor day'), false);
 });
 
+// The full default configuration, simulated once for the tests below that need it.
+let full = null;
+const fullSim = () => (full ??= simulateMarket({}));
+
+test('full universe: no company ever gets a real US ticker', () => {
+  const m = fullSim();
+  const t = m.companies.ticker;
+  assert.equal(new Set(t).size, m.N);
+  assert.deepEqual(t.filter((x) => isRealTicker(x)), []);
+  for (const x of t) assert.match(x, /^[A-Z]{2,4}$/);
+});
+
 test('full universe: ~1,900 companies ever listed, 1,250-1,500 eligible every model day', () => {
-  const m = simulateMarket({});
+  const m = fullSim();
   assert.equal(m.scenarioSwitch, null, 'the full default run continues on its own stream');
   const { N, s0, S } = m;
   const c = m.companies;
@@ -154,4 +178,57 @@ test('full universe: ~1,900 companies ever listed, 1,250-1,500 eligible every mo
   }
   assert.ok(lo >= 1250 && hi <= 1500, `eligible ${lo}-${hi}`);
   assert.equal(countTradingDays('2007-12-31', '2026-09-28'), S - s0);
+});
+
+test('payout yield: rises with size relative to the median, and with the median above its anchor', () => {
+  const ref = HIDDEN.payoutAnchor;
+  assert.ok(Math.abs(payoutYield(ref, ref) - HIDDEN.payoutBase) < 1e-12, 'the median company at the anchor pays the base yield');
+  let prev = -Infinity;
+  for (const x of [0.1, 0.3, 1, 3, 10, 30, 100, 300]) {
+    const y = payoutYield(x * ref, ref);
+    assert.ok(y > prev, `monotone in size (${x}x the median)`);
+    prev = y;
+  }
+  assert.ok(payoutYield(0.1 * ref, ref) < 0, 'small companies issue shares (negative net payout)');
+  assert.ok(payoutYield(ref, 2 * ref) > payoutYield(ref, ref), 'a rich median raises every yield');
+  assert.equal(payoutYield(NaN, ref), HIDDEN.payoutBase);
+});
+
+test('full universe: market caps look like the liquid US universe on every model day', () => {
+  // Without the payout process the total-return prices compounded market caps without limit (a
+  // $60 trillion company, a $55B median by 2026). Bounds: the largest company at most ~$4.5T, at most
+  // a handful above $1T (and at least one by the end), the eligible median roughly $10-25B, and a
+  // right-skewed cross-section (mean well above the median, positive skew of log market cap).
+  const m = fullSim();
+  const { N, s0, S, dates } = m;
+  const worst = { max: 0, over1T: 0, medLo: Infinity, medHi: 0, ratio: Infinity, skew: Infinity };
+  let lastOver1T = 0;
+  for (let t = s0; t < S; t++) {
+    const e = [];
+    for (let i = 0; i < N; i++) if (m.eligible[t * N + i]) e.push(m.mcap[t * N + i]);
+    e.sort((a, b) => a - b);
+    const n = e.length;
+    const med = n % 2 ? e[n >> 1] : (e[n / 2 - 1] + e[n / 2]) / 2;
+    const mean = e.reduce((a, b) => a + b, 0) / n;
+    const logs = e.map(Math.log);
+    const lm = logs.reduce((a, b) => a + b, 0) / n;
+    const sd = Math.sqrt(logs.reduce((a, b) => a + (b - lm) ** 2, 0) / n);
+    const skew = logs.reduce((a, b) => a + (b - lm) ** 3, 0) / n / sd ** 3;
+    const over1T = e.filter((x) => x > 1e12).length;
+    worst.max = Math.max(worst.max, e[n - 1]);
+    worst.over1T = Math.max(worst.over1T, over1T);
+    worst.medLo = Math.min(worst.medLo, med);
+    worst.medHi = Math.max(worst.medHi, med);
+    worst.ratio = Math.min(worst.ratio, mean / med);
+    worst.skew = Math.min(worst.skew, skew);
+    if (t === S - 1) lastOver1T = over1T;
+    if (dates[t] === '2008-01-02') assert.ok(e[n - 1] < 1e12, 'no trillion-dollar company in 2008');
+  }
+  const b = (x) => `${(x / 1e9).toFixed(1)}B`;
+  assert.ok(worst.max <= 4.6e12, `largest company ${b(worst.max)}`);
+  assert.ok(worst.over1T <= 10, `${worst.over1T} companies above $1T on one day`);
+  assert.ok(lastOver1T >= 1, 'at least one company above $1T at the end');
+  assert.ok(worst.medLo >= 8.5e9 && worst.medHi <= 27e9, `eligible median ${b(worst.medLo)}-${b(worst.medHi)}`);
+  assert.ok(worst.ratio >= 1.3, `mean/median ${worst.ratio.toFixed(2)}`);
+  assert.ok(worst.skew > 0, `skew of log market cap ${worst.skew.toFixed(2)}`);
 });

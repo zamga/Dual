@@ -239,36 +239,8 @@ export function price(tier, interval = 'month') {
   return { amount, vat, net: Math.round((amount - vat) * 100) / 100, months: interval === 'year' ? 12 : 1, saving: interval === 'year' ? p.month * 12 - p.year : 0 };
 }
 
-// ---- launch status (backtest.json "launch", read defensively) ---------------------------------------------
-// -> { known, ready, status, passed, total, gateD: {dsr, need, pass} | null, asOf, text: {en, sl} }
-export function launchInfo(backtest) {
-  const l = backtest?.launch;
-  if (!l || typeof l !== 'object') {
-    return {
-      known: false,
-      ready: false,
-      status: 'pre-launch',
-      passed: null,
-      total: null,
-      gateD: null,
-      asOf: null,
-      text: { en: 'Pre-launch: the sealed record has no subscribers yet.', sl: 'Pred zagonom: zapečateni zapis še nima naročnikov.' },
-    };
-  }
-  const gates = Array.isArray(l.holdoutGates) ? l.holdoutGates : [];
-  const passed = gates.filter((g) => g?.pass).length;
-  const total = gates.length || 5;
-  const p = l.pooled && Number.isFinite(l.pooled.dsr) ? { dsr: l.pooled.dsr, need: l.pooled.dsrThreshold ?? 0.95, pass: !!l.pooled.pass } : null;
-  const ready = l.status === 'ready';
-  const d2 = (x, sl) => (sl ? x.toFixed(2).replace('.', ',') : x.toFixed(2));
-  const en = ready
-    ? `Launch gate E has passed: all ${total} holdout gates, and gate (d) on the pooled record.`
-    : `Launch gate E: ${passed} of ${total} holdout gates pass${p ? `; gate (d) is re-tested monthly on the pooled record: ${d2(p.dsr)}, needs ${d2(p.need)}` : ''}.`;
-  const sl = ready
-    ? `Pogoj za zagon E je izpolnjen: vseh ${total} pogojev preizkusa in pogoj (d) na združenem zapisu.`
-    : `Pogoj za zagon E: izpolnjenih ${passed} od ${total} pogojev preizkusa${p ? `; pogoj (d) se mesečno preverja na združenem zapisu: ${d2(p.dsr, true)}, potrebno ${d2(p.need, true)}` : ''}.`;
-  return { known: true, ready, status: ready ? 'ready' : 'pre-launch', passed, total, gateD: p, asOf: l.asOf ?? null, text: { en, sl } };
-}
+// ---- launch status: web/js/launch.js (re-exported for the member pages and their tests) ------------------
+export { launchInfo } from '../launch.js';
 
 // ---- the SMS preview ---------------------------------------------------------------------------------------
 // The pick the preview texts are rendered from: the latest closed BUY (revealed to everyone), else any BUY.
@@ -279,14 +251,17 @@ export function previewPick(picks) {
 }
 
 // The same pick from hero.json (22 KB, the latest closed pick), so #join and #u- need not load picks.json.
+// A RENEW hero is previewed as the RENEW text it carried (hero.pick.kind, priorNo).
 export function previewFromHero(hero) {
   const p = hero?.pick;
-  if (!p || (p.kind && p.kind !== 'BUY') || !/^[A-Z]{1,5}$/.test(String(p.ticker ?? '')) || !hero.issueDate) return null;
+  const kind = p?.kind ?? 'BUY';
+  if (!p || !['BUY', 'RENEW'].includes(kind) || !/^[A-Z]{1,5}$/.test(String(p.ticker ?? '')) || !hero.issueDate) return null;
   const agreement = Array.isArray(p.agreeing) ? p.agreeing.length : null;
   if (agreement !== 3 && agreement !== 4) return null;
   return {
     no: p.no,
-    kind: 'BUY',
+    kind,
+    priorNo: p.priorNo ?? null,
     status: 'closed',
     ticker: p.ticker,
     issueDate: hero.issueDate,
@@ -307,9 +282,10 @@ export function smsModel(kind, locale, data) {
   return { text, encoding: a.encoding, used, max, segments: a.segments, nonGsm: a.nonGsm, label: `${used}/${max} ${a.encoding}`, ok: a.encoding === 'GSM-7' && used <= 160 };
 }
 
+// The pick's own text (BUY, or RENEW for a renewal) with the reader's stop link.
 export function buySms(pick, locale, token) {
   if (!pick) return null;
-  return smsModel('BUY', locale, {
+  return smsModel(pick.kind === 'RENEW' ? 'RENEW' : 'BUY', locale, {
     no: pick.no,
     ticker: pick.ticker,
     issueDate: pick.issueDate,
@@ -320,11 +296,12 @@ export function buySms(pick, locale, token) {
   });
 }
 
-// A stop-link token for the demo: 6 base62 characters from a seed (deterministic in tests).
+// A stop-link token for the demo: 8 base62 characters, the length the server issues (server/tokens.js
+// TOKEN_LENGTH), so the preview's segment count is the real one; deterministic in tests.
 const B62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 export function demoToken(rand = Math.random) {
   let s = '';
-  for (let i = 0; i < 6; i++) s += B62[Math.floor(rand() * 62) % 62];
+  for (let i = 0; i < 8; i++) s += B62[Math.floor(rand() * 62) % 62];
   return s;
 }
 

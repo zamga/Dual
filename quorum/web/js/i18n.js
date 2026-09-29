@@ -15,9 +15,9 @@ const EN = {
     'Quorum scores about 1,300 liquid US stocks every trading day with four independent model families and texts only when three agree. Simulated demo.',
   skip: 'Skip to content',
   'demo.notice': 'Simulated market · fictional companies · demo — not a real service, not investment advice',
-  'demo.short': 'Simulated market · fictional companies · demo',
+  'demo.region': 'Demo notice',
   'demo.viewAs': 'View as',
-  'demo.viewAsHint': 'Demo only: see the site as each tier sees it. Tiers differ in data breadth, never in pick timing.',
+  'demo.viewAsHint': 'Demo only: see the site as each tier sees it. The paid tiers differ in data breadth, never in pick timing; Free sees open picks sealed until they close.',
   'tier.free': 'Free',
   'tier.signal': 'Signal',
   'tier.research': 'Research',
@@ -46,6 +46,7 @@ const EN = {
   'locale.changed': 'Language: English.',
   'pill.next': 'Next issue',
   'pill.noQuorum': 'No quorum today',
+  'pill.noPick': 'No new pick today',
   'pill.quorum.one': 'Quorum: {n} pick',
   'pill.quorum.other': 'Quorum: {n} picks',
   'pill.pinned': 'demo clock',
@@ -93,6 +94,9 @@ const EN = {
   'error.data.title': 'The data did not load.',
   'error.data.body': 'This page reads published files from the ledger. One of them could not be fetched: {file}.',
   'error.page.title': 'This page failed to render.',
+  'error.page.body': 'Something in this page went wrong on our side. Try again; the published record itself is unaffected.',
+  'error.data.kicker': 'Data',
+  'error.page.kicker': 'Error',
   'announce.page': '{title}',
   'footer.company': 'Quorum Research d.o.o. (in formation), Ljubljana, Slovenia · Registration pending · No VAT number yet.',
   'footer.p1':
@@ -100,8 +104,11 @@ const EN = {
   'footer.p2':
     'Shares can fall as well as rise; you can lose all the money you invest. Past performance is not a reliable indicator of future results. Our track record is a hypothetical paper portfolio, not real trades.',
   'footer.p3':
-    'Picks come from statistical and machine-learning models. Written explanations are drafted with AI and approved by a named person. Neither the company nor our staff hold individual shares.',
-  'footer.p4': 'Not available to residents of the US, UK or Australia.',
+    'Picks come from statistical and machine-learning models. Written explanations are drafted by an AI model (Claude, Anthropic) or, while it is switched off, by a template writer from the model data; a numeric validator checks every number and a named person approves each one. Neither the company nor our staff hold individual shares.',
+  'footer.p3demo':
+    'Picks come from statistical and machine-learning models (the gradient-boosted ranker is family D). In this demo every written explanation comes from a template writer working from the model data; in production an AI model (Claude, Anthropic) drafts them. A numeric validator checks every number and a named person approves each one. Neither the company nor our staff hold individual shares.',
+  'footer.p4': 'Not available to residents of the US, UK or Australia, or in Canada until reviewed.',
+  'footer.label': 'Footer',
   'footer.demo':
     'This site is a demonstration. Every company, ticker, price and person in it is fictional and every result comes from a simulated market.',
   'footer.all12m': 'All recommendations, last 12 months',
@@ -128,9 +135,9 @@ const SL = {
     'Quorum vsak dan trgovanja s štirimi neodvisnimi družinami modelov oceni približno 1.300 likvidnih ameriških delnic in pošlje SMS samo, ko se strinjajo tri. Simulirani demo.',
   skip: 'Preskoči na vsebino',
   'demo.notice': 'Simuliran trg · izmišljena podjetja · demo — ni prava storitev, ni investicijski nasvet',
-  'demo.short': 'Simuliran trg · izmišljena podjetja · demo',
+  'demo.region': 'Obvestilo o demu',
   'demo.viewAs': 'Pogled kot',
-  'demo.viewAsHint': 'Samo v demu: stran, kot jo vidi posamezen paket. Paketi se razlikujejo po obsegu podatkov, nikoli po času izbir.',
+  'demo.viewAsHint': 'Samo v demu: stran, kot jo vidi posamezen paket. Plačljiva paketa se razlikujeta po obsegu podatkov, nikoli po času izbir; Brezplačno vidi odprte izbire zapečatene do zaprtja.',
   'tier.free': 'Brezplačno',
   'tier.signal': 'Signal',
   'tier.research': 'Research',
@@ -159,6 +166,7 @@ const SL = {
   'locale.changed': 'Jezik: slovenščina.',
   'pill.next': 'Naslednja izdaja',
   'pill.noQuorum': 'Danes brez kvoruma',
+  'pill.noPick': 'Danes brez nove izbire',
   'pill.quorum.one': 'Kvorum: {n} izbira',
   'pill.quorum.two': 'Kvorum: {n} izbiri',
   'pill.quorum.few': 'Kvorum: {n} izbire',
@@ -208,6 +216,9 @@ const SL = {
   'error.data.title': 'Podatki se niso naložili.',
   'error.data.body': 'Ta stran bere objavljene datoteke iz knjige. Ene ni bilo mogoče prenesti: {file}.',
   'error.page.title': 'Te strani ni bilo mogoče prikazati.',
+  'error.page.body': 'Na tej strani je šlo pri nas nekaj narobe. Poskusite znova; objavljeni zapis ni prizadet.',
+  'error.data.kicker': 'Podatki',
+  'error.page.kicker': 'Napaka',
   'announce.page': '{title}',
   'footer.company': 'Quorum Research d.o.o. (v ustanavljanju), Ljubljana, Slovenija · Vpis v register v teku · Še brez ID za DDV.',
   'footer.p1':
@@ -215,8 +226,11 @@ const SL = {
   'footer.p2':
     'Vrednost delnic lahko pade ali zraste; izgubite lahko ves vloženi denar. Pretekla uspešnost ni zanesljiv kazalnik prihodnjih rezultatov. Naš zapis je hipotetični papirni portfelj, ne resnični posli.',
   'footer.p3':
-    'Izbire nastanejo s statističnimi modeli in modeli strojnega učenja. Pisne razlage pripravi umetna inteligenca, odobri pa jih imenovana oseba. Niti podjetje niti zaposleni nimajo posameznih delnic.',
-  'footer.p4': 'Ni na voljo prebivalcem ZDA, Združenega kraljestva ali Avstralije.',
+    'Izbire nastanejo s statističnimi modeli in modeli strojnega učenja. Pisne razlage pripravi model umetne inteligence (Claude, Anthropic) ali, dokler je izklopljen, predložni pisec iz podatkov modelov; vsako število preveri numerični preverjevalnik, vsako razlago odobri imenovana oseba. Niti podjetje niti zaposleni nimajo posameznih delnic.',
+  'footer.p3demo':
+    'Izbire nastanejo s statističnimi modeli in modeli strojnega učenja (gradientno ojačani rangirnik je družina D). V tem demu vse pisne razlage pripravi predložni pisec iz podatkov modelov; v produkciji jih pripravi model umetne inteligence (Claude, Anthropic). Vsako število preveri numerični preverjevalnik, vsako razlago odobri imenovana oseba. Niti podjetje niti zaposleni nimajo posameznih delnic.',
+  'footer.p4': 'Ni na voljo prebivalcem ZDA, Združenega kraljestva ali Avstralije, v Kanadi pa do pregleda.',
+  'footer.label': 'Noga strani',
   'footer.demo':
     'Ta stran je predstavitev. Vsa podjetja, oznake, cene in osebe so izmišljeni, vsi rezultati pa izhajajo iz simuliranega trga.',
   'footer.all12m': 'Vsa priporočila, zadnjih 12 mesecev',
@@ -277,6 +291,14 @@ export function pickL(obj, locale = current) {
   return obj[locale] ?? obj.en ?? '';
 }
 
+// 'gain' | 'loss' | 'flat' for a fraction shown as a percentage with `digits` decimals, decided on the
+// rounded value so the arrow and colour never disagree with the printed number (0.000061 -> "0.0%", flat).
+export function signClassAt(x, digits = 1) {
+  if (!Number.isFinite(x)) return 'flat';
+  const r = Math.round(Math.abs(x) * 10 ** (digits + 2));
+  return r === 0 ? 'flat' : x > 0 ? 'gain' : 'loss';
+}
+
 // Locale-aware formatters. Percentages use the true minus sign (U+2212) on the web.
 export function formatters(locale = current) {
   return {
@@ -291,8 +313,9 @@ export function formatters(locale = current) {
     dm: (d) => fmtDDMM(d),
     long: (d) => fmtLong(d, locale),
     // signed returns (sign + arrow + class) so Gain/Loss is never colour alone
+    // The class follows the value as displayed: anything that rounds to 0.0% is flat (no arrow colour).
     signed: (x, opts = {}) => {
-      const cls = !Number.isFinite(x) || Math.abs(x) < 5e-5 ? 'flat' : x > 0 ? 'gain' : 'loss';
+      const cls = signClassAt(x, opts.digits ?? 1);
       const arrow = cls === 'gain' ? '↑' : cls === 'loss' ? '↓' : '→';
       return { text: fmtPctHtml(x, { digits: 1, sign: true, ...opts, locale }), arrow, cls };
     },

@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { zonedToInstant, formatInZone, NEW_YORK } from '../core/calendar.js';
 import { mean, median, wilsonCI, bootstrapCI, maxDrawdown } from '../core/stats.js';
 import {
-  FAMS, round, periodRange, episodeSets, outcomeStats, followEquity, monthEnds, monthEndSignals, universeStats, vetoBits, vetoKeysOf,
+  FAMS, round, floorPct, permille, periodRange, episodeSets, outcomeStats, followEquity, monthEnds, monthEndSignals, universeStats, vetoBits, vetoKeysOf,
 } from './backtest.js';
 import { MODEL_VERSION, PERSONS } from './record.js';
 import { buildLaunch, sealedEquity } from './launch.js';
+import { followPositions } from './validate.js';
 
 export const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'data');
 export const FILES = ['meta', 'summary', 'issues', 'ledger', 'picks', 'scoreboard', 'deciles', 'hero', 'universe', 'backtest'];
@@ -83,6 +84,7 @@ export function buildMeta(model, rec, validation) {
       llmVeto: 'stand-in',
       counting: 'picks = BUY records, renews = RENEW records; closed = records whose 21-day window has ended (closed or renewed); open = records still inside their window',
       prices: 'Simulated prices, adjusted for simulated 2-for-1 share splits dated before the sealed record; returns are unaffected',
+      marketCaps: 'Simulated market caps: price times a share count that shrinks with simulated dividends and buybacks, which rise with company size, so the cross-section stays close to the real liquid US universe',
       stream: model.internals?.market?.scenarioSwitch
         ? `EXPERIMENT: the simulation switched to sub-stream ${model.internals.market.scenarioSwitch.scenario} from ${model.internals.market.scenarioSwitch.from}`
         : 'The simulated world continues on its own random stream after the engine freeze; the sealed record is not a chosen scenario',
@@ -137,7 +139,7 @@ function slForm(n, [one, two, few, many]) {
   return h === 1 ? one : h === 2 ? two : h === 3 || h === 4 ? few : many;
 }
 
-/** Plain EN/SL explanation of the alert gap against the brief's 30 bps monitoring trigger. */
+/** Plain EN/SL explanation of the alert gap against the capacity rule's 30 bps monitoring trigger (brief §3.1). */
 export function alertGapNote(g) {
   const T = g.thresholdBps;
   const latest = g.latestWindowBps;
@@ -149,14 +151,14 @@ export function alertGapNote(g) {
   let en1;
   let sl1;
   if (latest === null) {
-    en1 = `The median alert gap is ${bpsEn(g.medianBps)} across all ${g.n} records, ${aboveAll ? 'above' : 'within'} the brief's ${T} bps monitoring trigger; fewer than ${g.window} records exist, so no ${g.window}-pick window is complete yet.`;
-    sl1 = `Mediana razlike ob obvestilu je ${bpsSl(g.medianBps)} pri vseh ${g.n} zapisih, kar je ${aboveAll ? 'nad mejo' : 'pod mejo'} ${T} b.t., pri kateri izhodišča sprožijo nadzor; zapisov je manj kot ${g.window}, zato nobeno okno ${g.window} izbir še ni polno.`;
+    en1 = `The median alert gap is ${bpsEn(g.medianBps)} across all ${g.n} records, ${aboveAll ? 'above' : 'within'} the ${T} bps monitoring trigger of our capacity rule; fewer than ${g.window} records exist, so no ${g.window}-pick window is complete yet.`;
+    sl1 = `Mediana razlike ob obvestilu je ${bpsSl(g.medianBps)} pri vseh ${g.n} zapisih, kar je ${aboveAll ? 'nad mejo' : 'pod mejo'} ${T} b.t., pri kateri naše pravilo zmogljivosti sproži nadzor; zapisov je manj kot ${g.window}, zato nobeno okno ${g.window} izbir še ni polno.`;
   } else {
     const but = aboveAll !== aboveLatest;
     const windowsEn = g.windowsAbove ? `${g.windowsAbove} of the ${g.windows} rolling ${g.window}-pick windows so far were above it` : `none of the ${g.windows} rolling ${g.window}-pick windows so far was above it`;
     const windowsSl = g.windowsAbove ? `nad mejo je bilo doslej ${g.windowsAbove} od ${g.windows} drsečih oken po ${g.window} izbir` : `nobeno od ${g.windows} drsečih oken po ${g.window} izbir doslej ni bilo nad mejo`;
-    en1 = `The median alert gap is ${bpsEn(g.medianBps)} across all ${g.n} records ${but ? 'but' : 'and'} ${bpsEn(latest)} over the latest ${g.window}, which is ${aboveLatest ? 'above' : 'within'} the brief's ${T} bps monitoring trigger (${windowsEn}).`;
-    sl1 = `Mediana razlike ob obvestilu je ${bpsSl(g.medianBps)} pri vseh ${g.n} zapisih${but ? ', a' : ' in'} ${bpsSl(latest)} pri zadnjih ${g.window}, kar je ${aboveLatest ? 'nad mejo' : 'pod mejo'} ${T} b.t., pri kateri izhodišča sprožijo nadzor (${windowsSl}).`;
+    en1 = `The median alert gap is ${bpsEn(g.medianBps)} across all ${g.n} records ${but ? 'but' : 'and'} ${bpsEn(latest)} over the latest ${g.window}, which is ${aboveLatest ? 'above' : 'within'} the ${T} bps monitoring trigger of our capacity rule (${windowsEn}).`;
+    sl1 = `Mediana razlike ob obvestilu je ${bpsSl(g.medianBps)} pri vseh ${g.n} zapisih${but ? ', a' : ' in'} ${bpsSl(latest)} pri zadnjih ${g.window}, kar je ${aboveLatest ? 'nad mejo' : 'pod mejo'} ${T} b.t., pri kateri naše pravilo zmogljivosti sproži nadzor (${windowsSl}).`;
   }
   const en2 = g.earningsEntries
     ? ` The simulation puts every earnings reaction into the next US open, and a fresh earnings surprise is one of the signals that trigger picks, so the ${g.earningsEntries} record${g.earningsEntries === 1 ? '' : 's'} issued the morning after an earnings filing opened a median ${bpsEn(abs(g.earningsMedianBps))} ${dirEn(g.earningsMedianBps)} the previous close, against ${bpsEn(abs(g.otherMedianBps))} ${dirEn(g.otherMedianBps)} for the other ${g.otherEntries}.`
@@ -164,8 +166,8 @@ export function alertGapNote(g) {
   const sl2 = g.earningsEntries
     ? ` Simulacija vsak odziv na poslovne rezultate postavi v naslednje odprtje borze v ZDA, sveže presenečenje pri dobičku pa je eden od signalov, ki sprožijo izbiro, zato je bila pri ${g.earningsEntries} ${slForm(g.earningsEntries, ['zapisu, izdanem', 'zapisih, izdanih', 'zapisih, izdanih', 'zapisih, izdanih'])} zjutraj po objavi rezultatov, mediana odprtja ${bpsSl(abs(g.earningsMedianBps))} ${dirSl(g.earningsMedianBps)} prejšnjim zaprtjem, pri preostalih ${g.otherEntries} pa ${bpsSl(abs(g.otherMedianBps))} ${dirSl(g.otherMedianBps)} njim.`
     : ' Simulacija vsak odziv na poslovne rezultate postavi v naslednje odprtje borze v ZDA; v tem obdobju noben zapis ni bil izdan zjutraj po objavi rezultatov.';
-  const en3 = " There are no subscribers yet, so the gap is not herding; the brief's doubling of the capacity floor applies to live subscriber flow and is not triggered by the pre-launch record.";
-  const sl3 = ' Naročnikov še ni, zato razlika ni posledica črednega trgovanja; podvojitev praga zmogljivosti iz izhodišč velja za tok naročil naročnikov po zagonu, zapis pred zagonom je ne sproži.';
+  const en3 = ' There are no subscribers yet, so the gap is not herding; the rule that doubles the capacity floor applies to live subscriber flow and is not triggered by the pre-launch record.';
+  const sl3 = ' Naročnikov še ni, zato razlika ni posledica črednega trgovanja; pravilo, ki podvoji prag zmogljivosti, velja za tok naročil naročnikov po zagonu, zapis pred zagonom ga ne sproži.';
   return { en: en1 + en2 + en3, sl: sl1 + sl2 + sl3 };
 }
 
@@ -193,8 +195,12 @@ export function buildSummary(model, rec) {
     simulated: true,
     liveSince: model.periods.sealed[0],
     label: { en: 'Pre-launch sealed record (no subscribers)', sl: 'Zapečaten zapis pred zagonom (brez naročnikov)' },
-    nPicks: rec.picks.length,
+    // a pick is a BUY; a RENEW continues a held position for a new 21-day window (its own record)
+    nPicks: rec.picks.filter((p) => p.kind === 'BUY').length,
+    nRenews: rec.picks.filter((p) => p.kind === 'RENEW').length,
+    nRecords: rec.picks.length,
     nClosed: measured.length,
+    counting: 'nPicks = BUY records (new picks), nRenews = RENEW records, nRecords = both; nClosed and every hit-rate and excess statistic count 21-day windows that have ended, BUY and RENEW records alike',
     hitRate: r4(wins / measured.length),
     hitCI: ci4(wilsonCI(wins, measured.length)),
     medianExcess: r6(median(ex)),
@@ -358,7 +364,7 @@ export function buildHero(model, rec) {
     const v = FAMS.map((f) => model.pct[f][q]);
     if (!v.some((x) => x === x)) continue;
     if (i === last._i) index = row;
-    for (const x of v) p.push(x === x ? Math.max(0, Math.min(1000, Math.round(x * 1000))) : -1);
+    for (const x of v) p.push(permille(x));
     row++;
   }
   return {
@@ -367,7 +373,8 @@ export function buildHero(model, rec) {
     issueNo: last.issueNo,
     nScored: iss.nScored,
     quorumCount: iss.buys.length + iss.renews.length,
-    pick: { no: last.no, ticker: last.ticker, name: last.name, agreeing: last.agreeing, index, kind: last.kind },
+    // kind: 'BUY' | 'RENEW' (a RENEW continues the position of pick priorNo; label it as a renewal)
+    pick: { no: last.no, kind: last.kind, priorNo: last.priorNo ?? null, ticker: last.ticker, name: last.name, agreeing: last.agreeing, index },
     p,
     sms: last.sms.en,
     smsSl: last.sms.sl,
@@ -390,7 +397,7 @@ export function buildUniverse(model, rule) {
     const keys = vetoKeysOf(vetoBits(model, s, i));
     const agree = v.filter((x) => x >= rule.topPct).length;
     const ret21 = s >= 21 ? model.close[q] / model.close[(s - 21) * N + i] - 1 : NaN;
-    rows.push([c.ticker, c.name, c.sector, ...v.map((x) => (x === x ? r4(x) : null)), agree, keys[0] ?? null, Math.round(model.mcap[q]), Math.round(model.adv60[q]), r4(ret21)]);
+    rows.push([c.ticker, c.name, c.sector, ...v.map((x) => floorPct(x)), agree, keys[0] ?? null, Math.round(model.mcap[q]), Math.round(model.adv60[q]), r4(ret21)]);
   }
   rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return {
@@ -410,8 +417,9 @@ export function buildBacktest(model, validation, rec) {
   const H = validation.holdout;
   const [rf] = periodRange(model, 'research');
   const [, ht] = periodRange(model, 'holdout');
-  const recs = [...R.run.records, ...H.run.records].filter((r) => r.outcome);
-  const pos = recs.map((r) => ({ i: r.i, t: r.t, tExit: r.closeT, cost: r.outcome.cost }));
+  // every research and holdout record, the research window's last picks included: their exits fall
+  // in the holdout, and a follower holds them to that exit (validate.js followPositions)
+  const pos = followPositions(model, [...R.run.records, ...H.run.records]);
   const eqQ = followEquity(model, pos, rf, ht);
   const eqS = {};
   for (const k of ['twoOfFour', 'A', 'B', 'C', 'D']) eqS[k] = followEquity(model, [...R.setsRaw[k], ...H.setsRaw[k]], rf, ht);
@@ -516,6 +524,12 @@ export function buildBacktest(model, validation, rec) {
       variants: validation.calibration.variants,
     },
     crashSwitchPeriods: model.crashPeriods.filter(([a]) => a <= H.to),
+    llmVetoShadow: {
+      appliedFrom: model.periods.sealed[0],
+      research: R.llmShadow,
+      holdout: H.llmShadow,
+      basis: 'The LLM 48-hour news veto (a deterministic stand-in in this simulation) is not backtested: LLM components are validated only on dates after the training cutoff, so the veto applies from the first issue of the sealed record. The research window, the calibration, the variants, the holdout and the ship gates run without it. candidates: stocks that met the rule with no other veto and that the stand-in would have blocked; renewals: renewals it would have turned into closes.',
+    },
     launch: buildLaunch(model, validation, rec),
   };
 }

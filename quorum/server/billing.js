@@ -12,6 +12,7 @@ import { TIER_FEATURES, FEATURES, setEntitlement, entitlementsFor } from './enti
 import { reason, normalizeCountry, evaluateGeo } from './geofence.js';
 import { iso, fromUnix, DAY_MS } from './util.js';
 import { isUniqueError } from './db.js';
+import { minimizeStripeEvent } from './privacy.js';
 
 const TIERS = ['signal', 'research'];
 const INTERVALS = ['month', 'year'];
@@ -201,7 +202,9 @@ export function createBilling(ctx) {
           'stripe',
           event.id,
           event.type,
-          JSON.stringify(event),
+          // Append-only and kept for accounting: ids, amounts, dates and billing country only (no
+          // name, email or address, which the account deletion could not remove afterwards).
+          JSON.stringify(minimizeStripeEvent(event)),
           iso(now),
         );
         const user = resolveUser({ remote, object: obj, customerId });

@@ -106,8 +106,39 @@ const FORBIDDEN = [
   'omejeno',
 ];
 
+// Price targets, return claims and urgency (brief §2.5: no prices or targets, no return claims, no
+// urgency). Whole words, any case; a trailing "s" (plural) is covered where it reads naturally.
+const CLAIM_WORDS = [
+  ['target', 'targets?'],
+  ['upside', 'upside'],
+  ['return', 'returns?'],
+  ['gain', 'gains?'],
+  ['profit', 'profits?|profitable'],
+  ['sure', 'sure|surely'],
+  ['immediately', 'immediately'],
+  ['today', 'today'],
+  ['fast', 'fast'],
+  // Slovene (ASCII, as it would appear in an SMS)
+  ['cilj', 'cilj|cilja|ciljna|ciljno'],
+  ['donos', 'donos|donosa|donosi'],
+  ['dobicek', 'dobicek|dobicka'],
+  ['zasluzek', 'zasluzek|zasluzka'],
+  ['zanesljivo', 'zanesljivo|gotovo'],
+  ['danes', 'danes'],
+];
+
 const CURRENCY_RE = /[$€£¥¤]|\b(?:USD|EUR|GBP)\b/;
 const LINKISH_RE = /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/\S*)?$/i;
+// Dates as the templates write them: 28.09.26, 28.09. and 28.9. (day 1-31, month 1-12).
+const DATE_TOKEN_RE = /(?<![\d.,])(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.(?:\d{2}(?![\d.,]*\d))?/g;
+// A number with a decimal part (123.45, 12,5): a price, a target or a return once dates are removed.
+const DECIMAL_RE = /\d[.,]\d/;
+
+/** The text without its link-like tokens and dates: what is left must carry no price-like number. */
+function numbersOutsideDatesAndLinks(text) {
+  const words = text.split(/\s+/).filter((raw) => !LINKISH_RE.test(raw.replace(/[),.;:!?]+$/, '').replace(/^[(]+/, '')));
+  return words.join(' ').replace(DATE_TOKEN_RE, ' ');
+}
 
 export function validateSms(text) {
   const errors = [];
@@ -124,7 +155,13 @@ export function validateSms(text) {
     const re = new RegExp(`(^|[^a-z0-9])${w.replace(/ /g, '\\s+')}($|[^a-z0-9])`, 'i');
     if (re.test(lower)) errors.push(`forbidden word: "${w}"`);
   }
+  for (const [label, pattern] of CLAIM_WORDS) {
+    if (new RegExp(`(^|[^a-z0-9])(?:${pattern})($|[^a-z0-9])`, 'i').test(lower)) errors.push(`forbidden word: "${label}" (targets, return claims and urgency are not allowed)`);
+  }
   if (CURRENCY_RE.test(text)) errors.push('contains a currency sign or code (no prices in SMS)');
+  if (DECIMAL_RE.test(numbersOutsideDatesAndLinks(text))) errors.push('contains a price-like decimal number (no prices, targets or returns in SMS)');
+  if (text.includes('%')) errors.push('contains a percent sign (no return claims in SMS)');
+  if (text.includes('!')) errors.push('contains an exclamation mark (no urgency in SMS)');
   if (/\p{Extended_Pictographic}/u.test(text)) errors.push('contains an emoji');
   for (const raw of text.split(/\s+/)) {
     const token = raw.replace(/[),.;:!?]+$/, '').replace(/^[(]+/, '');
@@ -136,7 +173,7 @@ export function validateSms(text) {
 }
 
 // The longest text each template can produce: 5-digit number, 5-letter ticker,
-// two-digit day and month everywhere, the CEST label, a 6-character token.
+// two-digit day and month everywhere, the CEST label, an 8-character token.
 export function worstCase(kind, locale) {
   return renderSms(kind, locale, {
     no: '99999',
@@ -145,6 +182,6 @@ export function worstCase(kind, locale) {
     entryDate: '2026-10-23',
     exitDate: '2026-11-23',
     agreement: 4,
-    token: 'ZZZZZZ',
+    token: 'ZZZZZZZZ',
   });
 }

@@ -86,6 +86,10 @@ export function registerJoinRoutes(router, ctx) {
       const locale = normLocale(body?.locale ?? user.locale);
       const perUser = ctx.rateLimiter.take('phoneStartUser', user.id, config.rateLimits.phoneStartUser);
       if (!perUser.ok) throw new HttpError(429, 'rate_limited', 'Too many codes requested. Try again later.', { retryAfterSec: perUser.retryAfterSec });
+      // Every Lookup and Verify code costs money (SMS pumping): all clients together have a budget
+      // (config.globalLimits.verifyStarts); past it, refuse and page on-call.
+      const budget = ctx.budget('verifyStarts');
+      if (!budget.ok) throw new HttpError(429, 'rate_limited', 'We are sending a lot of codes right now. Try again in a few minutes.', { retryAfterSec: budget.retryAfterSec });
 
       const lookup = await ctx.sms.lookup(e164);
       const check = checkLookup(lookup, { declaredCountry: user.jurisdiction, smsCountries: config.smsCountries, pumpingRiskMax: config.twilio.pumpingRiskMax });
