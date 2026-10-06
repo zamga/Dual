@@ -1,0 +1,21 @@
+{
+  "name": "jasno-landing-directions",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jasno: four landing-page directions for a Slovenian credit-intelligence brand. Static HTML/CSS/JS; screenshots via Playwright.",
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server 5173",
+    "fonts": "python3 tools/fetch-fonts.py",
+    "geo": "node tools/build-geo.mjs",
+    "capture": "node tools/capture.mjs",
+    "capture:all": "for d in 01-napoved 02-rentgen 03-mera 04-signal; do node tools/capture.mjs $d; done",
+    "boards": "node tools/boards.mjs",
+    "sheets": "node tools/sheets.mjs"
+  },
+  "devDependencies": {
+    "d3-geo": "^3.1.1",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  }
+}
