@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jasno – Zaupanje, izmerjeno. Bonitetni indeks podjetij</title>
+<meta name="description" content="Jasno vsak dan ob 6.00 izmeri, koliko lahko zaupate vsakemu od 218.437 slovenskih podjetij: indeks od 0 do 100, verjetnost neplačila, kreditni limit in plačilni rok.">
+<link rel="canonical" href="https://jasno.si/">
+<link rel="alternate" hreflang="sl" href="https://jasno.si/">
+<link rel="alternate" hreflang="en" href="https://jasno.si/en/">
+<link rel="alternate" hreflang="x-default" href="https://jasno.si/">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#F2EEE6">
+<meta name="color-scheme" content="light">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Jasno">
+<meta property="og:locale" content="sl_SI">
+<meta property="og:url" content="https://jasno.si/">
+<meta property="og:title" content="Jasno – Zaupanje, izmerjeno.">
+<meta property="og:description" content="Vsak dan ob 6.00 izmerimo, koliko lahko zaupate vsakemu od 218.437 slovenskih podjetij. Indeks od 0 do 100, verjetnost neplačila in priporočeni kreditni limit.">
+<meta property="og:image" content="https://jasno.si/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Jasno indeks 87 na merilu od 0 do 100 z rdečo oznako.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Jasno – Zaupanje, izmerjeno.">
+<meta name="twitter:description" content="Bonitetni indeks za vsa slovenska podjetja, osvežen vsak dan ob 6.00.">
+<meta name="twitter:image" content="https://jasno.si/og.png">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='3' fill='%23F2EEE6'/%3E%3Cpath d='M4 21.5h24' stroke='%23151413' stroke-width='1.6'/%3E%3Cpath d='M5 21.5v6M10.5 21.5v3.5M16 21.5v6M21.5 21.5v3.5M27 21.5v6' stroke='%23151413' stroke-width='1.4'/%3E%3Cpath d='M17.5 5h9l-4.5 13z' fill='%23DF3B1E'/%3E%3C/svg%3E">
+<link rel="preload" href="../shared/fonts/noto-serif-display-normal-100-900-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../shared/fonts/schibsted-grotesk-normal-400-900-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../shared/fonts/noto-serif-display.css">
+<link rel="stylesheet" href="../shared/fonts/schibsted-grotesk.css">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Decide the motion mode before first paint, so nothing flashes.
+  (function () {
+    var d = document.documentElement;
+    var cap = window.__CAPTURE__ === true || new URLSearchParams(location.search).has('capture');
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    d.classList.add('js');
+    if (cap) d.classList.add('is-capture');
+    else if (!reduce) {
+      d.classList.add('motion');
+      // Failsafe: never leave content hidden if scripts fail to start.
+      setTimeout(function () { if (!d.classList.contains('motion-ready')) d.classList.remove('motion'); }, 2600);
+    }
+  })();
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://jasno.si/#organization",
+      "name": "Jasno d.o.o.",
+      "alternateName": "Jasno",
+      "url": "https://jasno.si/",
+      "email": "pozdrav@jasno.si",
+      "address": { "@type": "PostalAddress", "addressLocality": "Ljubljana", "addressCountry": "SI" },
+      "description": "Bonitetni indeks za slovenska podjetja, osvežen vsak dan ob 6.00."
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://jasno.si/#website",
+      "url": "https://jasno.si/",
+      "name": "Jasno",
+      "inLanguage": "sl-SI",
+      "publisher": { "@id": "https://jasno.si/#organization" },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": { "@type": "EntryPoint", "urlTemplate": "https://jasno.si/iskanje?q={search_term_string}" },
+        "query-input": "required name=search_term_string"
+      }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="i-arrow" viewBox="0 0 22 12"><path d="M0 6h20M15 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 10 10"><path d="M5 1.2 9.4 8.8H.6z" fill="currentColor"/></symbol>
+  <symbol id="i-down" viewBox="0 0 10 10"><path d="M5 8.8.6 1.2h8.8z" fill="currentColor"/></symbol>
+  <symbol id="i-marker" viewBox="0 0 14 12"><path d="M0 0h14L7 12z" fill="currentColor"/></symbol>
+</svg>
+
+<a class="skip" href="#vsebina">Preskočite na vsebino</a>
+
+<div class="mrule mrule--l" aria-hidden="true"><span class="mrule__mark"></span></div>
+<div class="mrule mrule--r" aria-hidden="true"></div>
+
+<header class="masthead" id="vrh" data-masthead>
+  <div class="masthead__line">
+    <div class="wrap">
+      <p class="masthead__meta">
+        <span>Št.&nbsp;1</span>
+        <span class="masthead__date"><time datetime="2026-10-06">Ljubljana, torek, 6.&nbsp;oktobra 2026</time></span>
+        <span class="masthead__date--short"><time datetime="2026-10-06">Torek, 6.&nbsp;10.&nbsp;2026</time></span>
+        <span>Izhaja vsak dan ob&nbsp;6.00</span>
+        <span>Cena: 0&nbsp;€</span>
+      </p>
+    </div>
+  </div>
+  <div class="masthead__bar">
+    <div class="wrap masthead__inner">
+      <a class="wordmark" href="./" aria-label="Jasno – domača stran">Jasno</a>
+      <nav class="nav" id="meni" aria-label="Glavna navigacija" data-nav>
+        <ul class="nav__list">
+          <li><a class="nav__link" href="#porocilo">Produkt</a></li>
+          <li><a class="nav__link" href="#merila">Podatki</a></li>
+          <li><a class="nav__link" href="#cenik">Cenik</a></li>
+          <li><a class="nav__link" href="#razvijalci">Za razvijalce</a></li>
+          <li><a class="nav__link" href="/prijava">Prijava</a></li>
+        </ul>
+        <p class="lang lang--menu"><a href="./" lang="sl" aria-current="page">SL</a> <span aria-hidden="true">/</span> <a href="/en/" lang="en" hreflang="en">EN</a></p>
+      </nav>
+      <div class="masthead__end">
+        <p class="lang"><a href="./" lang="sl" aria-current="page">SL</a> <span aria-hidden="true">/</span> <a href="/en/" lang="en" hreflang="en">EN</a></p>
+        <a class="btn" href="/registracija">Preizkusite brezplačno</a>
+        <button class="menu-btn" type="button" aria-expanded="false" aria-controls="meni" data-menu-btn><span class="menu-btn__label">Meni</span><span class="menu-btn__bars" aria-hidden="true"></span></button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="vsebina" tabindex="-1">
+
+  <!-- § 0 · HERO ======================================================= -->
+  <section class="hero" aria-labelledby="naslov" data-hero>
+    <div class="wrap hero__grid">
+      <div class="hero__copy">
+        <div class="hero__top">
+          <p class="label hero__label" data-intro>Jasno indeks&nbsp;— §&nbsp;0</p>
+          <h1 class="h1" id="naslov" data-split>Zaupanje,<br> izmerjeno.</h1>
+          <p class="standfirst" data-intro>Vsak dan ob&nbsp;6.00 izmerimo, koliko lahko zaupate vsakemu od 218.437 slovenskih podjetij&nbsp;– na&nbsp;lestvici od&nbsp;0 do&nbsp;100, z&nbsp;verjetnostjo neplačila in priporočenim kreditnim limitom.</p>
+          <form class="search" role="search" action="/iskanje" method="get" data-search="hero" data-intro aria-label="Izmerite podjetje">
+            <label class="label search__label" for="q-hero">Izmerite podjetje</label>
+            <div class="search__row">
+              <input class="search__input" id="q-hero" name="q" type="search" placeholder="Ime podjetja, davčna ali matična številka" autocomplete="off" spellcheck="false" enterkeyhint="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="q-hero-list" aria-describedby="q-hero-hint">
+              <button class="search__btn" type="submit">Izmerite <svg class="i i--arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+              <ul class="search__list" id="q-hero-list" role="listbox" aria-label="Predlogi podjetij" hidden></ul>
+            </div>
+            <p class="search__hint" id="q-hero-hint">Brez kartice. 10&nbsp;brezplačnih preverb vsak mesec.</p>
+            <p class="search__status" role="status" aria-live="polite" data-status></p>
+          </form>
+        </div>
+        <p class="hero__more" data-intro><a class="link" href="#porocilo">Oglejte si primer poročila</a></p>
+      </div>
+
+      <figure class="hero__measure" aria-labelledby="hero-fn" data-measure>
+        <div class="hero__scale">
+        <div class="numeral" aria-hidden="true" data-numeral>
+          <span class="odo" data-odo>
+            <span class="odo__d"><span class="odo__s" style="--d:8"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></span></span><span class="odo__d"><span class="odo__s" style="--d:7"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></span></span>
+          </span>
+          <span class="numeral__fn">1</span>
+        </div>
+        <p class="sr-only" data-hero-sr>Jasno indeks 87 od 100, razred A, odlično.</p>
+        <div class="ruler ruler--hero" data-ruler data-labels="10" data-labels-sm="20" data-marker="87" data-intro-ruler>
+          <span class="ruler__marker" data-marker-el style="--v:87"><svg class="i" aria-hidden="true"><use href="#i-marker"/></svg></span>
+        </div>
+        <ol class="bands bands--hero" aria-label="Razredi Jasno indeksa" data-bands>
+          <li class="band" data-cls="E" style="--a:0;--b:34.5"><span class="band__k">E</span> <span class="band__n">Visoko tveganje</span> <span class="band__r">0<span class="nd">–</span>34</span></li>
+          <li class="band" data-cls="D" style="--a:34.5;--b:49.5"><span class="band__k">D</span> <span class="band__n">Povišano</span> <span class="band__r">35<span class="nd">–</span>49</span></li>
+          <li class="band" data-cls="C" style="--a:49.5;--b:64.5"><span class="band__k">C</span> <span class="band__n">Zmerno</span> <span class="band__r">50<span class="nd">–</span>64</span></li>
+          <li class="band" data-cls="B" style="--a:64.5;--b:79.5"><span class="band__k">B</span> <span class="band__n">Dobro</span> <span class="band__r">65<span class="nd">–</span>79</span></li>
+          <li class="band is-on" data-cls="A" style="--a:79.5;--b:100"><span class="band__k">A</span> <span class="band__n">Odlično</span> <span class="band__r">80<span class="nd">–</span>100</span></li>
+        </ol>
+        </div>
+        <figcaption class="hero__fn">
+          <p class="fn" id="hero-fn" data-fn><span class="fn__mark" aria-hidden="true">1</span><span class="fn__body" data-fn-text><span class="fn__co">Hribar Les d.o.o., Škofja Loka.</span> Jasno indeks na dan 6.&nbsp;10.&nbsp;2026 ob&nbsp;6.00. Verjetnost neplačila v&nbsp;12&nbsp;mesecih: 0,4&nbsp;%. Priporočeni limit: 120.000&nbsp;€.</span></p>
+          <p class="hero__ctrl" data-ctrl>
+            <span class="hero__count" aria-hidden="true"><span data-count>1</span>&thinsp;/&thinsp;3</span>
+            <button class="ctrl-btn" type="button" data-pause data-state="playing">Ustavite primere</button>
+          </p>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- § 1 · ESSAY ====================================================== -->
+  <section class="sec essay" id="posojilo" aria-labelledby="s1">
+    <div class="wrap">
+      <header class="runhead">
+        <p class="runhead__sec"><span class="runhead__mark">§&nbsp;1</span> Posojilo</p>
+        <p class="runhead__folio">Jasno, št.&nbsp;1 · stran&nbsp;2</p>
+      </header>
+      <div class="essay__grid">
+        <p class="label essay__kicker">Uvodnik</p>
+        <h2 class="h2 essay__title" id="s1" data-split>Vsak račun je posojilo.</h2>
+        <div class="essay__body" data-fade>
+          <p class="dropcap">Ko kupcu pošljete blago s&nbsp;<span class="nowrap">60-dnevnim</span> plačilnim rokom, mu v&nbsp;resnici posodite denar: brez obresti, brez zavarovanja in pogosto brez pogodbe. Teh 60&nbsp;dni ste banka. Brez bančnih podatkov. Banka bi pred posojilom preverila vse – letna poročila, promet na računu, dolgove in lastnike. Podjetja pa pogosto preverijo le ime na računu.</p>
+          <p>Kupčeva zamuda se ne vidi na računu, ki ga izstavite, vidi pa se na vašem. In tveganje se ne konča pri enem kupcu: ko en kupec ne plača, ne plača tudi njegov dobavitelj – in za njim naslednji. Verižna neplačila se širijo hitreje kot novice o&nbsp;njih.</p>
+          <p>Klasična bonitetna ocena pri tem pomaga le deloma. Temelji na letnem poročilu, zato opisuje preteklo leto, o&nbsp;današnjem jutru pa ne ve ničesar. Blokade računov, izvršbe in zamenjave direktorjev se v&nbsp;njej pokažejo z&nbsp;večmesečnim zamikom ali pa sploh ne.</p>
+          <p>Jasno meri vsako jutro. Ob&nbsp;6.00 preverimo 11&nbsp;virov podatkov in 4,2&nbsp;milijona plačilnih izkušenj ter za vsako od 218.437 podjetij izračunamo indeks od&nbsp;0 do&nbsp;100. Vsako oceno pojasnimo v&nbsp;slovenščini in ji dodamo priporočilo: kreditni limit in plačilni rok. Preden tovornjak zapusti dvorišče, že veste, komu lahko zaupate.</p>
+        </div>
+        <aside class="essay__margin" aria-label="Iz uvodnika">
+          <blockquote class="pullquote" aria-hidden="true" data-fade>
+            <p>Teh 60&nbsp;dni ste banka. Brez bančnih podatkov.</p>
+          </blockquote>
+          <figure class="invoice" data-invoice>
+            <figcaption class="sr-only">Primer računa: znesek 24.600,00 €, rok plačila 60 dni.</figcaption>
+            <div class="invoice__doc" aria-hidden="true">
+              <p class="invoice__row invoice__row--head"><span>Račun št.</span><span>2026-0418</span></p>
+              <p class="invoice__row"><span>Datum izdaje</span><span>6.&nbsp;10.&nbsp;2026</span></p>
+              <p class="invoice__row"><span>Zapade v plačilo</span><span>5.&nbsp;12.&nbsp;2026</span></p>
+              <p class="invoice__row invoice__row--sum"><span>Znesek</span><span>24.600,00&nbsp;€</span></p>
+              <p class="invoice__row invoice__row--term"><span class="invoice__term">Rok plačila: 60&nbsp;dni
+                <svg class="invoice__ring" viewBox="0 0 220 64" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1" d="M196 14.5C176 5.2 128 3.4 88 5.6 46 8 11.2 17.6 7.6 32.8 4.4 47.4 41 58.4 98 59.2c51.6.7 103-6.4 111.2-21.6 6.4-12-9-22.6-38.6-28.4C142 3.8 103 3.2 74 6.4"/></svg>
+              </span></p>
+              <p class="invoice__note">Do plačila je vaš denar pri kupcu.</p>
+            </div>
+          </figure>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- § 2 · THE UNIT =================================================== -->
+  <section class="sec scale" id="enota" aria-labelledby="s2">
+    <div class="wrap">
+      <header class="runhead">
+        <p class="runhead__sec"><span class="runhead__mark">§&nbsp;2</span> Enota</p>
+        <p class="runhead__folio">Jasno, št.&nbsp;1 · stran&nbsp;3</p>
+      </header>
+      <div class="scale__head">
+        <h2 class="h2" id="s2" data-split>Enota zaupanja.</h2>
+        <p class="deck" data-fade>Zaupanje je najstarejša valuta v&nbsp;poslovanju, a doslej ni imelo enote. Jasno indeks ga meri od&nbsp;0 do&nbsp;100. Čim višja je številka, tem manjša je verjetnost, da podjetje v&nbsp;12&nbsp;mesecih ne bo plačalo.<sup class="fnref"><a href="#opomba-2" id="sklic-2" aria-label="Opomba 2">2</a></sup></p>
+      </div>
+      <figure class="specimen" aria-labelledby="specimen-cap">
+        <p class="label specimen__cap" id="specimen-cap">Primeri na dan 6.&nbsp;10.&nbsp;2026 ob&nbsp;6.00</p>
+        <div class="specimen__field">
+          <ol class="pins" aria-label="Podjetja na lestvici Jasno indeksa">
+            <li class="pin pin--risk" style="--v:34" data-tier="1"><span class="pin__v">34</span><span class="pin__n">Kovač <br>Gradnje</span><span class="sr-only">, razred E</span></li>
+            <li class="pin" style="--v:41" data-tier="0"><span class="pin__v">41</span><span class="pin__n">Tiskarna <br>Vidmar</span><span class="sr-only">, razred D</span></li>
+            <li class="pin" style="--v:46" data-tier="1"><span class="pin__v">46</span><span class="pin__n">Strojna <br>Krajnc</span><span class="sr-only">, razred D</span></li>
+            <li class="pin" style="--v:58" data-tier="0"><span class="pin__v">58</span><span class="pin__n">Novak <br>Elektro</span><span class="sr-only">, razred C</span></li>
+            <li class="pin" style="--v:63" data-tier="1"><span class="pin__v">63</span><span class="pin__n">Avtoservis <br>Horvat</span><span class="sr-only">, razred C</span></li>
+            <li class="pin" style="--v:71" data-tier="0"><span class="pin__v">71</span><span class="pin__n">Zupan <br>Transport</span><span class="sr-only">, razred B</span></li>
+            <li class="pin" style="--v:79" data-tier="1"><span class="pin__v">79</span><span class="pin__n">Pekarna <br>Zrno</span><span class="sr-only">, razred B</span></li>
+            <li class="pin" style="--v:87" data-tier="0"><span class="pin__v">87</span><span class="pin__n">Hribar <br>Les</span><span class="sr-only">, razred A</span></li>
+          </ol>
+          <div class="ruler ruler--long" data-ruler data-labels="10" data-orient="auto"></div>
+          <ol class="bands bands--long" aria-label="Razredi">
+            <li class="band" data-cls="E" style="--a:0;--b:34.5"><span class="band__k">E</span> <span class="band__n">Visoko tveganje</span> <span class="band__r">0<span class="nd">–</span>34</span></li>
+            <li class="band" data-cls="D" style="--a:34.5;--b:49.5"><span class="band__k">D</span> <span class="band__n">Povišano</span> <span class="band__r">35<span class="nd">–</span>49</span></li>
+            <li class="band" data-cls="C" style="--a:49.5;--b:64.5"><span class="band__k">C</span> <span class="band__n">Zmerno</span> <span class="band__r">50<span class="nd">–</span>64</span></li>
+            <li class="band" data-cls="B" style="--a:64.5;--b:79.5"><span class="band__k">B</span> <span class="band__n">Dobro</span> <span class="band__r">65<span class="nd">–</span>79</span></li>
+            <li class="band" data-cls="A" style="--a:79.5;--b:100"><span class="band__k">A</span> <span class="band__n">Odlično</span> <span class="band__r">80<span class="nd">–</span>100</span></li>
+          </ol>
+        </div>
+      </figure>
+      <div class="classes-wrap">
+        <table class="classes">
+          <caption class="sr-only">Razredi Jasno indeksa in priporočila</caption>
+          <thead>
+            <tr><th scope="col">Razred</th><th scope="col">Razpon</th><th scope="col">Verjetnost neplačila</th><th scope="col">Pomen</th><th scope="col">Priporočilo</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row" class="classes__k">A</th><td class="num">80<span class="nd">–</span>100</td><td class="num">pod 0,5&nbsp;%</td><td>Odlično</td><td>Običajni plačilni roki, do 60&nbsp;dni.</td></tr>
+            <tr><th scope="row" class="classes__k">B</th><td class="num">65<span class="nd">–</span>79</td><td class="num">0,5<span class="nd">–</span>1,5&nbsp;%</td><td>Dobro</td><td>Plačilni rok do 45&nbsp;dni.</td></tr>
+            <tr><th scope="row" class="classes__k">C</th><td class="num">50<span class="nd">–</span>64</td><td class="num">1,5<span class="nd">–</span>4&nbsp;%</td><td>Zmerno</td><td>Rok do 30&nbsp;dni in nižji limit.</td></tr>
+            <tr><th scope="row" class="classes__k">D</th><td class="num">35<span class="nd">–</span>49</td><td class="num">4<span class="nd">–</span>12&nbsp;%</td><td>Povišano</td><td>Rok do 15&nbsp;dni, nizek limit ali zavarovanje.</td></tr>
+            <tr class="is-risk"><th scope="row" class="classes__k">E</th><td class="num">0<span class="nd">–</span>34</td><td class="num">nad 12&nbsp;%</td><td>Visoko tveganje</td><td>Samo predplačilo.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fn fn--section" id="opomba-2"><a class="fn__mark" href="#sklic-2" aria-label="Nazaj na besedilo">2</a>Jasno indeks je statistični model, preverjen na podatkih 2015–2025 (AUC 0,86). <a class="link" href="/metodologija">Metodologija</a> je javna.</p>
+    </div>
+  </section>
+
+  <!-- § 3 · WHAT WE MEASURE ============================================ -->
+  <section class="sec measures" id="merila" aria-labelledby="s3">
+    <div class="wrap">
+      <header class="runhead">
+        <p class="runhead__sec"><span class="runhead__mark">§&nbsp;3</span> Kaj merimo</p>
+        <p class="runhead__folio">Jasno, št.&nbsp;1 · stran&nbsp;4</p>
+      </header>
+      <div class="measures__head">
+        <h2 class="h2" id="s3" data-split>Kaj merimo.</h2>
+        <p class="deck" data-fade>Pet meril, 11&nbsp;virov podatkov, ena številka. Vsako jutro ob&nbsp;6.00 jih preračunamo za vseh 218.437 podjetij.</p>
+      </div>
+      <ol class="measures__list">
+        <li class="measure" data-fade>
+          <span class="measure__no" aria-hidden="true">01</span>
+          <div class="measure__text">
+            <h3 class="measure__title">Plačilna disciplina</h3>
+            <p>Kako hitro podjetje dejansko plača. 4,2&nbsp;milijona računov.</p>
+            <p class="measure__src">Vir: plačilne izkušnje uporabnikov</p>
+          </div>
+          <figure class="micro">
+            <svg class="micro__svg" viewBox="0 0 280 84" aria-hidden="true">
+              <path class="micro__grid" d="M0 76.5h280"/>
+              <path class="micro__line" d="M4 64 16 64 28 60 40 64 52 68 64 64 76 64 88 60 100 64 112 64 124 68 136 64 148 60 160 64 172 64 184 60 196 56 208 52 220 48 232 40 244 34 256 28 268 22"/>
+              <circle class="micro__dot micro__dot--red" cx="268" cy="22" r="3.2"/>
+            </svg>
+            <figcaption class="micro__cap">Povprečna zamuda v&nbsp;dneh · 24&nbsp;mesecev</figcaption>
+          </figure>
+        </li>
+        <li class="measure" data-fade>
+          <span class="measure__no" aria-hidden="true">02</span>
+          <div class="measure__text">
+            <h3 class="measure__title">Likvidnost</h3>
+            <p>Ali ima dovolj denarja za tekoče obveznosti.</p>
+            <p class="measure__src">Vir: letna poročila AJPES, blokade računov</p>
+          </div>
+          <figure class="micro">
+            <svg class="micro__svg" viewBox="0 0 280 84" aria-hidden="true">
+              <path class="micro__grid micro__grid--dash" d="M0 40.5h280"/>
+              <text class="micro__t" x="280" y="34" text-anchor="end">1,0</text>
+              <path class="micro__bars" d="M10 76V22M32 76V18M54 76V24M76 76V20M98 76V26M120 76V23M142 76V29M164 76V27M186 76V33M208 76V36M230 76V38"/>
+              <path class="micro__bars micro__bars--red" d="M252 76V47"/>
+              <path class="micro__grid" d="M0 76.5h280"/>
+            </svg>
+            <figcaption class="micro__cap">Količnik kratkoročne likvidnosti · 12&nbsp;četrtletij</figcaption>
+          </figure>
+        </li>
+        <li class="measure" data-fade>
+          <span class="measure__no" aria-hidden="true">03</span>
+          <div class="measure__text">
+            <h3 class="measure__title">Zadolženost</h3>
+            <p>Koliko dolguje glede na kapital in dobiček.</p>
+            <p class="measure__src">Vir: letna poročila AJPES</p>
+          </div>
+          <figure class="micro">
+            <svg class="micro__svg" viewBox="0 0 280 84" aria-hidden="true">
+              <path class="micro__grid" d="M0 76.5h280"/>
+              <path class="micro__line" d="M4 58H60V52H116V55H172V61H228V20H276"/>
+              <g class="micro__t"><text x="32" y="74" text-anchor="middle">2021</text><text x="88" y="74" text-anchor="middle">2022</text><text x="144" y="74" text-anchor="middle">2023</text><text x="200" y="74" text-anchor="middle">2024</text><text x="252" y="74" text-anchor="middle">2025</text></g>
+            </svg>
+            <figcaption class="micro__cap">Finančni dolg glede na EBITDA · 5&nbsp;let</figcaption>
+          </figure>
+        </li>
+        <li class="measure" data-fade>
+          <span class="measure__no" aria-hidden="true">04</span>
+          <div class="measure__text">
+            <h3 class="measure__title">Pravni dogodki</h3>
+            <p>Blokade, izvršbe, insolventni postopki, davčni dolg.</p>
+            <p class="measure__src">Vir: blokade računov, FURS, insolventni postopki in izvršbe</p>
+          </div>
+          <figure class="micro">
+            <svg class="micro__svg" viewBox="0 0 280 84" aria-hidden="true">
+              <path class="micro__grid" d="M4 42.5h272"/>
+              <path class="micro__ticks" d="M4 38v9M26.7 40v5M49.3 40v5M72 40v5M94.7 40v5M117.3 40v5M140 38v9M162.7 40v5M185.3 40v5M208 40v5M230.7 40v5M253.3 40v5M276 38v9"/>
+              <circle class="micro__ring" cx="61" cy="42.5" r="4.5"/>
+              <circle class="micro__ring" cx="150" cy="42.5" r="4.5"/>
+              <circle class="micro__ring" cx="203" cy="42.5" r="4.5"/>
+              <circle class="micro__dot micro__dot--red" cx="258" cy="42.5" r="5"/>
+              <g class="micro__t"><text x="61" y="26" text-anchor="middle">izvršba</text><text x="150" y="26" text-anchor="middle">FURS</text><text x="203" y="70" text-anchor="middle">izvršba</text><text x="258" y="26" text-anchor="middle" class="micro__t--red">blokada</text></g>
+            </svg>
+            <figcaption class="micro__cap">Dogodki v&nbsp;zadnjih 12&nbsp;mesecih</figcaption>
+          </figure>
+        </li>
+        <li class="measure" data-fade>
+          <span class="measure__no" aria-hidden="true">05</span>
+          <div class="measure__text">
+            <h3 class="measure__title">Lastniki in vodstvo</h3>
+            <p>Kdo stoji za podjetjem in kakšno zgodovino ima.</p>
+            <p class="measure__src">Vir: Poslovni register, spremembe lastništva in zastopnikov</p>
+          </div>
+          <figure class="micro">
+            <svg class="micro__svg" viewBox="0 0 280 84" aria-hidden="true">
+              <path class="micro__edge" d="M140 42 84 18M140 42 84 66M140 42 196 18M196 18 252 42M84 18 28 42M84 66 28 42"/>
+              <circle class="micro__node micro__node--core" cx="140" cy="42" r="6"/>
+              <circle class="micro__node" cx="84" cy="18" r="4"/>
+              <circle class="micro__node" cx="84" cy="66" r="4"/>
+              <circle class="micro__node" cx="196" cy="18" r="4"/>
+              <circle class="micro__node" cx="28" cy="42" r="4"/>
+              <circle class="micro__ring micro__ring--red" cx="252" cy="42" r="5"/>
+              <path class="micro__cross" d="M248.5 38.5l7 7M255.5 38.5l-7 7"/>
+            </svg>
+            <figcaption class="micro__cap">Povezave lastnikov in zastopnikov</figcaption>
+          </figure>
+        </li>
+      </ol>
+      <p class="sources" data-fade><span class="label sources__k">11&nbsp;virov</span> AJPES (letna poročila, Poslovni register) · blokade transakcijskih računov · FURS (seznam davčnih dolžnikov) · insolventni postopki in izvršbe · spremembe lastništva in zastopnikov · plačilne izkušnje.</p>
+    </div>
+  </section>
+
+  <!-- § 4 · REPORT ===================================================== -->
+  <section class="sec report" id="porocilo" aria-labelledby="s4">
+    <div class="wrap">
+      <header class="runhead">
+        <p class="runhead__sec"><span class="runhead__mark">§&nbsp;4</span> Poročilo</p>
+        <p class="runhead__folio">Jasno, št.&nbsp;1 · stran&nbsp;5</p>
+      </header>
+      <div class="report__head">
+        <h2 class="h2" id="s4" data-split>Ena stran. Številka in razlogi.</h2>
+        <p class="deck" data-fade>Jasno indeks, razred, verjetnost neplačila, priporočeni limit in plačilni rok. Razlogi so zapisani v&nbsp;slovenščini, ne v&nbsp;šifrah.</p>
+      </div>
+
+      <div class="report__stage">
+        <article class="sheet" aria-label="Primer bonitetnega poročila: Novak Elektro d.o.o.">
+          <header class="sheet__run sheet__blk">
+            <p>Jasno · Bonitetno poročilo · 6.&nbsp;10.&nbsp;2026</p>
+            <p>Osveženo ob&nbsp;6.00</p>
+          </header>
+          <div class="sheet__id sheet__blk">
+            <h3 class="sheet__title">Novak Elektro d.o.o.</h3>
+            <p class="sheet__facts">Celje · elektroinštalacije · MŠ 6234567000 · DŠ SI&nbsp;23456789</p>
+          </div>
+          <div class="sheet__score sheet__blk" data-note-anchor="score">
+            <div class="score">
+              <p class="score__num"><span class="score__v">58</span><span class="score__of">/100</span></p>
+              <div class="score__meta">
+                <p class="score__cls"><span class="score__k">C</span> Zmerno</p>
+                <p class="score__delta"><span class="delta delta--down"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg><span class="sr-only">znižanje za</span> 6</span> v&nbsp;30&nbsp;dneh</p>
+              </div>
+            </div>
+            <dl class="stats">
+              <div class="stat"><dt>Verjetnost neplačila v&nbsp;12&nbsp;mesecih</dt><dd>2,1&nbsp;%</dd></div>
+              <div class="stat"><dt>Priporočeni kreditni limit</dt><dd>18.000&nbsp;€</dd></div>
+              <div class="stat"><dt>Priporočeni plačilni rok</dt><dd>30&nbsp;dni</dd></div>
+            </dl>
+          </div>
+          <figure class="sheet__chart sheet__blk">
+            <figcaption class="sheet__k">Jasno indeks · zadnjih 24&nbsp;mesecev</figcaption>
+            <svg class="ichart" viewBox="0 0 760 214" role="img" aria-label="Jasno indeks podjetja Novak Elektro je bil od oktobra 2024 med 63 in 68, oktobra 2026 je padel na 58.">
+              <g class="ichart__grid">
+                <path d="M34 178.5H744M34 114.5H744M34 50.5H744"/>
+              </g>
+              <path class="ichart__bound" d="M34 85.5H744"/>
+              <g class="ichart__y"><text x="0" y="182">50</text><text x="0" y="118">60</text><text x="0" y="54">70</text></g>
+              <g class="ichart__cls"><text x="754" y="80">B</text><text x="754" y="98">C</text></g>
+              <path class="ichart__line" pathLength="1" d="M34 94.8 L63.6 88.4 L93.2 88.4 L122.8 82 L152.3 75.6 L181.9 75.6 L211.5 69.2 L241.1 69.2 L270.7 62.8 L300.3 69.2 L329.8 69.2 L359.4 62.8 L389 62.8 L418.6 69.2 L448.2 69.2 L477.8 75.6 L507.3 75.6 L536.9 75.6 L566.5 69.2 L596.1 75.6 L625.7 82 L655.3 88.4 L684.8 88.4 L714.4 88.4 L744 126.8"/>
+              <g class="ichart__ann">
+                <path d="M536.9 70V30"/>
+                <circle cx="536.9" cy="75.6" r="3.6"/>
+                <text x="530" y="26" text-anchor="end">Oddano letno poročilo 2025</text>
+              </g>
+              <g class="ichart__ann ichart__ann--red">
+                <path d="M744 132V158"/>
+                <circle cx="744" cy="126.8" r="4.4"/>
+                <text x="736" y="160" text-anchor="end">Zamude pri plačilih +12&nbsp;dni</text>
+              </g>
+              <g class="ichart__x"><text x="34" y="208">okt. 2024</text><text x="211.5" y="208" text-anchor="middle">apr. 2025</text><text x="389" y="208" text-anchor="middle">okt. 2025</text><text x="566.5" y="208" text-anchor="middle">apr. 2026</text><text x="744" y="208" text-anchor="end">okt. 2026</text></g>
+            </svg>
+          </figure>
+          <div class="sheet__fin sheet__blk">
+            <table class="fin">
+              <caption class="sr-only">Finančni podatki podjetja Novak Elektro v evrih, 2023–2025</caption>
+              <thead><tr><th scope="col" class="fin__k">Finančni podatki v&nbsp;EUR</th><th scope="col" class="fin__y23">2023</th><th scope="col">2024</th><th scope="col">2025</th><th scope="col">2025/24</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Prihodki</th><td class="fin__y23">2<span class="ts">.</span>418<span class="ts">.</span>300</td><td>2<span class="ts">.</span>652<span class="ts">.</span>900</td><td>2<span class="ts">.</span>391<span class="ts">.</span>400</td><td class="neg">−9<span class="ts">,</span>9&nbsp;%</td></tr>
+                <tr><th scope="row">EBITDA</th><td class="fin__y23">214<span class="ts">.</span>600</td><td>238<span class="ts">.</span>100</td><td>121<span class="ts">.</span>800</td><td class="neg">−48<span class="ts">,</span>8&nbsp;%</td></tr>
+                <tr><th scope="row">Čisti poslovni izid</th><td class="fin__y23">76<span class="ts">.</span>200</td><td>88<span class="ts">.</span>900</td><td class="neg">−12<span class="ts">.</span>400</td><td class="na"><span aria-hidden="true">–</span><span class="sr-only">ni podatka</span></td></tr>
+                <tr><th scope="row">Kapital</th><td class="fin__y23">612<span class="ts">.</span>400</td><td>701<span class="ts">.</span>300</td><td>688<span class="ts">.</span>900</td><td class="neg">−1<span class="ts">,</span>8&nbsp;%</td></tr>
+                <tr><th scope="row">Finančni dolg</th><td class="fin__y23">284<span class="ts">.</span>000</td><td>251<span class="ts">.</span>500</td><td>396<span class="ts">.</span>200</td><td>+57<span class="ts">,</span>5&nbsp;%</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="sheet__why sheet__blk">
+            <section class="why" aria-labelledby="why-h">
+              <h4 class="sheet__k" id="why-h">Razlogi za oceno</h4>
+              <ol class="why__list">
+                <li>Povprečna zamuda pri plačilih se je v&nbsp;šestih mesecih podaljšala s&nbsp;3 na 12&nbsp;dni.</li>
+                <li>Dobičkonosnost je v&nbsp;letu 2025 upadla (EBITDA −48,8&nbsp;%), finančni dolg pa je narasel za 57,5&nbsp;%.</li>
+                <li>Podjetje nima blokad, izvršb ali davčnega dolga, kapital ostaja pozitiven.</li>
+              </ol>
+            </section>
+            <section class="events" aria-labelledby="ev-h">
+              <h4 class="sheet__k" id="ev-h">Dogodki</h4>
+              <ol class="events__list">
+                <li><time datetime="2026-10-06">6.&nbsp;10.&nbsp;2026</time> <span>Jasno indeks znižan s&nbsp;64 na 58.</span></li>
+                <li><time datetime="2026-09-14">14.&nbsp;9.&nbsp;2026</time> <span>Povprečna zamuda pri plačilih presegla 10&nbsp;dni.</span></li>
+                <li><time datetime="2026-03-27">27.&nbsp;3.&nbsp;2026</time> <span>Oddano letno poročilo za leto 2025.</span></li>
+              </ol>
+            </section>
+          </div>
+          <footer class="sheet__foot sheet__blk">
+            <p>Jasno d.o.o. · Podatki: AJPES, FURS, sodišča, plačilne izkušnje</p>
+            <p>Stran 1/1</p>
+          </footer>
+        </article>
+        <p class="note note--l note--score" data-fade>Indeks od&nbsp;0 do&nbsp;100, osvežen danes ob&nbsp;6.00.</p>
+        <p class="note note--r note--stats" data-fade>Limit in rok – ne le številka.</p>
+        <p class="note note--l note--chart" data-fade>Vsaka sprememba ima datum in vzrok.</p>
+        <p class="note note--r note--fin" data-fade>Iz letnih poročil, ki jih podjetja oddajo AJPES.</p>
+        <p class="note note--l note--why" data-fade>Vsaka ocena ima razlog.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- § 5 · 365 : 1 ==================================================== -->
+  <section class="sec ratio" id="primerjava" aria-labelledby="s5">
+    <div class="wrap">
+      <header class="runhead">
+        <p class="runhead__sec"><span class="runhead__mark">§&nbsp;5</span> Primerjava</p>
+        <p class="runhead__folio">Jasno, št.&nbsp;1 · stran&nbsp;6</p>
+      </header>
+      <h2 class="ratio__title" id="s5">
+        <span class="ratio__num" aria-hidden="true">
+          <span class="ratio__part"><span class="ratio__fig" data-split-fig>365</span><span class="ratio__cap"><span class="ratio__who">Jasno</span> osvežitev na leto</span></span>
+          <span class="ratio__colon">:</span>
+          <span class="ratio__part"><span class="ratio__fig" data-split-fig>1</span><span class="ratio__cap"><span class="ratio__who">Klasična ocena</span> osvežitev na leto</span></span>
+        </span>
+        <span class="sr-only">Jasno se osveži 365-krat na leto, klasična bonitetna ocena enkrat.</span>
+      </h2>
+      <figure class="lines" aria-labelledby="lines-cap">
+        <div class="line line--classic">
+          <p class="line__k"><span class="label">Klasična bonitetna ocena</span> <span class="line__sum">1 osvežitev</span></p>
+          <div class="days days--classic" data-days="classic"></div>
+        </div>
+        <div class="line line--jasno">
+          <p class="line__k"><span class="label">Jasno</span> <span class="line__sum">365 osvežitev</span></p>
+          <div class="days days--jasno" data-days="jasno"></div>
+        </div>
+        <div class="days-axis" data-days-axis aria-hidden="true"></div>
+        <figcaption class="lines__cap" id="lines-cap"><span>Klasična ocena se osveži, ko podjetje odda letno poročilo.</span> <span>Jasno se osveži vsako jutro.</span></figcaption>
+      </figure>
+      <div class="compare-wrap">
+        <table class="compare">
+          <caption class="sr-only">Primerjava: klasična bonitetna ocena in Jasno</caption>
+          <thead>
+            <tr><th scope="col"><span class="sr-only">Merilo</span></th><th scope="col">Klasična bonitetna ocena</th><th scope="col">Jasno</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Osveževanje</th><td>Enkrat na leto</td><td>Vsak dan ob&nbsp;6.00</td></tr>
+            <tr><th scope="row">Starost podatkov</th><td>Do 18&nbsp;mesecev</td><td>Največ 24&nbsp;ur</td></tr>
+            <tr><th scope="row">Plačilno vedenje</th><td>Delno</td><td>4,2&nbsp;mio plačilnih izkušenj</td></tr>
+            <tr><th scope="row">Pojasnilo</th><td>Številka</td><td>Razlogi v&nbsp;slovenščini</td></tr>
+            <tr><th scope="row">Priporočilo</th><td><span aria-hidden="true">—</span><span class="sr-only">Brez priporočila</span></td><td>Kreditni limit in plačilni rok</td></tr>
+            <tr><th scope="row">Cena</th><td>Po ponudbi</td><td>Javni cenik, od 0&nbsp;€</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- § 6 · MONITORING ================================================= -->
+  <section class="sec monitor" id="spremljanje" aria-labelledby="s6">
+    <div class="wrap">
+      <header class="runhead">
+        <p class="runhead__sec"><span class="runhead__mark">§&nbsp;6</span> Spremljanje</p>
+        <p class="runhead__folio">Jasno, št.&nbsp;1 · stran&nbsp;7</p>
+      </header>
+      <div class="monitor__grid">
+        <div class="monitor__intro">
+          <h2 class="h2" id="s6" data-split>Novice o&nbsp;vaših partnerjih. Vsako jutro.</h2>
+          <p class="lead" data-fade>Na seznam za spremljanje dodajte kupce in dobavitelje. Ko se pri katerem od njih kaj spremeni, izveste še isto jutro – s&nbsp;priporočenim ukrepom.</p>
+          <p data-fade>Opozorila prejmete po e-pošti ali SMS-u, v&nbsp;Slacku ali Teamsu, prek API webhooka ali neposredno v&nbsp;ERP-ju.</p>
+          <div class="daily" data-fade>
+            <p class="label daily__k">Danes ob&nbsp;6.00</p>
+            <dl class="daily__list">
+              <div><dt>sprememb</dt><dd>1.284</dd></div>
+              <div class="is-risk"><dt>novih blokad</dt><dd>57</dd></div>
+              <div class="is-risk"><dt>začetih stečajev</dt><dd>12</dd></div>
+              <div><dt>izboljšanih ocen</dt><dd>312</dd></div>
+            </dl>
+          </div>
+          <div class="dev" id="razvijalci" data-fade>
+            <p class="label dev__k">Za razvijalce</p>
+            <p>REST API in webhooki: indeks, razred, priporočeni limit in razlogi za vsa podjetja na vašem seznamu, vsako jutro ob&nbsp;6.00.</p>
+            <figure class="dev__fig">
+              <figcaption class="label dev__cap">Primer obvestila prek webhooka</figcaption>
+              <pre class="dev__code"><code><span class="dev__m">POST</span> /jasno/opozorila
+{ "maticna": "6123456000",
+  "indeks": 34, "sprememba": <span class="dev__neg">-29</span>,
+  "razred": "E", "ukrep": "ustavite dobave" }</code></pre>
+            </figure>
+          </div>
+        </div>
+        <div class="briefs" aria-labelledby="briefs-h">
+          <h3 class="briefs__title" id="briefs-h"><span>Kratke novice</span> <span>6.&nbsp;10.&nbsp;2026</span></h3>
+          <ol class="briefs__list">
+            <li class="brief" data-fade>
+              <p class="brief__time"><time datetime="2026-10-06T06:02">06.02</time></p>
+              <div class="brief__body">
+                <h4 class="brief__h">Kovač Gradnje d.o.o.: blokada transakcijskega računa</h4>
+                <p class="brief__p">Račun blokiran od 2.&nbsp;10., davčni dolg 18.420&nbsp;€. Indeks 34, razred E.</p>
+              </div>
+              <p class="tag tag--red"><span class="sr-only">Priporočeni ukrep: </span>Ustavite dobave</p>
+            </li>
+            <li class="brief" data-fade>
+              <p class="brief__time"><time datetime="2026-10-06T06:02">06.02</time></p>
+              <div class="brief__body">
+                <h4 class="brief__h">Tiskarna Vidmar d.o.o.: vložena izvršba</h4>
+                <p class="brief__p">Indeks 41 <span class="delta delta--down"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg><span class="sr-only">znižanje za</span> 9</span>, razred D. Priporočeni rok: 15&nbsp;dni.</p>
+              </div>
+              <p class="tag"><span class="sr-only">Priporočeni ukrep: </span>Skrajšajte rok</p>
+            </li>
+            <li class="brief" data-fade>
+              <p class="brief__time"><time datetime="2026-10-06T06:03">06.03</time></p>
+              <div class="brief__body">
+                <h4 class="brief__h">Strojna Krajnc d.o.o.: letno poročilo ni oddano</h4>
+                <p class="brief__p">Rok za oddajo je potekel. Indeks 46 <span class="delta delta--down"><svg class="i" aria-hidden="true"><use href="#i-down"/></svg><span class="sr-only">znižanje za</span> 7</span>, razred D.</p>
+              </div>
+              <p class="tag"><span class="sr-only">Priporočeni ukrep: </span>Bodite pozorni</p>
+            </li>
+            <li class="brief" data-fade>
+              <p class="brief__time"><time datetime="2026-10-06T06:04">06.04</time></p>
+              <div class="brief__body">
+                <h4 class="brief__h">Pekarna Zrno d.o.o.: blokada odpravljena</h4>
+                <p class="brief__p">Blokada odpravljena 5.&nbsp;10.&nbsp;2026. Razred B, limit 30.000&nbsp;€.</p>
+              </div>
+              <p class="tag tag--up">Ocena 79 <span class="delta delta--up"><svg class="i" aria-hidden="true"><use href="#i-up"/></svg><span class="sr-only">zvišanje za</span> 11</span></p>
+            </li>
+            <li class="brief" data-fade>
+              <p class="brief__time"><time datetime="2026-10-06T06:05">06.05</time></p>
+              <div class="brief__body">
+                <h4 class="brief__h">Hribar Les d.o.o.: ocena izboljšana na 87</h4>
+                <p class="brief__p">Kapital raste tretje leto zapored. Razred A, limit 120.000&nbsp;€.</p>
+              </div>
+              <p class="tag tag--quiet"><span class="sr-only">Priporočeni ukrep: </span>Brez ukrepa</p>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- § 7 · PRICE LIST ================================================= -->
+  <section class="sec pricing" id="cenik" aria-labelledby="s7">
+    <div class="wrap">
+      <header class="runhead">
+        <p class="runhead__sec"><span class="runhead__mark">§&nbsp;7</span> Cenik</p>
+        <p class="runhead__folio">Jasno, št.&nbsp;1 · stran&nbsp;8</p>
+      </header>
+      <div class="pricing__head">
+        <h2 class="h2" id="s7" data-split>Javni cenik.</h2>
+        <p class="deck" data-fade>Brez ponudb in pogajanj. Vse cene so brez DDV.</p>
+      </div>
+      <ol class="prices">
+        <li class="price">
+          <div class="price__line">
+            <h3 class="price__name">Brezplačno</h3>
+            <p class="price__amount"><span class="price__fig">0&nbsp;€</span></p>
+          </div>
+          <div class="price__sub">
+            <p class="price__feat">10 preverb na mesec · Jasno indeks in razred · podatki iz registra</p>
+            <a class="price__cta" href="/registracija?paket=brezplacno" aria-label="Izberite paket Brezplačno">Izberite <svg class="i i--arrow" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+        </li>
+        <li class="price price--pop">
+          <div class="price__line">
+            <h3 class="price__name">Posel <span class="tag tag--red price__tag">Najpogosteje izbran</span></h3>
+            <p class="price__amount"><span class="price__fig">39&nbsp;€</span> <span class="price__per">/ mesec</span></p>
+          </div>
+          <div class="price__sub">
+            <p class="price__feat">Neomejene preverbe · spremljanje 50&nbsp;partnerjev · opozorila po e-pošti · pojasnila ocene</p>
+            <a class="price__cta" href="/registracija?paket=posel" aria-label="Izberite paket Posel">Izberite <svg class="i i--arrow" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+        </li>
+        <li class="price">
+          <div class="price__line">
+            <h3 class="price__name">Ekipa</h3>
+            <p class="price__amount"><span class="price__fig">119&nbsp;€</span> <span class="price__per">/ mesec</span></p>
+          </div>
+          <div class="price__sub">
+            <p class="price__feat">Spremljanje 500&nbsp;partnerjev · kreditni limiti · plačilne izkušnje · 5&nbsp;uporabnikov · izvoz v&nbsp;Excel</p>
+            <a class="price__cta" href="/registracija?paket=ekipa" aria-label="Izberite paket Ekipa">Izberite <svg class="i i--arrow" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+        </li>
+        <li class="price">
+          <div class="price__line">
+            <h3 class="price__name">Po meri</h3>
+            <p class="price__amount"><span class="price__fig price__fig--word">po dogovoru</span></p>
+          </div>
+          <div class="price__sub">
+            <p class="price__feat">API in integracija z&nbsp;ERP-jem · neomejeni uporabniki · skrbnik računa</p>
+            <a class="price__cta" href="/predstavitev" aria-label="Izberite paket Po meri">Izberite <svg class="i i--arrow" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+        </li>
+      </ol>
+      <p class="pricing__note" data-fade><span class="pricing__mark" aria-hidden="true">*</span>Letna naročnina: dva meseca brezplačno. Brez vezave, prekličete kadarkoli.</p>
+    </div>
+  </section>
+
+  <!-- § 8 · LETTERS ==================================================== -->
+  <section class="sec letters" id="pisma" aria-labelledby="s8">
+    <div class="wrap">
+      <header class="runhead">
+        <p class="runhead__sec"><span class="runhead__mark">§&nbsp;8</span> Pisma bralcev</p>
+        <p class="runhead__folio">Jasno, št.&nbsp;1 · stran&nbsp;9</p>
+      </header>
+      <h2 class="h2 letters__title" id="s8" data-split>Pisma bralcev.</h2>
+      <div class="letters__grid">
+        <figure class="letter" data-fade>
+          <p class="letter__salute">Spoštovani,</p>
+          <blockquote class="letter__body"><p>Prej smo za blokado kupca izvedeli, ko je bilo že prepozno. Zdaj izvemo ob šestih zjutraj, preden tovornjak zapusti dvorišče.</p></blockquote>
+          <figcaption class="letter__sig"><span class="letter__name">Petra Hribar</span><span class="letter__who">Finančna direktorica, Hribar Les d.o.o., Škofja Loka</span></figcaption>
+        </figure>
+        <figure class="letter" data-fade>
+          <p class="letter__salute">Spoštovani,</p>
+          <blockquote class="letter__body letter__body--big"><p>Kreditne limite zdaj postavljamo v&nbsp;minutah, ne v&nbsp;tednih.</p></blockquote>
+          <figcaption class="letter__sig"><span class="letter__name">Marko Zupan</span><span class="letter__who">Vodja prodaje, Zupan Transport d.o.o., Koper</span></figcaption>
+        </figure>
+        <figure class="letter" data-fade>
+          <p class="letter__salute">Spoštovani,</p>
+          <blockquote class="letter__body letter__body--big"><p>Končno ocena, ki pove tudi, zakaj.</p></blockquote>
+          <figcaption class="letter__sig"><span class="letter__name">Nina Vidic</span><span class="letter__who">Računovodkinja, Računovodstvo Vidic d.o.o., Novo mesto</span></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA ======================================================== -->
+  <section class="sec final" id="izmerite" aria-labelledby="s9">
+    <div class="wrap">
+      <h2 class="final__title" id="s9" data-split>Koliko zaupate svojemu največjemu kupcu?</h2>
+      <p class="final__sub" data-fade>Izmerite ga. Prvih 10&nbsp;meritev vsak mesec je brezplačnih.</p>
+      <form class="search search--final" role="search" action="/iskanje" method="get" data-search="final" aria-label="Izmerite podjetje">
+        <label class="label search__label" for="q-final">Izmerite podjetje</label>
+        <div class="search__row">
+          <input class="search__input" id="q-final" name="q" type="search" placeholder="Ime podjetja, davčna ali matična številka" autocomplete="off" spellcheck="false" enterkeyhint="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="q-final-list" aria-describedby="q-final-hint">
+          <button class="search__btn" type="submit">Izmerite <svg class="i i--arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+              <ul class="search__list" id="q-final-list" role="listbox" aria-label="Predlogi podjetij" hidden></ul>
+        </div>
+        <p class="search__hint" id="q-final-hint">Brez kartice. 10&nbsp;brezplačnih preverb vsak mesec. <a class="link" href="/predstavitev">Rezervirajte predstavitev</a></p>
+        <p class="search__status" role="status" aria-live="polite" data-status></p>
+      </form>
+      <figure class="final__measure" data-final-measure aria-labelledby="final-cap">
+        <div class="final__q" aria-hidden="true"><span class="final__qv" style="--v:50"><span class="final__qt" data-final-v>?</span></span></div>
+        <div class="ruler ruler--final" data-ruler data-labels="10" data-labels-sm="20" data-marker="50">
+          <span class="ruler__marker" data-marker-el style="--v:50"><svg class="i" aria-hidden="true"><use href="#i-marker"/></svg></span>
+        </div>
+        <figcaption class="final__cap" id="final-cap" data-final-cap>Vaš kupec še ni izmerjen.</figcaption>
+      </figure>
+    </div>
+  </section>
+</main>
+
+<!-- COLOPHON ========================================================== -->
+<footer class="colophon">
+  <div class="wrap">
+    <div class="colophon__cols">
+      <section class="colophon__col" aria-labelledby="f1">
+        <h2 class="label colophon__k" id="f1">Kolofon</h2>
+        <p class="colophon__text">Jasno d.o.o., Ljubljana. Stavljeno v&nbsp;črkah Noto Serif Display in Schibsted Grotesk. Podatki: AJPES, FURS, sodišča in 4,2&nbsp;milijona plačilnih izkušenj. Izhaja vsak dan ob&nbsp;6.00.</p>
+      </section>
+      <nav class="colophon__col colophon__col--toc" aria-labelledby="f2">
+        <h2 class="label colophon__k" id="f2">Rubrike</h2>
+        <ol class="toc">
+          <li><a href="#posojilo"><span class="toc__m">§&nbsp;1</span><span class="toc__t">Vsak račun je posojilo</span><span class="toc__p">2</span></a></li>
+          <li><a href="#enota"><span class="toc__m">§&nbsp;2</span><span class="toc__t">Enota zaupanja</span><span class="toc__p">3</span></a></li>
+          <li><a href="#merila"><span class="toc__m">§&nbsp;3</span><span class="toc__t">Kaj merimo</span><span class="toc__p">4</span></a></li>
+          <li><a href="#porocilo"><span class="toc__m">§&nbsp;4</span><span class="toc__t">Poročilo</span><span class="toc__p">5</span></a></li>
+          <li><a href="#primerjava"><span class="toc__m">§&nbsp;5</span><span class="toc__t">365&nbsp;:&nbsp;1</span><span class="toc__p">6</span></a></li>
+          <li><a href="#spremljanje"><span class="toc__m">§&nbsp;6</span><span class="toc__t">Spremljanje</span><span class="toc__p">7</span></a></li>
+          <li><a href="#cenik"><span class="toc__m">§&nbsp;7</span><span class="toc__t">Cenik</span><span class="toc__p">8</span></a></li>
+          <li><a href="#pisma"><span class="toc__m">§&nbsp;8</span><span class="toc__t">Pisma bralcev</span><span class="toc__p">9</span></a></li>
+        </ol>
+      </nav>
+      <nav class="colophon__col" aria-labelledby="f3">
+        <h2 class="label colophon__k" id="f3">Pravno</h2>
+        <ul class="colophon__links">
+          <li><a class="link" href="/pogoji">Pogoji uporabe</a></li>
+          <li><a class="link" href="/zasebnost">Zasebnost</a></li>
+          <li><a class="link" href="/piskotki">Piškotki</a></li>
+          <li><a class="link" href="mailto:pozdrav@jasno.si">pozdrav@jasno.si</a></li>
+        </ul>
+      </nav>
+    </div>
+    <p class="colophon__mark" aria-hidden="true">Jasno</p>
+    <div class="ruler ruler--footer" data-ruler data-labels="0" aria-hidden="true"></div>
+    <div class="colophon__legal">
+      <p>© 2026 Jasno d.o.o., Ljubljana · <a href="/pogoji">Pogoji uporabe</a> · <a href="/zasebnost">Zasebnost</a> · <a href="/piskotki">Piškotki</a> · <a href="mailto:pozdrav@jasno.si">pozdrav@jasno.si</a></p>
+      <p>Podjetja in podatki v&nbsp;primerih so izmišljeni.</p>
+      <p><a class="link" href="#vrh">Na vrh strani</a></p>
+    </div>
+  </div>
+</footer>
+
+<script src="../shared/vendor/gsap.min.js" defer></script>
+<script src="../shared/vendor/ScrollTrigger.min.js" defer></script>
+<script src="../shared/vendor/SplitText.min.js" defer></script>
+<script src="../shared/vendor/lenis.min.js" defer></script>
+<script src="main.js" defer></script>
+</body>
+</html>

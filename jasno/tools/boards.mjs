@@ -97,7 +97,7 @@ async function render(name, html, width, height, dpr = 2) {
 for (const d of DIRECTIONS) {
   if (!has(d.dir, 'desktop-hero@2x.png')) { console.log(`- skip ${d.dir} (no captures yet)`); continue; }
   const mobileFull = has(d.dir, 'mobile-full@2x.jpg');
-  const phoneW = 300, phoneH = Math.round(phoneW * 844 / 390);
+  const phoneW = 270, phoneH = Math.round(phoneW * 844 / 390);
   // offsets in CSS px of the 390-wide page → scaled to phone width
   const k = phoneW / 390;
   const offsets = mobileFull ? [0, ...(await mobileOffsets(d.dir))] : [];
@@ -106,18 +106,18 @@ for (const d of DIRECTIONS) {
     : '';
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}
     @import url('/shared/fonts/${d.fontCss}');
-    body{background:${d.bg};color:${d.fg};width:2000px;height:1250px;padding:64px 72px;display:grid;grid-template-rows:auto 1fr;gap:44px}
+    body{background:${d.bg};color:${d.fg};width:2000px;padding:64px 72px 80px;display:grid;grid-template-rows:auto auto;gap:44px}
     header{display:flex;justify-content:space-between;align-items:flex-end;gap:40px}
     .idea{font-family:${d.font},'Geist',sans-serif;font-size:44px;line-height:1.05;letter-spacing:-.02em;max-width:820px}
     .meta{color:${d.muted};max-width:560px;font-size:17px;line-height:1.45;text-align:right}
-    .stage{display:grid;grid-template-columns:1fr auto;gap:48px;align-items:start}
+    .stage{display:grid;grid-template-columns:942px auto;gap:48px;align-items:center}
     .phones{display:flex;gap:28px;padding-top:6px}
   </style></head><body>
     <header><div><div class="label" style="color:${d.muted};margin-bottom:14px">Jasno · Direction ${d.no} · ${d.name}</div><div class="idea">${d.idea}</div><div style="color:${d.muted};font-size:20px;margin-top:10px">${d.ideaEn}</div></div>
       <div class="meta">${d.line}<div class="label" style="margin-top:12px">Desktop 1440 · Mobile 390</div></div></header>
-    <div class="stage"><div class="frame" style="width:${phones ? 1040 : 1856}px"><img src="${shot(d.dir, 'desktop-hero@2x.png')}"></div><div class="phones">${phones}</div></div>
+    <div class="stage"><div class="frame" style="width:${phones ? 942 : 1856}px"><img src="${shot(d.dir, 'desktop-hero@2x.png')}"></div><div class="phones">${phones}</div></div>
   </body></html>`;
-  await render(`${d.dir}-board`, html, 2000, 1250);
+  await render(`${d.dir}-board`, html, 2000, 700);
 
   /* Scroll board: full desktop page + full mobile page side by side. */
   if (has(d.dir, 'desktop-full@2x.jpg') && mobileFull) {
