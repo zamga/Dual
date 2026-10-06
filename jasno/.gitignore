@@ -1,0 +1,4 @@
+node_modules/
+_smoke/
+# screenshots are committed once, at the end (they are regenerated on every capture)
+screens/
