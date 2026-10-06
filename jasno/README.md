@@ -87,6 +87,7 @@ jasno/
   tools/
       capture.mjs          Playwright screenshots (desktop 1440 @2x, mobile 390 @3x/@2x, review slices)
       boards.mjs           presentation boards from the captures
+      sheets.mjs           cuts full pages into ≤ 8000 px sheets at section boundaries (for sharing)
       build-geo.mjs        regenerates shared/geo from world-atlas
       fetch-fonts.py       regenerates shared/fonts from Google Fonts
   screens/                 the delivered images
@@ -99,7 +100,8 @@ cd jasno
 npm run serve                 # http://localhost:5173/01-napoved/ (…02-rentgen, 03-mera, 04-signal)
 npm run capture -- 01-napoved # screenshots → screens/01-napoved/
 npm run capture:all           # all four
-node tools/boards.mjs         # presentation boards → screens/boards/
+npm run boards                # presentation boards → screens/boards/
+npm run sheets                # shareable page sheets → screens/sheets/
 ```
 
 Pages must be served over HTTP; fonts do not load from `file://`. Add `?capture=1` to any URL to see the static,
